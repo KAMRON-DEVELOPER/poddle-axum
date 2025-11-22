@@ -63,8 +63,7 @@ pub struct CreateDeploymentRequest {
     pub labels: Option<HashMap<String, String>>,
 
     /// Subdomain for the deployment (optional, auto-generated if not provided)
-    #[validate(length(min = 3, max = 63))]
-    #[validate(regex(path = *SUBDOMAIN))]
+    #[validate(length(min = 3, max = 63), regex(path = *SUBDOMAIN))]
     pub subdomain: Option<String>,
 }
 

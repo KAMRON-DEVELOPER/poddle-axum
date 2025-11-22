@@ -1,13 +1,44 @@
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: compute-service-sa
-  namespace: cloud-ns
+  name: compute-sa
+  namespace: compute-ns
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: compute-role
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "services", "secrets"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources: ["ingresses"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: compute-rb
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: compute-role
+subjects:
+  - kind: ServiceAccount
+    name: compute-sa
+---
+
+---
+
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
-  name: compute-service-cr
+  name: compute-cr
 rules:
   - apiGroups: [""]
     resources: ["pods", "services", "secrets"]
@@ -22,12 +53,12 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: compute-service-crb
+  name: compute-crb
 subjects:
   - kind: ServiceAccount
-    name: compute-service-sa
-    namespace: cloud-ns
+    name: compute-sa
+    namespace: compute-ns
 roleRef:
   kind: ClusterRole
-  name: compute-service-cr
+  name: compute-cr
   apiGroup: rbac.authorization.k8s.io
