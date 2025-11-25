@@ -94,8 +94,7 @@ impl Config {
         let k8s_in_cluster =
             get_config_value("K8S_IN_CLUSTER", Some("K8S_IN_CLUSTER"), None, Some(false)).await?;
 
-        let base_domain =
-            std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "app.pinespot.uz".to_string());
+        let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "poddle.uz".to_string());
 
         let server_addres = get_config_value(
             "SERVER_ADDRES",
@@ -223,7 +222,9 @@ impl Config {
         )
         .await?;
 
-        let cookie_key = get_config_value("KEY", Some("KEY"), None, None).await?;
+        let cookie_key = get_config_value("COOKIE_KEY", Some("COOKIE_KEY"), None, None).await?;
+        let cookie_secure =
+            get_config_value("COOKIE_SECURE", Some("COOKIE_SECURE"), None, None).await?;
 
         let s3_access_key_id =
             get_optional_config_value("S3_ACCESS_KEY_ID", Some("S3_ACCESS_KEY_ID"), None).await?;
@@ -263,8 +264,6 @@ impl Config {
             None,
         )
         .await?;
-        let cookie_secure =
-            get_config_value("COOKIE_SECURE", Some("COOKIE_SECURE"), None, None).await?;
 
         let email_service_api_key = get_config_value(
             "EMAIL_SERVICE_API_KEY",
