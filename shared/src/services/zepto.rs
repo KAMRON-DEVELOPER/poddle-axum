@@ -122,7 +122,7 @@ impl ZeptoMail {
             .post(&self.api_url)
             .header("accept", "application/json")
             .header("content-type", "application/json")
-            .header("authorization", format!("Zoho-enczapikey {}", api_key))
+            .header("authorization", api_key)
             .json(&payload)
             .send()
             .await
