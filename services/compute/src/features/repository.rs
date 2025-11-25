@@ -2,8 +2,9 @@ use shared::schemas::Pagination;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::features::models::{
-    Deployment, DeploymentEvent, DeploymentSecret, DeploymentStatus, Project,
+use crate::features::{
+    models::{Deployment, DeploymentEvent, DeploymentStatus, Project},
+    schemas::CreateDeploymentRequest,
 };
 
 pub struct ProjectRepository;
@@ -127,6 +128,10 @@ impl ProjectRepository {
 pub struct DeploymentRepository;
 
 impl DeploymentRepository {
+    pub async fn get_user_namespace(user_id: Uuid) -> String {
+        format!("user-{}", &user_id.to_string().replace("-", "")[..16])
+    }
+
     pub async fn get_all_by_project(
         pool: &PgPool,
         project_id: Uuid,
@@ -170,14 +175,7 @@ impl DeploymentRepository {
         tx: &mut Transaction<'_, Postgres>,
         user_id: Uuid,
         project_id: Uuid,
-        name: &str,
-        image: &str,
-        env_vars: serde_json::Value,
-        replicas: i32,
-        resources: serde_json::Value,
-        labels: Option<serde_json::Value>,
-        cluster_namespace: &str,
-        cluster_deployment_name: &str,
+        req: CreateDeploymentRequest,
     ) -> Result<Deployment, sqlx::Error> {
         sqlx::query_as::<_, Deployment>(
             r#"
@@ -191,14 +189,14 @@ impl DeploymentRepository {
         )
         .bind(user_id)
         .bind(project_id)
-        .bind(name)
-        .bind(image)
-        .bind(env_vars)
-        .bind(replicas)
-        .bind(resources)
-        .bind(labels)
-        .bind(cluster_namespace)
-        .bind(cluster_deployment_name)
+        .bind(req.name)
+        .bind(req.image)
+        .bind(req.env_vars)
+        .bind(req.replicas)
+        .bind(req.resources)
+        .bind(req.labels)
+        .bind(req.cluster_namespace)
+        .bind(req.cluster_deployment_name)
         .fetch_one(&mut **tx)
         .await
     }
@@ -262,57 +260,6 @@ impl DeploymentRepository {
         .execute(pool)
         .await?;
 
-        Ok(())
-    }
-}
-
-pub struct DeploymentSecretRepository;
-
-impl DeploymentSecretRepository {
-    pub async fn create(
-        tx: &mut Transaction<'_, Postgres>,
-        deployment_id: Uuid,
-        key: &str,
-        encrypted_value: Vec<u8>,
-    ) -> Result<DeploymentSecret, sqlx::Error> {
-        sqlx::query_as::<_, DeploymentSecret>(
-            r#"
-                INSERT INTO deployment_secrets (deployment_id, key, value)
-                VALUES ($1, $2, $3)
-                RETURNING *
-            "#,
-        )
-        .bind(deployment_id)
-        .bind(key)
-        .bind(encrypted_value)
-        .fetch_one(&mut **tx)
-        .await
-    }
-
-    pub async fn get_all_by_deployment(
-        pool: &PgPool,
-        deployment_id: Uuid,
-    ) -> Result<Vec<DeploymentSecret>, sqlx::Error> {
-        sqlx::query_as::<_, DeploymentSecret>(
-            r#"
-                SELECT * FROM deployment_secrets
-                WHERE deployment_id = $1
-                ORDER BY created_at ASC
-            "#,
-        )
-        .bind(deployment_id)
-        .fetch_all(pool)
-        .await
-    }
-
-    pub async fn delete_by_deployment(
-        tx: &mut Transaction<'_, Postgres>,
-        deployment_id: Uuid,
-    ) -> Result<(), sqlx::Error> {
-        sqlx::query("DELETE FROM deployment_secrets WHERE deployment_id = $1")
-            .bind(deployment_id)
-            .execute(&mut **tx)
-            .await?;
         Ok(())
     }
 }

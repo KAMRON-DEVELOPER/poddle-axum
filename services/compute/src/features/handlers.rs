@@ -9,6 +9,7 @@ use shared::{
     services::database::Database,
     utilities::{config::Config, errors::AppError, jwt::Claims},
 };
+use tracing::debug;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -155,10 +156,13 @@ pub async fn get_deployment(
     claims: Claims,
     Path((_, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
+    State(kubernetes): State<Kubernetes>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let detail = DeploymentService::get_detail(&database.pool, deployment_id, user_id).await?;
+    let detail =
+        DeploymentService::get_detail(&database.pool, &kubernetes.client, deployment_id, user_id)
+            .await?;
 
     Ok(Json(detail))
 }
@@ -171,23 +175,30 @@ pub async fn create_deployment(
     State(config): State<Config>,
     Json(req): Json<CreateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
+    debug!("req is {:#?}", req);
     req.validate()?;
 
-    let user_id: Uuid = claims.sub;
+    let user_id = claims.sub;
 
-    // Verify project ownership
     ProjectRepository::get_one_by_id(&database.pool, project_id, user_id).await?;
+
+    // Start database transaction
+    let mut tx = database.pool.begin().await?;
+
+    DeploymentRepository::create(tx, user_id, project_id, req);
 
     let deployment = DeploymentService::create(
         &database.pool,
         &kubernetes.client,
-        &config.k8s_encryption_key,
         user_id,
         project_id,
         &config.base_domain,
         req,
     )
     .await?;
+
+    // Commit transaction
+    tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(deployment)))
 }

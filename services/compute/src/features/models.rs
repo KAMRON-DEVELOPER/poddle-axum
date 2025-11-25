@@ -54,16 +54,6 @@ pub struct Deployment {
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentSecret {
-    pub id: Uuid,
-    pub deployment_id: Uuid,
-    pub key: String,
-    pub value: Vec<u8>,
-    pub created_at: DateTime<Utc>,
-}
-
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
-#[serde(rename_all = "camelCase")]
 pub struct DeploymentEvent {
     pub id: Uuid,
     pub deployment_id: Uuid,

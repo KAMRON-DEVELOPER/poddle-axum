@@ -29,6 +29,8 @@ schemars = { version = "1" }
 aes-gcm = "0.10.3"
 once_cell = "1.21.3"
 base64 = "0.22.1"
+futures.workspace = true
+tokio-stream = "0.1.17"
 
 # rustls = { version = "0.23.32", features = ["std", "log", "logging", "ring"] }
 # anyhow = "1.0.100"
