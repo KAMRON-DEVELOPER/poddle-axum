@@ -760,6 +760,7 @@ dependencies = [
  "bigdecimal",
  "chrono",
  "dotenvy",
+ "futures",
  "k8s-openapi",
  "kube",
  "once_cell",
@@ -773,12 +774,29 @@ dependencies = [
  "sqlx",
  "time",
  "tokio",
+ "tokio-stream",
  "tower-http",
  "tracing",
  "tracing-subscriber",
  "uuid",
  "validator",
 ]
+
+[[package]]
+name = "compute-deployer"
+version = "0.1.0"
+
+[[package]]
+name = "compute-informer"
+version = "0.1.0"
+
+[[package]]
+name = "compute-monitoring"
+version = "0.1.0"
+
+[[package]]
+name = "compute-watcher"
+version = "0.1.0"
 
 [[package]]
 name = "concurrent-queue"
