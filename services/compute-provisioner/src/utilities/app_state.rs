@@ -1,9 +1,10 @@
-use crate::services::build_kubernetes::Kubernetes;
 use axum::extract::FromRef;
 use reqwest::Client;
 use rustls::ClientConfig;
 use shared::{
-    services::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
+    services::{
+        amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
+    },
     utilities::config::Config,
 };
 

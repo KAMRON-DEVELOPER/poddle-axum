@@ -1,5 +1,4 @@
 pub mod features;
-pub mod services;
 pub mod utilities;
 
 use std::net::SocketAddr;
@@ -11,9 +10,7 @@ use axum::{
     response::IntoResponse,
 };
 use shared::{
-    services::{
-        amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
-    },
+    services::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
     utilities::config::Config,
 };
 use time::macros::format_description;
@@ -69,7 +66,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let rustls_config = build_rustls_config(&config)?;
     let database = Database::new(&config).await?;
     let redis = Redis::new(&config).await?;
-    let kubernetes = Kubernetes::new(&config).await?;
     let amqp = Amqp::new(&config).await?;
     let kafka = Kafka::new(&config, "compute-service-group")?;
     let http_client = reqwest::ClientBuilder::new()
@@ -80,7 +76,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         rustls_config: None,
         database,
         redis,
-        kubernetes,
         amqp,
         kafka,
         config: config.clone(),

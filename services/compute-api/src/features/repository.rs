@@ -10,7 +10,7 @@ use crate::features::{
 pub struct ProjectRepository;
 
 impl ProjectRepository {
-    pub async fn get_many_by_user_id(
+    pub async fn get_many(
         pool: &PgPool,
         user_id: Uuid,
         pagination: Pagination,

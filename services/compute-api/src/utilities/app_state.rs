@@ -1,4 +1,3 @@
-use crate::services::build_kubernetes::Kubernetes;
 use axum::extract::FromRef;
 use reqwest::Client;
 use rustls::ClientConfig;
@@ -10,19 +9,12 @@ use shared::{
 #[derive(Clone)]
 pub struct AppState {
     pub rustls_config: Option<ClientConfig>,
-    pub kubernetes: Kubernetes,
     pub database: Database,
     pub redis: Redis,
     pub amqp: Amqp,
     pub kafka: Kafka,
     pub config: Config,
     pub http_client: Client,
-}
-
-impl FromRef<AppState> for Kubernetes {
-    fn from_ref(state: &AppState) -> Self {
-        state.kubernetes.clone()
-    }
 }
 
 impl FromRef<AppState> for Database {

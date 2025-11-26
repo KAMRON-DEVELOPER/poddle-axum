@@ -754,9 +754,7 @@ dependencies = [
 name = "compute"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
  "axum",
- "base64",
  "bigdecimal",
  "chrono",
  "dotenvy",
@@ -787,11 +785,25 @@ dependencies = [
 name = "compute-deployer"
 version = "0.1.0"
 dependencies = [
+ "aes-gcm",
+ "axum",
+ "base64",
+ "chrono",
+ "dotenvy",
  "futures",
+ "k8s-openapi",
  "kube",
  "kube-client",
+ "prometheus-client",
+ "redis",
+ "reqwest",
+ "rustls",
  "schemars",
+ "serde",
+ "serde_json",
  "shared",
+ "sqlx",
+ "time",
  "tokio",
  "tower-http",
  "tracing",

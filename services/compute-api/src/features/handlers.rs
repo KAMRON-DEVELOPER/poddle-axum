@@ -13,15 +13,12 @@ use tracing::debug;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::{
-    features::{
-        repository::{DeploymentRepository, ProjectRepository},
-        schemas::{
-            CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
-            ScaleDeploymentRequest, UpdateProjectRequest,
-        },
+use crate::features::{
+    repository::{DeploymentRepository, ProjectRepository},
+    schemas::{
+        CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
+        ScaleDeploymentRequest, UpdateProjectRequest,
     },
-    services::{build_kubernetes::Kubernetes, kubernetes::DeploymentService},
 };
 
 // ============================================
@@ -36,7 +33,7 @@ pub async fn get_projects(
     let user_id: Uuid = claims.sub;
 
     let (projects, total) =
-        ProjectRepository::get_many_by_user_id(&database.pool, user_id, pagination).await?;
+        ProjectRepository::get_many(&database.pool, user_id, pagination).await?;
 
     Ok(Json(ListResponse {
         data: projects,
@@ -156,13 +153,8 @@ pub async fn get_deployment(
     claims: Claims,
     Path((_, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
-    State(kubernetes): State<Kubernetes>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-
-    let detail =
-        DeploymentService::get_detail(&database.pool, &kubernetes.client, deployment_id, user_id)
-            .await?;
 
     Ok(Json(detail))
 }
@@ -171,7 +163,6 @@ pub async fn create_deployment(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
-    State(kubernetes): State<Kubernetes>,
     State(config): State<Config>,
     Json(req): Json<CreateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -187,16 +178,6 @@ pub async fn create_deployment(
 
     DeploymentRepository::create(tx, user_id, project_id, req);
 
-    let deployment = DeploymentService::create(
-        &database.pool,
-        &kubernetes.client,
-        user_id,
-        project_id,
-        &config.base_domain,
-        req,
-    )
-    .await?;
-
     // Commit transaction
     tx.commit().await?;
 
@@ -207,21 +188,11 @@ pub async fn scale_deployment(
     claims: Claims,
     Path((_, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
-    State(kubernetes): State<Kubernetes>,
     Json(req): Json<ScaleDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     req.validate()?;
 
     let user_id: Uuid = claims.sub;
-
-    let deployment = DeploymentService::scale(
-        &database.pool,
-        &kubernetes.client,
-        deployment_id,
-        user_id,
-        req.replicas,
-    )
-    .await?;
 
     Ok(Json(deployment))
 }
@@ -230,11 +201,8 @@ pub async fn delete_deployment(
     claims: Claims,
     Path((_, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
-    State(kubernetes): State<Kubernetes>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-
-    DeploymentService::delete(&database.pool, &kubernetes.client, deployment_id, user_id).await?;
 
     Ok((
         StatusCode::OK,

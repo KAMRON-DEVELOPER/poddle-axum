@@ -25,5 +25,5 @@ kube-client.workspace = true
 kube.workspace = true
 k8s-openapi.workspace = true
 schemars.workspace = true
-prometheus-client = "0.24.0"
+prometheus-client.workspace = true
 prometheus-http-query = "0.8.3"

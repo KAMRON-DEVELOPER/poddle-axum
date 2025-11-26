@@ -22,12 +22,6 @@ use tracing::error;
 use tracing::info;
 use uuid::Uuid;
 
-use crate::features::models::{DeploymentStatus, ResourceSpec};
-use crate::features::repository::{DeploymentEventRepository, DeploymentRepository};
-use crate::features::schemas::{
-    CreateDeploymentRequest, DeploymentDetailResponse, DeploymentResponse,
-};
-
 pub struct DeploymentService;
 
 impl DeploymentService {
