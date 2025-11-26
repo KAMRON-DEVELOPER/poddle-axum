@@ -2,8 +2,10 @@ use kube::{
     Client, Config as KubeConfig,
     config::{KubeConfigOptions, Kubeconfig},
 };
-use shared::utilities::{config::Config, errors::AppError};
 use tracing::info;
+
+use crate::utilities::config::Config;
+use crate::utilities::errors::AppError;
 
 #[derive(Clone)]
 pub struct Kubernetes {

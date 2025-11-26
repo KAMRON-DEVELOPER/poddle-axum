@@ -28,12 +28,13 @@ tokio-rustls.workspace = true
 reqwest.workspace = true
 tonic.workspace = true
 rdkafka.workspace = true
-kube = { version = "2.0.1", features = ["runtime", "derive", "ring", "rustls-tls", "kube-runtime", "config", "client", "kube-client"] }
-k8s-openapi = { version = "0.26.0", features = ["v1_33"] }
+kube-client.workspace = true
+kube.workspace = true
+k8s-openapi.workspace = true
 bcrypt = "0.17.1"
 url = { version = "2.5.7", features = ["serde"] }
 thiserror = "2.0.16"
 jsonwebtoken = "9.3.1"
 object_store = { version = "0.12.4", features = ["gcp", "aws"] }
 oauth2 = "5.0.0"
-kube-client = "2.0.1"
+prometheus-http-query = "0.8.3"

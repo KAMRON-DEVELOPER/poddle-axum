@@ -1,85 +1,152 @@
+pub mod services;
+pub mod utilities;
+
+use std::net::SocketAddr;
+
+use crate::{
+    services::prometheus::Prometheus, utilities::app_state::AppState,
+    utilities::metrics_scraper::metrics_scraper, utilities::state_syncer::state_syncer,
+};
+use axum::{extract::DefaultBodyLimit, http};
+use shared::{
+    services::{
+        amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
+    },
+    utilities::config::Config,
+};
+use time::macros::format_description;
+use tokio::signal;
+use tower_http::trace::{DefaultOnResponse, TraceLayer};
+use tracing::info;
+use tracing_subscriber::{
+    EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
+};
+
 #[tokio::main]
-async fn main() {
-    let redis = RedisClient::new().await;
-    let k8s = kube::Client::try_default().await?;
-    let prometheus = PrometheusClient::new("http://prometheus:9090");
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install rustls crypto provider");
 
-    // Spawn 3 independent tasks
-    tokio::try_join!(
-        event_watcher(k8s.clone(), redis.clone()),
-        periodic_syncer(k8s.clone(), redis.clone()),
-        metrics_scraper(prometheus, redis.clone())
-    )?;
-}
-
-// TASK 1: Real-time event watching
-async fn event_watcher(k8s: Client, redis: RedisClient) {
-    let deploys = Api::<Deployment>::all(k8s.clone());
-    let pods = Api::<Pod>::all(k8s.clone());
-
-    let deploy_stream = watcher(deploys, Config::default()).applied_objects();
-    let pod_stream = watcher(pods, Config::default()).applied_objects();
-
-    // Merge streams and handle events
-    tokio::select! {
-        _ = handle_deployment_events(deploy_stream, redis.clone()) => {},
-        _ = handle_pod_events(pod_stream, redis.clone()) => {},
+    match dotenvy::dotenv() {
+        Ok(path) => {
+            info!("Loaded .env file from {}", path.display());
+        }
+        Err(dotenvy::Error::Io(ref err)) if err.kind() == std::io::ErrorKind::NotFound => {
+            println!(".env file not found, continuing without it");
+        }
+        Err(e) => {
+            println!("Couldn't load .env file: {}", e);
+        }
     }
-}
 
-// TASK 2: Periodic full reconciliation
-async fn periodic_syncer(k8s: Client, redis: RedisClient) {
-    let mut interval = tokio::time::interval(Duration::from_secs(300)); // 5 min
+    let config = Config::init().await?;
 
-    loop {
-        interval.tick().await;
+    let filter =
+        EnvFilter::new("compute=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
+    let timer = LocalTime::new(format_description!(
+        "[year]-[month]-[day] [hour]:[minute]:[second]"
+    ));
+    tracing_subscriber::registry()
+        .with(filter)
+        .with(
+            tracing_subscriber::fmt::layer()
+                .with_target(false)
+                .with_file(true)
+                .with_line_number(true)
+                .with_timer(timer),
+            // .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW),
+        )
+        .init();
 
-        info!("Running full reconciliation...");
+    // let rustls_config = build_rustls_config(&config)?;
+    let database = Database::new(&config).await?;
+    let redis = Redis::new(&config).await?;
+    let kubernetes = Kubernetes::new(&config).await?;
+    let amqp = Amqp::new(&config).await?;
+    let kafka = Kafka::new(&config, "compute-service-group")?;
+    let http_client = reqwest::ClientBuilder::new()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()?;
+    let prometheus = Prometheus::new(&config, http_client.clone()).await?;
 
-        // List ALL deployments across all user namespaces
-        let deploys = Api::<Deployment>::all(k8s.clone())
-            .list(&ListParams::default().labels("app.poddle.io/managed=true"))
-            .await?;
+    let app_state = AppState {
+        rustls_config: None,
+        database,
+        redis: redis.clone(),
+        prometheus: prometheus.clone(),
+        kubernetes: kubernetes.clone(),
+        amqp,
+        kafka,
+        config: config.clone(),
+        http_client,
+    };
 
-        for deploy in deploys {
-            let key = format!("deploy:{}:{}", deploy.namespace()?, deploy.name_any());
-            let current_state = serde_json::to_string(&deploy)?;
+    let tracing_layer = TraceLayer::new_for_http()
+        .on_request(|request: &http::Request<_>, _span: &tracing::Span| {
+            let method = request.method();
+            let uri = request.uri();
+            let matched_path = request
+                .extensions()
+                .get::<axum::extract::MatchedPath>()
+                .map(|p| p.as_str())
+                .unwrap_or("<unknown>");
 
-            // Compare with cache
-            let cached: Option<String> = redis.get(&key).await?;
-
-            if cached.as_ref() != Some(&current_state) {
-                warn!("Drift detected for {}, reconciling", key);
-                redis.set(&key, &current_state).await?;
-
-                // Optional: Update Postgres too
-                db.upsert_deployment_status(&deploy).await?;
+            if uri.query().is_some() {
+                info!("{} {} {}", method, matched_path, uri);
+            } else {
+                info!("{} {}", method, matched_path);
             }
-        }
+        })
+        .on_response(DefaultOnResponse::new().level(tracing::Level::INFO));
 
-        info!("Reconciliation complete");
-    }
+    let app = axum::Router::new()
+        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
+        .layer(tracing_layer)
+        .with_state(app_state);
+
+    info!("🚀 Server running on port {:#?}", config.server_addres);
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8002").await.unwrap();
+    // let listener = tokio::net::TcpListener::bind(config.clone().server_addres.clone())
+    //     .await
+    //     .unwrap();
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .unwrap();
+
+    // Spawn independent tasks
+    let state_handle = tokio::spawn(state_syncer(kubernetes.client, redis.connection.clone()));
+    let metrics_handle = tokio::spawn(metrics_scraper(prometheus.client, redis.connection.clone()));
+
+    let _ = tokio::join!(state_handle, metrics_handle);
+
+    Ok(())
 }
 
-// TASK 3: Prometheus metrics scraping
-async fn metrics_scraper(prom: PrometheusClient, redis: RedisClient) {
-    let mut interval = tokio::time::interval(Duration::from_secs(30));
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
 
-    loop {
-        interval.tick().await;
+    #[cfg(unix)]
+    let terminate = async {
+        signal::unix::signal(signal::unix::SignalKind::terminate())
+            .expect("failed to install signal handler")
+            .recv()
+            .await;
+    };
 
-        // Scrape CPU usage per deployment
-        let cpu_query = r#"
-            sum by (namespace, deployment) (
-                rate(container_cpu_usage_seconds_total{container!=""}[1m])
-            )
-        "#;
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
 
-        let results = prom.query(cpu_query).await?;
-
-        for metric in results {
-            let key = format!("metrics:{}:{}:cpu", metric.namespace, metric.deployment);
-            redis.set_ex(&key, metric.value, 60).await?; // Expire in 60s
-        }
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
     }
 }

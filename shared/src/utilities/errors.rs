@@ -183,6 +183,10 @@ pub enum AppError {
     KubeconfigError(#[from] kube_client::config::KubeconfigError),
     #[error("InferConfigError, {0}")]
     InferConfigError(#[from] kube_client::config::InferConfigError),
+    #[error("PrometheusHttpQueryError, {0}")]
+    PrometheusHttpQueryError(#[from] prometheus_http_query::Error),
+    #[error("KubeRuntimeError, {0}")]
+    KubeRuntimeError(#[from] kube::runtime::watcher::Error),
 }
 
 impl IntoResponse for AppError {
@@ -420,6 +424,8 @@ impl IntoResponse for AppError {
             Self::InClusterError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             Self::KubeconfigError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             Self::InferConfigError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Self::PrometheusHttpQueryError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Self::KubeRuntimeError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };
 
         let body = Json(json!({"error": error_message}));

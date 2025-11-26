@@ -11,7 +11,9 @@ use axum::{
     response::IntoResponse,
 };
 use shared::{
-    services::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
+    services::{
+        amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
+    },
     utilities::config::Config,
 };
 use time::macros::format_description;
@@ -25,7 +27,7 @@ use tracing_subscriber::{
     EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::{services::build_kubernetes::Kubernetes, utilities::app_state::AppState};
+use crate::utilities::app_state::AppState;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

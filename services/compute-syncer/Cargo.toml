@@ -4,3 +4,26 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+shared = { path = "../../shared" }
+rustls.workspace = true
+axum.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+dotenvy.workspace = true
+time.workspace = true
+uuid.workspace = true
+futures.workspace = true
+kube-client.workspace = true
+kube.workspace = true
+k8s-openapi.workspace = true
+schemars.workspace = true
+prometheus-client = "0.24.0"
+prometheus-http-query = "0.8.3"

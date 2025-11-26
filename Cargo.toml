@@ -2,10 +2,9 @@
 members = [
     "shared",
     "services/users-api",
-    "services/compute-api",
     "services/billing-api",
-    "services/compute-watcher",
-    # "services/compute-informer",
+    "services/billing-worker",
+    "services/compute-api",
     "services/compute-provisioner",
     "services/compute-syncer",
 ]
@@ -85,3 +84,16 @@ rdkafka = "0.38.0"
 futures = "0.3.31"
 dotenvy = "0.15.7"
 regex = "1.11.2"
+kube-client = "2.0.1"
+kube = { version = "2.0.1", features = [
+    "runtime",
+    "derive",
+    "ring",
+    "rustls-tls",
+    "kube-runtime",
+    "config",
+    "client",
+    "kube-client",
+] }
+k8s-openapi = { version = "0.26.0", features = ["v1_33"] }
+schemars = { version = "1" }

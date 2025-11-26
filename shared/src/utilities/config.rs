@@ -22,6 +22,8 @@ pub struct Config {
     pub k8s_config_path: Option<String>,
     pub k8s_encryption_key: String,
 
+    pub prometheus_url: String,
+
     pub base_dir: PathBuf,
     pub tracing_level: Level,
 
@@ -121,6 +123,14 @@ impl Config {
             Some("TRACING_LEVEL"),
             None,
             Some(Level::DEBUG),
+        )
+        .await?;
+
+        let prometheus_url = get_config_value(
+            "PROMETHEUS_URL",
+            Some("PROMETHEUS_URL"),
+            None,
+            Some("http://prometheus:9090".to_string()),
         )
         .await?;
 
@@ -300,6 +310,7 @@ impl Config {
             frontend_endpoint,
             base_dir,
             tracing_level,
+            prometheus_url,
             database_url,
             redis_url,
             redis_host,
