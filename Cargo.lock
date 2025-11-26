@@ -787,10 +787,6 @@ name = "compute-deployer"
 version = "0.1.0"
 
 [[package]]
-name = "compute-informer"
-version = "0.1.0"
-
-[[package]]
 name = "compute-monitoring"
 version = "0.1.0"
 

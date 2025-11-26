@@ -1,5 +1,14 @@
 [workspace]
-members = ["services/users", "services/compute", "services/billing", "shared", "services/compute-watcher", "services/compute-informer", "services/compute-deployer", "services/compute-monitoring"]
+members = [
+    "shared",
+    "services/users-api",
+    "services/compute-api",
+    "services/billing-api",
+    "services/compute-watcher",
+    # "services/compute-informer",
+    "services/compute-provisioner",
+    "services/compute-syncer",
+]
 
 resolver = "2"
 
