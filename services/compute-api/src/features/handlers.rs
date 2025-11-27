@@ -8,7 +8,13 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
+use lapin::{
+    BasicProperties,
+    options::{BasicPublishOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
+    types::FieldTable,
+};
 use shared::{
+    models::DeploymentStatus,
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
         ScaleDeploymentRequest, UpdateProjectRequest,
@@ -23,7 +29,7 @@ use shared::{
     services::database::Database,
     utilities::{config::Config, errors::AppError, jwt::Claims},
 };
-use tracing::debug;
+use tracing::{debug, info};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -162,12 +168,15 @@ pub async fn get_deployments(
 
 pub async fn get_deployment(
     claims: Claims,
-    Path((_, deployment_id)): Path<(Uuid, Uuid)>,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    Ok(Json(detail))
+    let deployment =
+        DeploymentRepository::get_by_id(&database.pool, user_id, deployment_id).await?;
+
+    Ok(Json(deployment))
 }
 
 pub async fn create_deployment(
@@ -175,7 +184,6 @@ pub async fn create_deployment(
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
     State(amqp): State<Amqp>,
-    State(config): State<Config>,
     Json(req): Json<CreateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     debug!("req is {:#?}", req);
@@ -183,54 +191,94 @@ pub async fn create_deployment(
 
     let user_id = claims.sub;
 
+    // Verify project exists
     ProjectRepository::get_one_by_id(&database.pool, project_id, user_id).await?;
 
+    // Start database transaction
     let mut tx = database.pool.begin().await?;
 
+    // Create deployment record
     let deployment = DeploymentRepository::create(&mut tx, user_id, project_id, req).await?;
 
+    // Get RabbitMQ channel
     let channel = amqp.channel().await?;
 
-    channel.basic_ack(delivery_tag, options);
-    channel.basic_get(queue, options);
-    channel.basic_nack(delivery_tag, options);
-    channel.basic_publish(exchange, routing_key, options, payload, properties);
-    channel.basic_qos(prefetch_count, options);
-    channel.basic_recover_async(options);
+    // Declare exchange (idempotent)
+    channel
+        .exchange_declare(
+            "compute",
+            lapin::ExchangeKind::Topic,
+            ExchangeDeclareOptions {
+                durable: true,
+                auto_delete: false,
+                internal: false,
+                nowait: false,
+                passive: false,
+            },
+            FieldTable::default(),
+        )
+        .await?;
 
-    channel.channel_flow(options);
+    // Declare queue for provisioner
+    channel
+        .queue_declare(
+            "compute.provision",
+            QueueDeclareOptions {
+                durable: true,
+                exclusive: false,
+                auto_delete: false,
+                nowait: false,
+                passive: false,
+            },
+            FieldTable::default(),
+        )
+        .await?;
 
-    channel.close(reply_code, reply_text);
+    // Bind queue to exchange
+    channel
+        .queue_bind(
+            "compute.provision",
+            "compute",
+            "compute.provision",
+            QueueBindOptions::default(),
+            FieldTable::default(),
+        )
+        .await?;
 
-    channel.exchange_bind(destination, source, routing_key, options, arguments);
-    channel.exchange_declare(exchange, kind, options, arguments);
-    channel.exchange_delete(exchange, options);
-    channel.exchange_unbind(destination, source, routing_key, options, arguments);
-
-    channel.queue_bind(queue, exchange, routing_key, options, arguments);
-    channel.queue_declare(queue, options, arguments);
-    channel.queue_delete(queue, options);
-    channel.queue_purge(queue, options);
-    channel.queue_unbind(queue, exchange, routing_key, arguments);
-
-    channel.id();
-    channel.status();
-
-    channel.tx_commit();
-    channel.tx_rollback();
-    channel.tx_select();
-
-    channel.wait_for_confirms();
-    channel.wait_for_recovery(error);
-
+    // Prepare message
     let message = serde_json::json!({
         "deployment_id": deployment.id,
         "user_id": user_id,
-        "action": "create"
+        "project_id": project_id,
+        "action": "create",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
     });
 
-    amqp.publish("compute.provision", &message).await?;
+    let payload = serde_json::to_vec(&message)?;
 
+    // Publish message
+    channel
+        .basic_publish(
+            "compute",
+            "compute.provision",
+            BasicPublishOptions {
+                mandatory: false,
+                immediate: false,
+            },
+            &payload,
+            BasicProperties::default()
+                .with_delivery_mode(2) // persistent
+                .with_content_type("application/json".into()),
+        )
+        .await?
+        .await?; // Wait for confirmation
+
+    info!(
+        "Published deployment creation message for {}",
+        deployment.id
+    );
+
+    // Commit transaction
     tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(deployment)))
@@ -238,26 +286,101 @@ pub async fn create_deployment(
 
 pub async fn scale_deployment(
     claims: Claims,
-    Path((_, deployment_id)): Path<(Uuid, Uuid)>,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
+    State(amqp): State<Amqp>,
     Json(req): Json<ScaleDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     req.validate()?;
 
     let user_id: Uuid = claims.sub;
 
+    // Update deployment in database
+    let deployment =
+        DeploymentRepository::update_replicas(&database.pool, deployment_id, user_id, req.replicas)
+            .await?;
+
+    // Get RabbitMQ channel
+    let channel = amqp.channel().await?;
+
+    // Prepare scaling message
+    let message = serde_json::json!({
+        "deployment_id": deployment_id,
+        "user_id": user_id,
+        "project_id": project_id,
+        "action": "scale",
+        "replicas": req.replicas,
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+
+    let payload = serde_json::to_vec(&message)?;
+
+    // Publish to scaling queue
+    channel
+        .basic_publish(
+            "compute",
+            "compute.scale",
+            BasicPublishOptions::default(),
+            &payload,
+            BasicProperties::default()
+                .with_delivery_mode(2)
+                .with_content_type("application/json".into()),
+        )
+        .await?
+        .await?;
+
+    info!("Published scaling message for deployment {}", deployment_id);
+
     Ok(Json(deployment))
 }
 
 pub async fn delete_deployment(
     claims: Claims,
-    Path((_, deployment_id)): Path<(Uuid, Uuid)>,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
+    State(amqp): State<Amqp>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id: Uuid = claims.sub;
+    let user_id = claims.sub;
+
+    // Mark as deleting in database
+    DeploymentRepository::update_status(&database.pool, deployment_id, DeploymentStatus::Deleting)
+        .await?;
+
+    // Get RabbitMQ channel
+    let channel = amqp.channel().await?;
+
+    // Prepare deletion message
+    let message = serde_json::json!({
+        "deployment_id": deployment_id,
+        "user_id": user_id,
+        "project_id": project_id,
+        "action": "delete",
+        "timestamp": chrono::Utc::now().to_rfc3339(),
+    });
+
+    let payload = serde_json::to_vec(&message)?;
+
+    // Publish deletion message
+    channel
+        .basic_publish(
+            "compute",
+            "compute.delete",
+            BasicPublishOptions::default(),
+            &payload,
+            BasicProperties::default()
+                .with_delivery_mode(2)
+                .with_content_type("application/json".into()),
+        )
+        .await?
+        .await?;
+
+    info!(
+        "Published deletion message for deployment {}",
+        deployment_id
+    );
 
     Ok((
-        StatusCode::OK,
-        Json(MessageResponse::new("Deployment deleted successfully")),
+        StatusCode::ACCEPTED,
+        Json(MessageResponse::new("Deployment deletion initiated")),
     ))
 }

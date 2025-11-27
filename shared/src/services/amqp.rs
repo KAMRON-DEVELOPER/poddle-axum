@@ -1,9 +1,11 @@
 use std::sync::Arc;
 
 use lapin::{
-    Channel, Connection, ConnectionProperties,
+    BasicProperties, Channel, Connection, ConnectionProperties,
+    options::BasicPublishOptions,
     tcp::{OwnedIdentity, OwnedTLSConfig},
 };
+use serde::Serialize;
 use tracing::info;
 
 use crate::utilities::{config::Config, errors::AppError};
@@ -40,5 +42,62 @@ impl Amqp {
 
     pub async fn channel(&self) -> Result<Channel, AppError> {
         Ok(self.connection.create_channel().await?)
+    }
+
+    pub async fn basic_publish<T: Serialize>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        message: &T,
+    ) -> Result<(), AppError> {
+        let channel = self.channel().await?;
+
+        let payload = serde_json::to_vec(message)?;
+
+        channel
+            .basic_publish(
+                exchange,
+                routing_key,
+                BasicPublishOptions {
+                    mandatory: false,
+                    immediate: false,
+                },
+                &payload,
+                BasicProperties::default()
+                    .with_delivery_mode(2)
+                    .with_content_type("application/json".into()),
+            )
+            .await?
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn basic_publish_with_properties<T: Serialize>(
+        &self,
+        exchange: &str,
+        routing_key: &str,
+        message: &T,
+        properties: BasicProperties,
+    ) -> Result<(), AppError> {
+        let channel = self.channel().await?;
+
+        let payload = serde_json::to_vec(message)?;
+
+        channel
+            .basic_publish(
+                exchange,
+                routing_key,
+                BasicPublishOptions {
+                    mandatory: false,
+                    immediate: false,
+                },
+                &payload,
+                properties,
+            )
+            .await?
+            .await?;
+
+        Ok(())
     }
 }

@@ -762,6 +762,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "kube-client",
+ "lapin",
  "once_cell",
  "redis",
  "redis-macros",

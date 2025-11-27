@@ -154,8 +154,8 @@ impl DeploymentRepository {
 
     pub async fn get_by_id(
         pool: &PgPool,
-        deployment_id: Uuid,
         user_id: Uuid,
+        deployment_id: Uuid,
     ) -> Result<Deployment, sqlx::Error> {
         sqlx::query_as::<_, Deployment>(
             r#"

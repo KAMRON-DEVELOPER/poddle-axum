@@ -23,6 +23,7 @@ dotenvy.workspace = true
 time.workspace = true
 bigdecimal.workspace = true
 redis.workspace = true
+lapin.workspace = true
 regex.workspace = true
 kube-client.workspace = true
 kube.workspace = true
