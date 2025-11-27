@@ -1,8 +1,19 @@
+use crate::{
+    features::repository::{DeploymentRepository, ProjectRepository},
+    services::compute_cache::ComputeCache,
+};
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
+};
+use shared::{
+    schemas::{
+        CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
+        ScaleDeploymentRequest, UpdateProjectRequest,
+    },
+    services::redis::Redis,
 };
 use shared::{
     schemas::{ListResponse, Pagination},
@@ -12,14 +23,6 @@ use shared::{
 use tracing::debug;
 use uuid::Uuid;
 use validator::Validate;
-
-use crate::features::{
-    repository::{DeploymentRepository, ProjectRepository},
-    schemas::{
-        CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
-        ScaleDeploymentRequest, UpdateProjectRequest,
-    },
-};
 
 // ============================================
 // PROJECT HANDLERS
@@ -117,9 +120,14 @@ pub async fn delete_project(
 pub async fn get_deployments(
     claims: Claims,
     Path(project_id): Path<Uuid>,
+    State(redis): State<Redis>,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
+
+    let mut cache = ComputeCache(redis.connection);
+
+    let d = cache.get_deployments_state(project_id).await?;
 
     let deployments =
         DeploymentRepository::get_all_by_project(&database.pool, project_id, user_id).await?;

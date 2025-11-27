@@ -1,6 +1,5 @@
 pub mod handlers;
 pub mod implementations;
-pub mod metrics;
 pub mod models;
 pub mod repository;
 pub mod schemas;
@@ -36,6 +35,6 @@ pub fn routes() -> Router<AppState> {
         )
         .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics",
-            get(metrics::deployment_metrics_stream),
+            get(websocket::deployment_metrics_stream),
         )
 }

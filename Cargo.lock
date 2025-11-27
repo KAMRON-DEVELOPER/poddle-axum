@@ -763,6 +763,8 @@ dependencies = [
  "kube",
  "kube-client",
  "once_cell",
+ "redis",
+ "redis-macros",
  "regex",
  "reqwest",
  "rustls",
@@ -3291,6 +3293,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "redis-macros"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ac3609707f8c68aac6f3871c9a9596a7a9e30e3cc42ebba741d13b39e27c6d8"
+dependencies = [
+ "redis",
+ "redis-macros-derive",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "redis-macros-derive"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "923db076e23f014fd5c5504fba397d3dd06b29724a3dd8e21aa7a3423c00b129"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "redis",
+ "syn",
+]
+
+[[package]]
 name = "redox_syscall"
 version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3824,6 +3850,7 @@ dependencies = [
  "axum-extra",
  "bcrypt",
  "chrono",
+ "futures",
  "jsonwebtoken",
  "k8s-openapi",
  "kube",
@@ -3831,10 +3858,13 @@ dependencies = [
  "lapin",
  "oauth2",
  "object_store",
+ "once_cell",
  "prometheus-http-query",
  "rand 0.9.2",
  "rdkafka",
  "redis",
+ "redis-macros",
+ "regex",
  "reqwest",
  "rustls",
  "rustls-pemfile",

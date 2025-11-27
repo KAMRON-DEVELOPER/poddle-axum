@@ -2,7 +2,7 @@ use shared::schemas::Pagination;
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use crate::features::{
+use shared::{
     models::{Deployment, DeploymentEvent, DeploymentStatus, Project},
     schemas::CreateDeploymentRequest,
 };
