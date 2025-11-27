@@ -1,0 +1,91 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: compute-service-secrets
+  namespace: default
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql://cloudservice:changeme-use-strong-password@postgres:5432/cloudservice"
+  REDIS_URL: "redis://:changeme-redis-password@redis:6379"
+  AMQP_URL: "amqp://cloudservice:changeme-rabbitmq-password@rabbitmq:5672"
+  ENCRYPTION_KEY: "generate-with-openssl-rand-base64-32"
+  JWT_SECRET: "your-jwt-secret-key"
+  BASE_DOMAIN: "app.pinespot.uz"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute-service
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: compute-service
+  template:
+    metadata:
+      labels:
+        app: compute-service
+    spec:
+      serviceAccountName: compute-service-sa
+      containers:
+        - name: compute-service
+          image: your-registry/compute-service:latest
+          ports:
+            - containerPort: 8001
+          envFrom:
+            - secretRef:
+                name: compute-service-secrets
+          env:
+            - name: SERVER_ADDRESS
+              value: "0.0.0.0:8001"
+            - name: K8S_IN_CLUSTER
+              value: "true"
+            - name: RUST_LOG
+              value: "info"
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-service
+  namespace: default
+spec:
+  selector:
+    app: compute-service
+  ports:
+    - port: 80
+      targetPort: 8001
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: compute-service
+  namespace: default
+  annotations:
+    kubernetes.io/ingress.class: traefik
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  tls:
+    - hosts:
+        - api.pinespot.uz
+      secretName: compute-service-tls
+  rules:
+    - host: api.pinespot.uz
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: compute-service
+                port:
+                  number: 80

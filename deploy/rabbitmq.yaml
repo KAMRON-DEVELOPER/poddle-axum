@@ -1,0 +1,117 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: rabbitmq-ns
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-hs
+  namespace: rabbitmq-ns
+spec:
+  clusterIP: None
+  selector:
+    app: rabbitmq
+  ports:
+    - port: 5672
+      name: amqp
+    - port: 15672
+      name: http-mgmt
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq-service
+  namespace: rabbitmq-ns
+spec:
+  type: ClusterIP
+  selector:
+    app: rabbitmq
+  ports:
+    - name: amqp
+      port: 5672
+      targetPort: 5672
+    - name: http
+      port: 15672
+      targetPort: 15672
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rabbitmq-cm
+  namespace: rabbitmq-ns
+data:
+  RABBITMQ_DEFAULT_USER: guest
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: rabbitmq-secret
+  namespace: rabbitmq-ns
+type: Opaque
+stringData:
+  RABBITMQ_DEFAULT_PASS: password
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq-ss
+  namespace: rabbitmq-ns
+spec:
+  replicas: 1
+  serviceName: "rabbitmq-hs"
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: rabbitmq
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+    spec:
+      resources:
+        requests:
+          cpu: "128m"
+          memory: "128Mi"
+        limits:
+          cpu: "256m"
+          memory: "256Mi"
+      containers:
+        - name: rabbitmq
+          image: rabbitmq:management-alpine
+          ports:
+            - containerPort: 5672
+            - containerPort: 15672
+          envFrom:
+            - configMapRef:
+                name: rabbitmq-cm
+            - secretRef:
+                name: rabbitmq-secret
+          volumeMounts:
+            - name: rabbitmq-data
+              mountPath: /var/lib/rabbitmq
+            - name: rabbitmq-volume
+              mountPath: /etc/rabbitmq/rabbitmq.conf
+              subPath: rabbitmq.conf
+              readOnly: true
+          readinessProbe:
+            exec:
+              command: ["rabbitmq-diagnostics", "ping"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+      volumes:
+        - name: rabbitmq-volume
+          configMap:
+            name: rabbitmq-conf
+            items:
+              - key: rabbitmq.conf
+                path: rabbitmq.conf
+  volumeClaimTemplates:
+    - metadata:
+        name: rabbitmq-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: local-path
+        resources:
+          requests:
+            storage: 1Gi
