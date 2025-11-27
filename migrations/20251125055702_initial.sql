@@ -18,11 +18,24 @@ $$ LANGUAGE plpgsql;
 -- ENUM TYPES
 -- ==============================================
 DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
-    'pending',
-    'running',
-    'succeeded',
-    'failed',
-    'terminated'
+    -- 1. Saved in DB, waiting for Worker
+    'queued',
+    -- 2. Worker is creating K8s resources
+    'provisioning',
+    -- 3. K8s accepted it, pulling images (ContainerCreating)
+    'starting',
+    -- 4. All pods are Running and Ready
+    'healthy',
+    -- 5. Pods are crashing or failing health checks
+    'unhealthy',
+    -- 6. Expected 3 replicas, but only 2 are ready
+    'degraded',
+    -- 7. Moving from 2 to 5 replicas
+    'scaling',
+    -- 8. Stopped by user or billing
+    'suspended',
+    -- 9. Configuration error (Image pull backoff, etc.)
+    'failed'
 );
 EXCEPTION
 WHEN duplicate_object THEN NULL;
@@ -142,34 +155,47 @@ CREATE TABLE IF NOT EXISTS deployments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    -- Deployment config
     name VARCHAR(128) NOT NULL,
-    image TEXT NOT NULL,
-    env_vars JSONB NOT NULL DEFAULT '{}'::jsonb,
+    image VARCHAR(500) NOT NULL,
     replicas INTEGER NOT NULL DEFAULT 1 CHECK (replicas >= 1),
-    resources JSONB NOT NULL DEFAULT jsonb_build_object(
-        'cpu_request_millicores',
-        250,
-        'cpu_limit_millicores',
-        500,
-        'memory_request_mb',
-        256,
-        'memory_limit_mb',
-        512
-    ),
+    port INT NOT NULL,
+    -- K8s identifiers
+    cluster_namespace VARCHAR(63) NOT NULL,
+    cluster_deployment_name VARCHAR(63) NOT NULL,
+    -- Configuration (JSONB for flexibility)
+    env_vars JSONB NOT NULL DEFAULT '{}'::jsonb,
+    resources JSONB NOT NULL,
     labels JSONB,
-    status deployment_status NOT NULL DEFAULT 'pending',
-    cluster_namespace VARCHAR(128) NOT NULL DEFAULT 'default',
-    cluster_deployment_name VARCHAR(192) NOT NULL,
     node_selector JSONB,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (project_id, name)
+    -- Status
+    status deployment_status NOT NULL DEFAULT 'queued',
+    -- External access
+    subdomain VARCHAR(63),
+    external_url TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE(cluster_namespace, cluster_deployment_name)
 );
 CREATE INDEX IF NOT EXISTS idx_deployments_user_id ON deployments(user_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_project_id ON deployments(project_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments(status);
 CREATE TRIGGER set_deployments_timestamp BEFORE
 UPDATE ON deployments FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+--
+--
+-- ==============================================
+-- DEPLOYMENT EVENTS
+-- ==============================================
+CREATE TABLE IF NOT EXISTS deployment_events (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    deployment_id UUID NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
+    event_type VARCHAR(128) NOT NULL,
+    message TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_events(deployment_id);
+CREATE INDEX IF NOT EXISTS idx_deployment_events_created ON deployment_events(created_at DESC);
 --
 --
 -- ==============================================
@@ -282,29 +308,3 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER after_user_created
 AFTER
 INSERT ON users FOR EACH ROW EXECUTE PROCEDURE on_user_created_balance();
---
---
--- ==============================================
--- DEPLOYMENT SECRETS (application-managed encryption)
--- ==============================================
-CREATE TABLE IF NOT EXISTS deployment_secrets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    deployment_id UUID NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
-    key TEXT NOT NULL,
-    value BYTEA NOT NULL,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE UNIQUE INDEX IF NOT EXISTS uq_deployment_secret_key ON deployment_secrets (deployment_id, key);
---
---
--- ==============================================
--- DEPLOYMENT EVENTS
--- ==============================================
-CREATE TABLE IF NOT EXISTS deployment_events (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    deployment_id UUID NOT NULL REFERENCES deployments(id) ON DELETE CASCADE,
-    event_type VARCHAR(128) NOT NULL,
-    message TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_events(deployment_id);

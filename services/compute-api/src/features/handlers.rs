@@ -13,7 +13,10 @@ use shared::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
         ScaleDeploymentRequest, UpdateProjectRequest,
     },
-    services::redis::Redis,
+    services::{
+        amqp::{self, Amqp},
+        redis::Redis,
+    },
 };
 use shared::{
     schemas::{ListResponse, Pagination},
@@ -171,6 +174,7 @@ pub async fn create_deployment(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
+    State(amqp): State<Amqp>,
     State(config): State<Config>,
     Json(req): Json<CreateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -181,12 +185,52 @@ pub async fn create_deployment(
 
     ProjectRepository::get_one_by_id(&database.pool, project_id, user_id).await?;
 
-    // Start database transaction
     let mut tx = database.pool.begin().await?;
 
-    DeploymentRepository::create(tx, user_id, project_id, req);
+    let deployment = DeploymentRepository::create(&mut tx, user_id, project_id, req).await?;
 
-    // Commit transaction
+    let channel = amqp.channel().await?;
+
+    channel.basic_ack(delivery_tag, options);
+    channel.basic_get(queue, options);
+    channel.basic_nack(delivery_tag, options);
+    channel.basic_publish(exchange, routing_key, options, payload, properties);
+    channel.basic_qos(prefetch_count, options);
+    channel.basic_recover_async(options);
+
+    channel.channel_flow(options);
+
+    channel.close(reply_code, reply_text);
+
+    channel.exchange_bind(destination, source, routing_key, options, arguments);
+    channel.exchange_declare(exchange, kind, options, arguments);
+    channel.exchange_delete(exchange, options);
+    channel.exchange_unbind(destination, source, routing_key, options, arguments);
+
+    channel.queue_bind(queue, exchange, routing_key, options, arguments);
+    channel.queue_declare(queue, options, arguments);
+    channel.queue_delete(queue, options);
+    channel.queue_purge(queue, options);
+    channel.queue_unbind(queue, exchange, routing_key, arguments);
+
+    channel.id();
+    channel.status();
+
+    channel.tx_commit();
+    channel.tx_rollback();
+    channel.tx_select();
+
+    channel.wait_for_confirms();
+    channel.wait_for_recovery(error);
+
+    let message = serde_json::json!({
+        "deployment_id": deployment.id,
+        "user_id": user_id,
+        "action": "create"
+    });
+
+    amqp.publish("compute.provision", &message).await?;
+
     tx.commit().await?;
 
     Ok((StatusCode::CREATED, Json(deployment)))

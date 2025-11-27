@@ -1,4 +1,4 @@
-use shared::schemas::Pagination;
+use shared::{models::ResourceSpec, schemas::Pagination};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -177,26 +177,43 @@ impl DeploymentRepository {
         project_id: Uuid,
         req: CreateDeploymentRequest,
     ) -> Result<Deployment, sqlx::Error> {
+        let namespace = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
+        let deployment_name = format!(
+            "{}-{}",
+            req.name.to_lowercase().replace("_", "-"),
+            &Uuid::new_v4().to_string()[..8]
+        );
+
+        let env_vars = serde_json::to_value(&req.env_vars).unwrap_or(serde_json::json!({}));
+        let resources = serde_json::to_value(&req.resources)
+            .unwrap_or_else(|_| serde_json::to_value(&ResourceSpec::default()).unwrap());
+        let labels = req
+            .labels
+            .as_ref()
+            .map(|l| serde_json::to_value(l).unwrap());
+
         sqlx::query_as::<_, Deployment>(
             r#"
                 INSERT INTO deployments (
-                    user_id, project_id, name, image, env_vars, replicas,
-                    resources, labels, cluster_namespace, cluster_deployment_name
+                    user_id, project_id, name, image, replicas, port, env_vars, resources,
+                    labels, subdomain, cluster_namespace, cluster_deployment_name
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 RETURNING *
             "#,
         )
         .bind(user_id)
         .bind(project_id)
-        .bind(req.name)
-        .bind(req.image)
-        .bind(req.env_vars)
+        .bind(&req.name)
+        .bind(&req.image)
         .bind(req.replicas)
-        .bind(req.resources)
-        .bind(req.labels)
-        .bind(req.cluster_namespace)
-        .bind(req.cluster_deployment_name)
+        .bind(req.port)
+        .bind(env_vars)
+        .bind(resources)
+        .bind(labels)
+        .bind(&req.subdomain)
+        .bind(namespace)
+        .bind(deployment_name)
         .fetch_one(&mut **tx)
         .await
     }
