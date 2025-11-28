@@ -12,7 +12,8 @@ use lapin::{
 };
 use shared::{
     schemas::{
-        CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
+        CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
+        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ScaleDeploymentMessage,
         ScaleDeploymentRequest, UpdateProjectRequest,
     },
     services::amqp::Amqp,
@@ -186,7 +187,8 @@ pub async fn create_deployment(
     let mut tx = database.pool.begin().await?;
 
     // Create deployment record
-    let deployment = DeploymentRepository::create(&mut tx, user_id, project_id, req).await?;
+    let deployment =
+        DeploymentRepository::create(&mut tx, user_id, project_id, req.clone()).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
@@ -234,13 +236,7 @@ pub async fn create_deployment(
         .await?;
 
     // Prepare message
-    let message = serde_json::json!({
-        "deployment_id": deployment.id,
-        "user_id": user_id,
-        "project_id": project_id,
-        "action": "create",
-        "timestamp": chrono::Utc::now().timestamp(),
-    });
+    let message = CreateDeploymentMessage::from_request(deployment.id, user_id, project_id, req);
 
     let payload = serde_json::to_vec(&message)?;
 
@@ -248,7 +244,7 @@ pub async fn create_deployment(
     channel
         .basic_publish(
             "compute",
-            "compute.provision",
+            "compute.create",
             BasicPublishOptions {
                 mandatory: false,
                 immediate: false,
@@ -291,19 +287,18 @@ pub async fn scale_deployment(
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
 
-    // Prepare scaling message
-    let message = serde_json::json!({
-        "deployment_id": deployment_id,
-        "user_id": user_id,
-        "project_id": project_id,
-        "action": "scale",
-        "replicas": req.replicas,
-        "timestamp": chrono::Utc::now().to_rfc3339(),
-    });
+    // Prepare message
+    let message = ScaleDeploymentMessage {
+        deployment_id,
+        user_id,
+        project_id,
+        replicas: req.replicas,
+        timestamp: chrono::Utc::now().timestamp(),
+    };
 
     let payload = serde_json::to_vec(&message)?;
 
-    // Publish to scaling queue
+    // Publish message
     channel
         .basic_publish(
             "compute",
@@ -336,18 +331,17 @@ pub async fn delete_deployment(
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
 
-    // Prepare deletion message
-    let message = serde_json::json!({
-        "deployment_id": deployment_id,
-        "user_id": user_id,
-        "project_id": project_id,
-        "action": "delete",
-        "timestamp": chrono::Utc::now().timestamp(),
-    });
+    // Prepare message
+    let message = DeleteDeploymentMessage {
+        deployment_id,
+        user_id,
+        project_id,
+        timestamp: chrono::Utc::now().timestamp(),
+    };
 
     let payload = serde_json::to_vec(&message)?;
 
-    // Publish deletion message
+    // Publish message
     channel
         .basic_publish(
             "compute",

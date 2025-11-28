@@ -3,6 +3,9 @@ use std::collections::HashMap;
 
 use k8s_openapi::api::apps::v1::{Deployment as K8sDeployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Namespace;
+// use k8s_openapi::api::core::v1::NamespaceCondition;
+// use k8s_openapi::api::core::v1::NamespaceSpec;
+// use k8s_openapi::api::core::v1::NamespaceStatus;
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, EnvVar, PodSpec, PodTemplateSpec, ResourceRequirements,
     Secret as K8sSecret, Service, ServicePort, ServiceSpec,
@@ -17,7 +20,7 @@ use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
 use shared::models::ResourceSpec;
-use shared::schemas::CreateDeploymentRequest;
+use shared::schemas::CreateDeploymentMessage;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::error;
@@ -27,31 +30,45 @@ use uuid::Uuid;
 pub struct KubernetesService;
 
 impl KubernetesService {
-    async fn get_user_namespace(client: &Client, user_id: Uuid) -> Result<String, AppError> {
+    async fn get_namespace_or_create(client: &Client, user_id: Uuid) -> Result<String, AppError> {
         let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
         let ns_api: Api<Namespace> = Api::all(client.clone());
 
         match ns_api.get(&ns_string).await {
-            Ok(_) => {
-                info!("Namespace {} already exists", ns_string);
+            Ok(ns) => {
+                info!("Namespace {:?} already exists", ns);
                 Ok(ns_string)
             }
-            Err(_) => {
+            Err(e) => {
+                error!("Namespace not exist: {}", e);
                 info!("Creating namespace {}", ns_string);
                 let mut labels = BTreeMap::new();
                 labels.insert("user-id".to_string(), user_id.to_string());
 
-                let ns = Namespace {
+                let new_ns = Namespace {
                     metadata: ObjectMeta {
                         name: Some(ns_string.clone()),
                         labels: Some(labels),
                         ..Default::default()
                     },
+                    // spec: Some(NamespaceSpec {
+                    //     finalizers: todo!(),
+                    // }),
+                    // status: Some(NamespaceStatus {
+                    //     conditions: vec![NamespaceCondition {
+                    //         last_transition_time: todo!(),
+                    //         message: todo!(),
+                    //         reason: todo!(),
+                    //         status: todo!(),
+                    //         type_: todo!(),
+                    //     }],
+                    //     phase: todo!(),
+                    // }),
                     ..Default::default()
                 };
 
                 ns_api
-                    .create(&PostParams::default(), &ns)
+                    .create(&PostParams::default(), &new_ns)
                     .await
                     .map_err(|e| {
                         AppError::InternalError(format!("Failed to create namespace: {}", e))
@@ -67,59 +84,79 @@ impl KubernetesService {
         pool: &PgPool,
         client: &Client,
         user_id: Uuid,
-        project_id: Uuid,
+        deployment_id: Uuid,
         base_domain: &str,
-        req: CreateDeploymentRequest,
+        message: CreateDeploymentMessage,
     ) -> Result<(), AppError> {
-        let namespace = Self::get_user_namespace(client, user_id).await?;
+        info!("🚀 Creating K8s resources for deployment {}", deployment_id);
+
+        // Update status to 'provisioning'
+        sqlx::query!(
+            r#"
+                UPDATE deployments
+                SET status = 'provisioning'
+                WHERE id = $1
+            "#,
+            deployment_id
+        )
+        .execute(pool)
+        .await?;
+
+        // Get or create namespace
+        let namespace = Self::get_namespace_or_create(client, user_id).await?;
 
         // Generate unique deployment name
         let deployment_name = format!(
             "{}-{}",
-            req.name.to_lowercase().replace("_", "-"),
-            &Uuid::new_v4().to_string()[..8]
+            message
+                .name
+                .to_lowercase()
+                .replace("_", "-")
+                .replace(" ", "-"),
+            &deployment_id.to_string()[..8]
         );
 
         // Determine subdomain
-        let subdomain = req.subdomain.unwrap_or_else(|| {
-            format!("{}-{}", req.name, &user_id.to_string()[..8])
+        let subdomain = message.subdomain.unwrap_or_else(|| {
+            format!("{}-{}", message.name, &user_id.to_string()[..8])
                 .to_lowercase()
                 .replace("_", "-")
         });
 
         let external_url = format!("{}.{}", subdomain, base_domain);
 
-        // Prepare env vars (non-sensitive)
-        let env_vars = req.env_vars.unwrap_or_default();
-        let env_vars_json = serde_json::to_value(&env_vars)?;
+        info!("📍 External URL: {}", external_url);
 
-        // Prepare resources
-        let resources = req.resources.unwrap_or_default();
-        let resources_json = serde_json::to_value(&resources)?;
-
-        // Prepare labels
-        let labels_json = req.labels.map(|l| serde_json::to_value(l).unwrap());
-
-        // Start database transaction
-        let mut tx = pool.begin().await?;
-
-        // Create Kubernetes resources (secrets are NOT stored in DB)
-        let secrets = req.secrets.unwrap_or_default();
-
+        // Create all K8s resources
         Self::create_k8s_resources(
             client,
             &namespace,
             &deployment_name,
-            &deployment.id,
-            &req.image,
-            req.port,
-            req.replicas,
-            &resources,
+            &deployment_id,
+            &message.image,
+            message.port,
+            message.replicas,
+            &message.resources,
             &external_url,
-            env_vars,
-            secrets,
+            message.env_vars,
+            message.secrets,
         )
         .await?;
+
+        // Update deployment status to 'starting'
+        sqlx::query!(
+            r#"
+            UPDATE deployments
+            SET status = 'starting', external_url = $2
+            WHERE id = $1
+            "#,
+            deployment_id,
+            external_url
+        )
+        .execute(pool)
+        .await?;
+
+        info!("✅ K8s resources created for deployment {}", deployment_id);
 
         Ok(())
     }
@@ -504,54 +541,6 @@ impl KubernetesService {
         DeploymentRepository::delete(pool, deployment_id, user_id).await?;
 
         info!("Deployment {} deleted successfully", deployment_id);
-        Ok(())
-    }
-
-    /// Get deployment details with live K8s status
-    pub async fn get_detail(
-        pool: &PgPool,
-        client: &Client,
-        deployment_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(), AppError> {
-        // Get live K8s deployment status
-        let deployments_api: Api<K8sDeployment> =
-            Api::namespaced(client.clone(), &deployment.cluster_namespace);
-
-        let ready_replicas = match deployments_api
-            .get(&deployment.cluster_deployment_name)
-            .await
-        {
-            Ok(k8s_dep) => k8s_dep
-                .status
-                .and_then(|s| s.ready_replicas)
-                .map(|r| r as i32),
-            Err(e) => {
-                error!("Failed to get K8s deployment status: {}", e);
-                None
-            }
-        };
-
-        let env_vars: HashMap<String, String> =
-            serde_json::from_value(deployment.env_vars.clone())?;
-        let resources: ResourceSpec = serde_json::from_value(deployment.resources.clone())?;
-        let labels: Option<HashMap<String, String>> = deployment
-            .labels
-            .as_ref()
-            .map(|l| serde_json::from_value(l.clone()).unwrap());
-
-        // Get Ingress URL
-        let ingress_api: Api<Ingress> =
-            Api::namespaced(client.clone(), &deployment.cluster_namespace);
-        let external_url = match ingress_api.get(&deployment.cluster_deployment_name).await {
-            Ok(ingress) => ingress
-                .spec
-                .and_then(|spec| spec.rules)
-                .and_then(|rules| rules.first().cloned())
-                .and_then(|rule| rule.host),
-            Err(_) => None,
-        };
-
         Ok(())
     }
 }

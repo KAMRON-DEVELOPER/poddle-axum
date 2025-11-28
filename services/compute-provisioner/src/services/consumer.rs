@@ -8,10 +8,11 @@ use lapin::{
     types::FieldTable,
 };
 use shared::{
+    schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, ScaleDeploymentMessage},
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
     utilities::{config::Config, errors::AppError},
 };
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::services::kubernetes_service::KubernetesService;
 
@@ -66,14 +67,14 @@ pub async fn start_rabbitmq_consumer(
             .await?;
     }
 
-    // Set QoS (prefetch), a consumer will only receive up to 10 messages that it has not yet acknowledged
+    // Set QoS (prefetch)
     channel.basic_qos(10, BasicQosOptions::default()).await?;
 
     // Start consumers
     let create_consumer = channel
         .basic_consume(
             "compute.create",
-            "creater",
+            "creator",
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
@@ -130,109 +131,113 @@ async fn handle_create_messages(
     kubernetes: Kubernetes,
     mut consumer: Consumer,
 ) {
+    info!("🎯 Create consumer started");
+
     while let Some(delivery) = consumer.next().await {
         match delivery {
             Ok(delivery) => {
-                let payload = String::from_utf8_lossy(&delivery.data);
-                info!("Received provision message: {}", payload);
-
-                match serde_json::from_slice::<serde_json::Value>(&delivery.data) {
+                // Try to deserialize into structured message
+                match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
-                        let deployment_id = message["deployment_id"]
-                            .as_str()
-                            .and_then(|s| uuid::Uuid::parse_str(s).ok());
-                        let user_id = message["user_id"]
-                            .as_str()
-                            .and_then(|s| uuid::Uuid::parse_str(s).ok());
+                        info!(
+                            "📦 Received create deployment message: {} (image: {}, replicas: {})",
+                            message.deployment_id, message.image, message.replicas
+                        );
 
-                        if let (Some(deployment_id), Some(user_id)) = (deployment_id, user_id) {
-                            // Process deployment creation
-                            match KubernetesService::create(
-                                &database.pool,
-                                &kubernetes.client,
-                                user_id,
-                                deployment_id,
-                                &config.base_domain,
-                            )
-                            .await
-                            {
-                                Ok(_) => {
-                                    info!("✅ Deployment {} created", deployment_id);
-                                    // Acknowledge message
-                                    delivery
-                                        .ack(BasicAckOptions::default())
-                                        .await
-                                        .expect("Failed to ack");
-                                }
-                                Err(e) => {
-                                    tracing::error!("❌ Failed to create deployment: {}", e);
-                                    // Reject and requeue
-                                    delivery
-                                        .nack(BasicNackOptions {
-                                            requeue: true,
-                                            multiple: false,
-                                        })
-                                        .await
-                                        .expect("Failed to nack");
+                        // Now we have ALL the data we need without a database query!
+                        match KubernetesService::create(
+                            &database.pool,
+                            &kubernetes.client,
+                            message.user_id,
+                            message.deployment_id,
+                            &config.base_domain,
+                            message.clone(),
+                        )
+                        .await
+                        {
+                            Ok(_) => {
+                                info!(
+                                    "✅ Deployment {} created successfully",
+                                    message.deployment_id
+                                );
+
+                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                    error!("Failed to ack message: {}", e);
                                 }
                             }
-                        } else {
-                            tracing::error!("Invalid message format");
-                            delivery
-                                .reject(BasicRejectOptions { requeue: false })
-                                .await
-                                .expect("Failed to reject");
+                            Err(e) => {
+                                error!(
+                                    "❌ Failed to create deployment {}: {}",
+                                    message.deployment_id, e
+                                );
+
+                                // Requeue for retry (up to max retries handled by RabbitMQ TTL/DLX)
+                                if let Err(e) = delivery
+                                    .nack(BasicNackOptions {
+                                        requeue: true,
+                                        multiple: false,
+                                    })
+                                    .await
+                                {
+                                    error!("Failed to nack message: {}", e);
+                                }
+                            }
                         }
                     }
                     Err(e) => {
-                        tracing::error!("Failed to parse message: {}", e);
-                        delivery
-                            .reject(BasicRejectOptions { requeue: false })
-                            .await
-                            .expect("Failed to reject");
+                        error!("❌ Failed to parse CreateDeploymentMessage: {}", e);
+                        warn!("Payload: {}", String::from_utf8_lossy(&delivery.data));
+
+                        // Don't requeue malformed messages
+                        if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await
+                        {
+                            error!("Failed to reject message: {}", e);
+                        }
                     }
                 }
             }
             Err(e) => {
-                tracing::error!("Consumer error: {}", e);
+                error!("Consumer error: {}", e);
             }
         }
     }
 }
 
 async fn handle_scale_messages(database: Database, kubernetes: Kubernetes, mut consumer: Consumer) {
+    info!("📏 Scale consumer started");
+
     while let Some(delivery) = consumer.next().await {
         match delivery {
-            Ok(delivery) => match serde_json::from_slice::<serde_json::Value>(&delivery.data) {
-                Ok(message) => {
-                    let deployment_id = message["deployment_id"]
-                        .as_str()
-                        .and_then(|s| uuid::Uuid::parse_str(s).ok());
-                    let user_id = message["user_id"]
-                        .as_str()
-                        .and_then(|s| uuid::Uuid::parse_str(s).ok());
-                    let replicas = message["replicas"].as_i64();
+            Ok(delivery) => {
+                match serde_json::from_slice::<ScaleDeploymentMessage>(&delivery.data) {
+                    Ok(message) => {
+                        info!(
+                            "📏 Scaling deployment {} to {} replicas",
+                            message.deployment_id, message.replicas
+                        );
 
-                    if let (Some(deployment_id), Some(user_id), Some(replicas)) =
-                        (deployment_id, user_id, replicas)
-                    {
                         match KubernetesService::scale(
                             &database.pool,
                             &kubernetes.client,
-                            deployment_id,
-                            user_id,
-                            replicas as i32,
+                            message.deployment_id,
+                            message.user_id,
+                            message.replicas,
                         )
                         .await
                         {
                             Ok(_) => {
-                                info!("✅ Deployment {} scaled to {}", deployment_id, replicas);
+                                info!(
+                                    "✅ Deployment {} scaled to {}",
+                                    message.deployment_id, message.replicas
+                                );
+
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
                                     error!("Failed to ack message: {}", e);
                                 }
                             }
                             Err(e) => {
-                                tracing::error!("Failed to scale: {}", e);
+                                error!("Failed to scale deployment: {}", e);
+
                                 delivery
                                     .nack(BasicNackOptions {
                                         requeue: true,
@@ -243,16 +248,16 @@ async fn handle_scale_messages(database: Database, kubernetes: Kubernetes, mut c
                             }
                         }
                     }
+                    Err(e) => {
+                        error!("Failed to parse ScaleDeploymentMessage: {}", e);
+                        delivery
+                            .reject(BasicRejectOptions { requeue: false })
+                            .await
+                            .ok();
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to parse scale message: {}", e);
-                    delivery
-                        .reject(BasicRejectOptions { requeue: false })
-                        .await
-                        .ok();
-                }
-            },
-            Err(e) => tracing::error!("Scale consumer error: {}", e),
+            }
+            Err(e) => error!("Scale consumer error: {}", e),
         }
     }
 }
@@ -262,34 +267,33 @@ async fn handle_delete_messages(
     kubernetes: Kubernetes,
     mut consumer: Consumer,
 ) {
+    info!("🗑️ Delete consumer started");
+
     while let Some(delivery) = consumer.next().await {
         match delivery {
-            Ok(delivery) => match serde_json::from_slice::<serde_json::Value>(&delivery.data) {
-                Ok(message) => {
-                    let deployment_id = message["deployment_id"]
-                        .as_str()
-                        .and_then(|s| uuid::Uuid::parse_str(s).ok());
-                    let user_id = message["user_id"]
-                        .as_str()
-                        .and_then(|s| uuid::Uuid::parse_str(s).ok());
+            Ok(delivery) => {
+                match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
+                    Ok(message) => {
+                        info!("🗑️ Deleting deployment {}", message.deployment_id);
 
-                    if let (Some(deployment_id), Some(user_id)) = (deployment_id, user_id) {
                         match KubernetesService::delete(
                             &database.pool,
                             &kubernetes.client,
-                            deployment_id,
-                            user_id,
+                            message.deployment_id,
+                            message.user_id,
                         )
                         .await
                         {
                             Ok(_) => {
-                                info!("✅ Deployment {} deleted", deployment_id);
+                                info!("✅ Deployment {} deleted", message.deployment_id);
+
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
                                     error!("Failed to ack message: {}", e);
                                 }
                             }
                             Err(e) => {
-                                tracing::error!("Failed to delete: {}", e);
+                                error!("Failed to delete deployment: {}", e);
+
                                 delivery
                                     .nack(BasicNackOptions {
                                         requeue: true,
@@ -300,16 +304,16 @@ async fn handle_delete_messages(
                             }
                         }
                     }
+                    Err(e) => {
+                        error!("Failed to parse DeleteDeploymentMessage: {}", e);
+                        delivery
+                            .reject(BasicRejectOptions { requeue: false })
+                            .await
+                            .ok();
+                    }
                 }
-                Err(e) => {
-                    tracing::error!("Failed to parse delete message: {}", e);
-                    delivery
-                        .reject(BasicRejectOptions { requeue: false })
-                        .await
-                        .ok();
-                }
-            },
-            Err(e) => tracing::error!("Delete consumer error: {}", e),
+            }
+            Err(e) => error!("Delete consumer error: {}", e),
         }
     }
 }

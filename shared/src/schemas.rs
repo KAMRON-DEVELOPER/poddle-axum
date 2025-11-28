@@ -84,7 +84,7 @@ pub struct UpdateProjectRequest {
 // DEPLOYMENT SCHEMAS
 // ============================================
 
-#[derive(Deserialize, Validate, Debug)]
+#[derive(Clone, Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDeploymentRequest {
     #[validate(length(min = 1, max = 128))]
@@ -238,5 +238,77 @@ pub struct DeploymentMetrics {
     pub available_replicas: i32,
     pub unavailable_replicas: i32,
     pub pods: Vec<PodMetrics>,
+    pub timestamp: i64,
+}
+
+// ============================================
+// RABBITMQ MESSAGE TYPES
+// ============================================
+
+/// Message sent to compute.create queue
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateDeploymentMessage {
+    pub user_id: Uuid,
+    pub project_id: Uuid,
+    pub deployment_id: Uuid,
+
+    pub name: String,
+    pub image: String,
+    pub replicas: i32,
+    pub port: i32,
+
+    pub env_vars: HashMap<String, String>,
+    pub secrets: HashMap<String, String>,
+    pub resources: ResourceSpec,
+    pub labels: Option<HashMap<String, String>>,
+    pub subdomain: Option<String>,
+
+    pub timestamp: i64,
+}
+
+impl CreateDeploymentMessage {
+    pub fn from_request(
+        deployment_id: Uuid,
+        user_id: Uuid,
+        project_id: Uuid,
+        req: CreateDeploymentRequest,
+    ) -> Self {
+        Self {
+            deployment_id,
+            user_id,
+            project_id,
+            name: req.name,
+            image: req.image,
+            replicas: req.replicas,
+            port: req.port,
+            env_vars: req.env_vars.unwrap_or_default(),
+            secrets: req.secrets.unwrap_or_default(),
+            resources: req.resources.unwrap_or_default(),
+            labels: req.labels,
+            subdomain: req.subdomain,
+            timestamp: chrono::Utc::now().timestamp(),
+        }
+    }
+}
+
+/// Message sent to compute.scale queue
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct ScaleDeploymentMessage {
+    pub deployment_id: Uuid,
+    pub user_id: Uuid,
+    pub project_id: Uuid,
+    pub replicas: i32,
+    pub timestamp: i64,
+}
+
+/// Message sent to compute.delete queue
+#[derive(Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteDeploymentMessage {
+    pub deployment_id: Uuid,
+    pub user_id: Uuid,
+    pub project_id: Uuid,
     pub timestamp: i64,
 }
