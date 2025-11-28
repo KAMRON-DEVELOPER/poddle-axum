@@ -3,7 +3,7 @@ pub mod utilities;
 
 use std::net::SocketAddr;
 
-use crate::utilities::app_state::AppState;
+use crate::{services::consumer::start_rabbitmq_consumer, utilities::app_state::AppState};
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
     services::{
@@ -39,8 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::init().await?;
 
-    let filter =
-        EnvFilter::new("compute=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
+    let filter = EnvFilter::new(
+        "compute-provisioner=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
+    );
     let timer = LocalTime::new(format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second]"
     ));
@@ -52,7 +53,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_file(true)
                 .with_line_number(true)
                 .with_timer(timer),
-            // .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW),
         )
         .init();
 
@@ -68,10 +68,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app_state = AppState {
         rustls_config: None,
-        database,
+        database: database.clone(),
         redis: redis.clone(),
         kubernetes: kubernetes.clone(),
-        amqp,
+        amqp: amqp.clone(),
         kafka,
         config: config.clone(),
         http_client,
@@ -101,8 +101,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(app_state);
 
     // Start RabbitMQ consumer
+    let _config = config.clone();
+    let _amqp = amqp.clone();
+    let _database = database.clone();
     tokio::spawn(async move {
-        if let Err(e) = start_rabbitmq_consumer(amqp, database, kubernetes, config).await {
+        if let Err(e) = start_rabbitmq_consumer(_amqp, _database, kubernetes, _config).await {
             tracing::error!("RabbitMQ consumer error: {}", e);
         }
     });
@@ -137,9 +140,6 @@ async fn shutdown_signal() {
             .recv()
             .await;
     };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
 
     tokio::select! {
         _ = ctrl_c => {},

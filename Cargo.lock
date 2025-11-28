@@ -751,7 +751,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute"
+name = "compute-api"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -785,7 +785,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute-deployer"
+name = "compute-provisioner"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
@@ -816,7 +816,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute-monitoring"
+name = "compute-syncer"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -4729,7 +4729,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 
 [[package]]
-name = "users"
+name = "users-api"
 version = "0.1.0"
 dependencies = [
  "axum",

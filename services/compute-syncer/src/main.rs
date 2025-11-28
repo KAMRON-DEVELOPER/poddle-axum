@@ -75,8 +75,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     let prometheus = Prometheus::new(&config, http_client.clone()).await?;
 
-    info!("✅ All services initialized");
-
     // Spawn background tasks
     info!("📊 Starting deployment status syncer");
     let status_handle = tokio::spawn(deployment_status_syncer(

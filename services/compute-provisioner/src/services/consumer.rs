@@ -14,7 +14,7 @@ use tracing::info;
 
 use crate::services::kubernetes::DeploymentService;
 
-async fn start_rabbitmq_consumer(
+pub async fn start_rabbitmq_consumer(
     amqp: Amqp,
     database: Database,
     kubernetes: Kubernetes,
