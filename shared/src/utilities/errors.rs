@@ -187,6 +187,8 @@ pub enum AppError {
     PrometheusHttpQueryError(#[from] prometheus_http_query::Error),
     #[error("KubeRuntimeError, {0}")]
     KubeRuntimeError(#[from] kube::runtime::watcher::Error),
+    #[error("NamaSpaceError, {0}")]
+    NamaSpaceError(String),
 }
 
 impl IntoResponse for AppError {
@@ -426,6 +428,7 @@ impl IntoResponse for AppError {
             Self::InferConfigError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             Self::PrometheusHttpQueryError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             Self::KubeRuntimeError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Self::NamaSpaceError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e),
         };
 
         let body = Json(json!({"error": error_message}));

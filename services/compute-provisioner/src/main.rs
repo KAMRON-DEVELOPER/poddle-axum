@@ -100,6 +100,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(tracing_layer)
         .with_state(app_state);
 
+    // Start RabbitMQ consumer
+    tokio::spawn(async move {
+        if let Err(e) = start_rabbitmq_consumer(amqp, database, kubernetes, config).await {
+            tracing::error!("RabbitMQ consumer error: {}", e);
+        }
+    });
+
     info!("🚀 Server running on port {:#?}", config.server_addres);
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8005").await.unwrap();
     // let listener = tokio::net::TcpListener::bind(config.clone().server_addres.clone())

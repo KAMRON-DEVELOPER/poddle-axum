@@ -8,13 +8,33 @@ use uuid::Uuid;
 // ============================================
 
 #[derive(Type, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
-#[sqlx(type_name = "deployment_status", rename_all = "snake_case")]
+#[sqlx(type_name = "deployment_status", rename_all = "lowercase")]
 pub enum DeploymentStatus {
-    Pending,
-    Running,
-    Succeeded,
+    Queued,
+    Provisioning,
+    Starting,
+    Healthy,
+    Unhealthy,
+    Degraded,
+    Scaling,
+    Suspended,
     Failed,
-    Terminated,
+}
+
+impl std::fmt::Display for DeploymentStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Queued => write!(f, "queued"),
+            Self::Provisioning => write!(f, "provisioning"),
+            Self::Starting => write!(f, "starting"),
+            Self::Healthy => write!(f, "healthy"),
+            Self::Unhealthy => write!(f, "unhealthy"),
+            Self::Degraded => write!(f, "degraded"),
+            Self::Scaling => write!(f, "scaling"),
+            Self::Suspended => write!(f, "suspended"),
+            Self::Failed => write!(f, "failed"),
+        }
+    }
 }
 
 // ============================================

@@ -99,3 +99,4 @@ k8s-openapi = { version = "0.26.0", features = ["v1_33"] }
 schemars = { version = "1" }
 prometheus-client = "0.24.0"
 redis-macros = "0.5"
+urlencoding = "2.1.3"

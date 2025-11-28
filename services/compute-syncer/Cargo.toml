@@ -17,6 +17,7 @@ tokio.workspace = true
 tower-http.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+urlencoding.workspace = true
 dotenvy.workspace = true
 time.workspace = true
 uuid.workspace = true

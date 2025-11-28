@@ -4,15 +4,14 @@ pub mod utilities;
 use std::net::SocketAddr;
 
 use crate::{
-    services::prometheus::Prometheus, utilities::app_state::AppState,
-    utilities::metrics_scraper::metrics_scraper, utilities::state_syncer::state_syncer,
+    services::prometheus::Prometheus,
+    utilities::deployment_status_syncer::deployment_status_syncer,
+    utilities::metrics_scraper::metrics_scraper,
 };
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
-    services::{
-        amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
-    },
-    utilities::config::Config,
+    services::{database::Database, kubernetes::Kubernetes, redis::Redis},
+    utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;
 use tokio::signal;
@@ -24,10 +23,12 @@ use tracing_subscriber::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install crypto provider
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    // Load .env file
     match dotenvy::dotenv() {
         Ok(path) => {
             info!("Loaded .env file from {}", path.display());
@@ -40,10 +41,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Initialize config
     let config = Config::init().await?;
 
+    // Initialize tracing
     let filter =
-        EnvFilter::new("compute=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
+        EnvFilter::new("compute-syncer=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
     let timer = LocalTime::new(format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second]"
     ));
@@ -55,32 +58,94 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_file(true)
                 .with_line_number(true)
                 .with_timer(timer),
-            // .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW),
         )
         .init();
 
+    info!("🚀 Starting compute-syncer");
+
+    // Initialize services
     // let rustls_config = build_rustls_config(&config)?;
     let database = Database::new(&config).await?;
     let redis = Redis::new(&config).await?;
     let kubernetes = Kubernetes::new(&config).await?;
-    let amqp = Amqp::new(&config).await?;
-    let kafka = Kafka::new(&config, "compute-service-group")?;
+    // let amqp = Amqp::new(&config).await?;
+    // let kafka = Kafka::new(&config, "compute-service-group")?;
     let http_client = reqwest::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
     let prometheus = Prometheus::new(&config, http_client.clone()).await?;
 
-    let app_state = AppState {
-        rustls_config: None,
-        database,
-        redis: redis.clone(),
-        prometheus: prometheus.clone(),
-        kubernetes: kubernetes.clone(),
-        amqp,
-        kafka,
-        config: config.clone(),
-        http_client,
-    };
+    info!("✅ All services initialized");
+
+    // Spawn background tasks
+    info!("📊 Starting deployment status syncer");
+    let status_handle = tokio::spawn(deployment_status_syncer(
+        database.pool.clone(),
+        kubernetes.client.clone(),
+        redis.connection.clone(),
+    ));
+
+    info!("📈 Starting metrics scraper");
+    let metrics_handle = tokio::spawn(metrics_scraper(
+        prometheus.client.clone(),
+        redis.connection.clone(),
+    ));
+
+    // Start HTTP server for health checks
+    let _server_handle = tokio::spawn(start_health_server());
+
+    info!("✅ All background tasks started");
+
+    // Wait for shutdown signal
+    tokio::select! {
+        _ = shutdown_signal() => {
+            info!("🛑 Shutdown signal received");
+        }
+        result = status_handle => {
+            match result {
+                Ok(Ok(())) => info!("Status syncer completed"),
+                Ok(Err(e)) => info!("Status syncer error: {}", e),
+                Err(e) => info!("Status syncer panicked: {}", e),
+            }
+        }
+        result = metrics_handle => {
+            match result {
+                Ok(Ok(())) => info!("Metrics scraper completed"),
+                Ok(Err(e)) => info!("Metrics scraper error: {}", e),
+                Err(e) => info!("Metrics scraper panicked: {}", e),
+            }
+        }
+    }
+
+    info!("👋 Compute-syncer shutting down");
+
+    Ok(())
+}
+
+/// Start a simple HTTP server for health checks and metrics
+async fn start_health_server() -> Result<(), AppError> {
+    use axum::{Json, Router, routing::get};
+    use serde_json::json;
+
+    let health_route = Router::new()
+        .route(
+            "/health",
+            get(|| async {
+                Json(json!({
+                    "status": "healthy",
+                    "service": "compute-syncer"
+                }))
+            }),
+        )
+        .route(
+            "/ready",
+            get(|| async {
+                Json(json!({
+                    "status": "ready",
+                    "service": "compute-syncer"
+                }))
+            }),
+        );
 
     let tracing_layer = TraceLayer::new_for_http()
         .on_request(|request: &http::Request<_>, _span: &tracing::Span| {
@@ -100,29 +165,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .on_response(DefaultOnResponse::new().level(tracing::Level::INFO));
 
-    let app = axum::Router::new()
-        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
-        .layer(tracing_layer)
-        .with_state(app_state);
+    let app = Router::new()
+        .merge(health_route)
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
+        .layer(tracing_layer);
 
-    info!("🚀 Server running on port {:#?}", config.server_addres);
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8005").await.unwrap();
-    // let listener = tokio::net::TcpListener::bind(config.clone().server_addres.clone())
-    //     .await
-    //     .unwrap();
+    let addr = "0.0.0.0:8006";
+    info!("🏥 Health check server running on {}", addr);
+
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
-    .await
-    .unwrap();
-
-    // Spawn independent tasks
-    let state_handle = tokio::spawn(state_syncer(kubernetes.client, redis.connection.clone()));
-    let metrics_handle = tokio::spawn(metrics_scraper(prometheus.client, redis.connection.clone()));
-
-    let _ = tokio::join!(state_handle, metrics_handle);
+    .await?;
 
     Ok(())
 }
@@ -141,9 +199,6 @@ async fn shutdown_signal() {
             .recv()
             .await;
     };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
 
     tokio::select! {
         _ = ctrl_c => {},
