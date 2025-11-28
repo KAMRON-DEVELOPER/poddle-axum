@@ -4,7 +4,7 @@ use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment;
 use kube::runtime::{WatchStreamExt, reflector, watcher};
 use kube::{Api, Client, ResourceExt};
-use redis::AsyncCommands;
+// use redis::AsyncCommands;
 use redis::aio::MultiplexedConnection;
 use shared::models::DeploymentStatus;
 use shared::utilities::config::Config;
@@ -18,7 +18,7 @@ use uuid::Uuid;
 pub async fn deployment_status_syncer(
     pool: PgPool,
     client: Client,
-    mut connection: MultiplexedConnection,
+    mut _connection: MultiplexedConnection,
 ) -> Result<(), AppError> {
     info!("Starting deployment status syncer");
 
@@ -27,14 +27,14 @@ pub async fn deployment_status_syncer(
     let api = Api::<Deployment>::all(client);
 
     // Create a reflector store (efficient caching)
-    let (reader, writer) = reflector::store::<Deployment>();
+    let (_reader, writer) = reflector::store::<Deployment>();
 
     // Watch for changes
     let watch_config = watcher::Config::default().labels("managed-by=poddle"); // Only watch our deployments
 
     // stream: Pin<Box<dyn Stream<Item = Result<Deployment, Error>> + Send>>
     // let Some(event: Deployment)
-    let mut stream = reflector(writer, watcher(api, watch_config))
+    let stream = reflector(writer, watcher(api, watch_config))
         .default_backoff()
         // .reflect(writer)
         .applied_objects()
@@ -93,25 +93,25 @@ pub async fn deployment_status_syncer(
     Ok(())
 }
 
-async fn update_redis(
-    connection: &mut MultiplexedConnection,
-    deployment: &Deployment,
-) -> Result<(), AppError> {
-    let namespace = deployment.namespace().unwrap_or("default".to_owned());
-    let name = deployment.name_any();
-    let key = format!("deploy:{}:{}", namespace, name);
+// async fn update_redis(
+//     connection: &mut MultiplexedConnection,
+//     deployment: &Deployment,
+// ) -> Result<(), AppError> {
+//     let namespace = deployment.namespace().unwrap_or("default".to_owned());
+//     let name = deployment.name_any();
+//     let key = format!("deploy:{}:{}", namespace, name);
 
-    let state = serde_json::json!({
-        "name": name,
-        "namespace": namespace,
-        "replicas": deployment.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
-        "ready_replicas": deployment.status.as_ref().and_then(|s| s.ready_replicas).unwrap_or(0),
-    });
+//     let state = serde_json::json!({
+//         "name": name,
+//         "namespace": namespace,
+//         "replicas": deployment.spec.as_ref().and_then(|s| s.replicas).unwrap_or(1),
+//         "ready_replicas": deployment.status.as_ref().and_then(|s| s.ready_replicas).unwrap_or(0),
+//     });
 
-    let _: u64 = connection.set_ex(&key, state.to_string(), 600).await?; // 10 min TTL
+//     let _: u64 = connection.set_ex(&key, state.to_string(), 600).await?; // 10 min TTL
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 /// Process a single K8s deployment and update DB status
 async fn process_deployment_status(pool: &PgPool, deployment: &Deployment) -> Result<(), AppError> {
@@ -219,7 +219,7 @@ async fn process_deployment_status(pool: &PgPool, deployment: &Deployment) -> Re
 fn determine_status(
     desired: i32,
     ready: i32,
-    available: i32,
+    _available: i32,
     unavailable: i32,
     status: Option<&k8s_openapi::api::apps::v1::DeploymentStatus>,
 ) -> DeploymentStatus {
@@ -262,7 +262,7 @@ fn determine_status(
 }
 
 /// Periodically scrape Prometheus metrics for billing
-async fn scrape_metrics_periodically(pool: PgPool, config: Config) {
+async fn _scrape_metrics_periodically(pool: PgPool, config: Config) {
     let mut ticker = interval(Duration::from_secs(3600)); // Every hour
 
     loop {
@@ -270,14 +270,17 @@ async fn scrape_metrics_periodically(pool: PgPool, config: Config) {
 
         info!("Starting metrics scrape for billing");
 
-        if let Err(e) = scrape_and_bill(&pool, &config).await {
+        if let Err(e) = _scrape_and_bill(&pool, &config).await {
             error!("Failed to scrape metrics: {}", e);
         }
     }
 }
 
 /// Scrape Prometheus and create billing records
-async fn scrape_and_bill(pool: &PgPool, config: &Config) -> Result<(), Box<dyn std::error::Error>> {
+async fn _scrape_and_bill(
+    pool: &PgPool,
+    config: &Config,
+) -> Result<(), Box<dyn std::error::Error>> {
     let client = reqwest::Client::new();
 
     // Query Prometheus for CPU/Memory usage per deployment
