@@ -3,13 +3,11 @@ pub mod utilities;
 
 use std::net::SocketAddr;
 
-use crate::{services::consumer::start_rabbitmq_consumer, utilities::app_state::AppState};
+use crate::services::consumer::start_rabbitmq_consumer;
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
-    services::{
-        amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
-    },
-    utilities::config::Config,
+    services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
+    utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;
 use tokio::signal;
@@ -21,10 +19,12 @@ use tracing_subscriber::{
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Install crypto provider
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
+    // Load .env file
     match dotenvy::dotenv() {
         Ok(path) => {
             info!("Loaded .env file from {}", path.display());
@@ -37,8 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
+    // Initialize config
     let config = Config::init().await?;
 
+    // Initialize tracing
     let filter = EnvFilter::new(
         "compute-provisioner=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
     );
@@ -56,26 +58,71 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .init();
 
+    info!("🚀 Starting compute-provisioner");
+
+    // Initialize services
     // let rustls_config = build_rustls_config(&config)?;
     let database = Database::new(&config).await?;
-    let redis = Redis::new(&config).await?;
+    // let redis = Redis::new(&config).await?;
     let kubernetes = Kubernetes::new(&config).await?;
     let amqp = Amqp::new(&config).await?;
-    let kafka = Kafka::new(&config, "compute-service-group")?;
-    let http_client = reqwest::ClientBuilder::new()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
+    // let kafka = Kafka::new(&config, "compute-service-group")?;
+    // let http_client = reqwest::ClientBuilder::new()
+    //     .redirect(reqwest::redirect::Policy::none())
+    //     .build()?;
 
-    let app_state = AppState {
-        rustls_config: None,
-        database: database.clone(),
-        redis: redis.clone(),
-        kubernetes: kubernetes.clone(),
-        amqp: amqp.clone(),
-        kafka,
-        config: config.clone(),
-        http_client,
-    };
+    // Spawn background tasks
+    info!("📊 Starting compute provisioner");
+    let consumer_handle = tokio::spawn(start_rabbitmq_consumer(amqp, database, kubernetes, config));
+
+    // Start HTTP server for health checks
+    let _server_handle = tokio::spawn(start_health_server());
+
+    info!("✅ All background tasks started");
+
+    // Wait for shutdown signal
+    tokio::select! {
+        _ = shutdown_signal() => {
+            info!("🛑 Shutdown signal received");
+        }
+        result = consumer_handle => {
+            match result {
+                Ok(Ok(())) => info!("Status syncer completed"),
+            Ok(Err(e)) => info!("Status syncer error: {}", e),
+            Err(e) => info!("Status syncer panicked: {}", e),
+            }
+        }
+    }
+
+    info!("👋 Compute-syncer shutting down");
+
+    Ok(())
+}
+
+/// Start a simple HTTP server for health checks and metrics
+async fn start_health_server() -> Result<(), AppError> {
+    use axum::{Json, Router, routing::get};
+    use serde_json::json;
+
+    let health_route = Router::new()
+        .route(
+            "/health",
+            get(|| async {
+                Json(json!({
+                    "status": "healthy",
+                    "service": "compute-provisioner"
+                }))
+            }),
+        )
+        .route(
+            "/ready",
+            get(|| async {
+                Json(json!({
+                    "status": "ready",
+                    "service": "compute-provisioner"
+                }))
+            }),
+        );
 
     let tracing_layer = TraceLayer::new_for_http()
         .on_request(|request: &http::Request<_>, _span: &tracing::Span| {
@@ -95,33 +142,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .on_response(DefaultOnResponse::new().level(tracing::Level::INFO));
 
-    let app = axum::Router::new()
-        .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
-        .layer(tracing_layer)
-        .with_state(app_state);
+    let app = Router::new()
+        .merge(health_route)
+        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
+        .layer(tracing_layer);
 
-    // Start RabbitMQ consumer
-    let _config = config.clone();
-    let _amqp = amqp.clone();
-    let _database = database.clone();
-    tokio::spawn(async move {
-        if let Err(e) = start_rabbitmq_consumer(_amqp, _database, kubernetes, _config).await {
-            tracing::error!("RabbitMQ consumer error: {}", e);
-        }
-    });
+    let addr = "0.0.0.0:8006";
+    info!("🏥 Health check server running on {}", addr);
 
-    info!("🚀 Server running on port {:#?}", config.server_addres);
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8005").await.unwrap();
-    // let listener = tokio::net::TcpListener::bind(config.clone().server_addres.clone())
-    //     .await
-    //     .unwrap();
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
-    .await
-    .unwrap();
+    .await?;
 
     Ok(())
 }
