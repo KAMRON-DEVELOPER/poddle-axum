@@ -22,7 +22,7 @@ data:
     certificatesResolvers:
       letsencrypt:
         acme:
-          email: your-email@pinespot.uz
+          email: atajanovkamronbek2003@gmail.com
           storage: /data/acme.json
           httpChallenge:
             entryPoint: web

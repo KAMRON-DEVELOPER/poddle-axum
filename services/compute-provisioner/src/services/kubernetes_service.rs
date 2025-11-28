@@ -27,7 +27,12 @@ use tracing::error;
 use tracing::info;
 use uuid::Uuid;
 
-pub struct KubernetesService;
+pub struct KubernetesService {
+    client: Client,
+    base_domain: String,
+    enable_tls: bool,
+    cluster_issuer: String,
+}
 
 impl KubernetesService {
     async fn get_namespace_or_create(client: &Client, user_id: Uuid) -> Result<String, AppError> {
@@ -413,6 +418,7 @@ impl KubernetesService {
 
     /// Create Kubernetes Ingress with Traefik
     async fn create_k8s_ingress(
+        &self,
         client: &Client,
         namespace: &str,
         name: &str,
@@ -422,10 +428,13 @@ impl KubernetesService {
         let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), namespace);
 
         let mut annotations = BTreeMap::new();
+
+        // Traefik configuration
         annotations.insert(
             "kubernetes.io/ingress.class".to_string(),
             "traefik".to_string(),
         );
+
         annotations.insert(
             "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
             "websecure".to_string(),
@@ -433,6 +442,38 @@ impl KubernetesService {
         annotations.insert(
             "cert-manager.io/cluster-issuer".to_string(),
             "letsencrypt-prod".to_string(),
+        );
+
+        // For development with self-signed certs
+        if !self.enable_tls {
+            annotations.insert(
+                "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
+                "web,websecure".to_string(),
+            );
+            annotations.insert(
+                "traefik.ingress.kubernetes.io/router.tls".to_string(),
+                "true".to_string(),
+            );
+        } else {
+            // Production with Let's Encrypt
+            annotations.insert(
+                "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
+                "websecure".to_string(),
+            );
+            annotations.insert(
+                "cert-manager.io/cluster-issuer".to_string(),
+                self.cluster_issuer.clone(),
+            );
+        }
+
+        // Redirect HTTP to HTTPS
+        annotations.insert(
+            "traefik.ingress.kubernetes.io/redirect-entry-point".to_string(),
+            "https".to_string(),
+        );
+        annotations.insert(
+            "traefik.ingress.kubernetes.io/redirect-permanent".to_string(),
+            "true".to_string(),
         );
 
         let ingress = Ingress {
