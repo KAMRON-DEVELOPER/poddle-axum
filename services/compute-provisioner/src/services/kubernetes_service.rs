@@ -24,12 +24,12 @@ use tracing::error;
 use tracing::info;
 use uuid::Uuid;
 
-pub struct DeploymentService;
+pub struct KubernetesService;
 
-impl DeploymentService {
-    async fn get_user_namespace(k8s_client: &Client, user_id: Uuid) -> Result<String, AppError> {
+impl KubernetesService {
+    async fn get_user_namespace(client: &Client, user_id: Uuid) -> Result<String, AppError> {
         let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
-        let ns_api: Api<Namespace> = Api::all(k8s_client.clone());
+        let ns_api: Api<Namespace> = Api::all(client.clone());
 
         match ns_api.get(&ns_string).await {
             Ok(_) => {
@@ -65,13 +65,13 @@ impl DeploymentService {
 
     pub async fn create(
         pool: &PgPool,
-        k8s_client: &Client,
+        client: &Client,
         user_id: Uuid,
         project_id: Uuid,
         base_domain: &str,
         req: CreateDeploymentRequest,
     ) -> Result<(), AppError> {
-        let namespace = Self::get_user_namespace(k8s_client, user_id).await?;
+        let namespace = Self::get_user_namespace(client, user_id).await?;
 
         // Generate unique deployment name
         let deployment_name = format!(
@@ -107,7 +107,7 @@ impl DeploymentService {
         let secrets = req.secrets.unwrap_or_default();
 
         Self::create_k8s_resources(
-            k8s_client,
+            client,
             &namespace,
             &deployment_name,
             &deployment.id,
@@ -447,13 +447,13 @@ impl DeploymentService {
     /// Scale deployment replicas
     pub async fn scale(
         pool: &PgPool,
-        k8s_client: &Client,
+        client: &Client,
         deployment_id: Uuid,
         user_id: Uuid,
         new_replicas: i32,
     ) -> Result<(), AppError> {
         let deployments_api: Api<K8sDeployment> =
-            Api::namespaced(k8s_client.clone(), &deployment.cluster_namespace);
+            Api::namespaced(client.clone(), &deployment.cluster_namespace);
 
         let patch = serde_json::json!({
             "spec": {
@@ -478,7 +478,7 @@ impl DeploymentService {
     /// Delete deployment and all K8s resources
     pub async fn delete(
         pool: &PgPool,
-        k8s_client: &Client,
+        client: &Client,
         deployment_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), AppError> {
@@ -487,17 +487,17 @@ impl DeploymentService {
         let delete_params = DeleteParams::default();
 
         // Delete in reverse order (Ingress -> Service -> Deployment -> Secret)
-        let ingress_api: Api<Ingress> = Api::namespaced(k8s_client.clone(), namespace);
+        let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), namespace);
         let _ = ingress_api.delete(name, &delete_params).await;
 
-        let service_api: Api<Service> = Api::namespaced(k8s_client.clone(), namespace);
+        let service_api: Api<Service> = Api::namespaced(client.clone(), namespace);
         let _ = service_api.delete(name, &delete_params).await;
 
-        let deployment_api: Api<K8sDeployment> = Api::namespaced(k8s_client.clone(), namespace);
+        let deployment_api: Api<K8sDeployment> = Api::namespaced(client.clone(), namespace);
         let _ = deployment_api.delete(name, &delete_params).await;
 
         let secret_name = format!("{}-secrets", name);
-        let secret_api: Api<K8sSecret> = Api::namespaced(k8s_client.clone(), namespace);
+        let secret_api: Api<K8sSecret> = Api::namespaced(client.clone(), namespace);
         let _ = secret_api.delete(&secret_name, &delete_params).await;
 
         // Delete from database
@@ -510,13 +510,13 @@ impl DeploymentService {
     /// Get deployment details with live K8s status
     pub async fn get_detail(
         pool: &PgPool,
-        k8s_client: &Client,
+        client: &Client,
         deployment_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), AppError> {
         // Get live K8s deployment status
         let deployments_api: Api<K8sDeployment> =
-            Api::namespaced(k8s_client.clone(), &deployment.cluster_namespace);
+            Api::namespaced(client.clone(), &deployment.cluster_namespace);
 
         let ready_replicas = match deployments_api
             .get(&deployment.cluster_deployment_name)
@@ -542,7 +542,7 @@ impl DeploymentService {
 
         // Get Ingress URL
         let ingress_api: Api<Ingress> =
-            Api::namespaced(k8s_client.clone(), &deployment.cluster_namespace);
+            Api::namespaced(client.clone(), &deployment.cluster_namespace);
         let external_url = match ingress_api.get(&deployment.cluster_deployment_name).await {
             Ok(ingress) => ingress
                 .spec

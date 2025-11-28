@@ -73,7 +73,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Spawn background tasks
     info!("📊 Starting compute provisioner");
-    let consumer_handle = tokio::spawn(start_rabbitmq_consumer(amqp, database, kubernetes, config));
+    let consumer_handle = tokio::spawn(start_rabbitmq_consumer(amqp, config, database, kubernetes));
 
     // Start HTTP server for health checks
     let _server_handle = tokio::spawn(start_health_server());

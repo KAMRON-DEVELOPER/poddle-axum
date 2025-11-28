@@ -1,9 +1,9 @@
-use futures::{StreamExt, TryStreamExt};
+use futures::StreamExt;
 use lapin::{
     Consumer,
     options::{
-        BasicAckOptions, BasicConsumeOptions, BasicQosOptions, ExchangeDeclareOptions,
-        QueueBindOptions, QueueDeclareOptions,
+        BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicQosOptions,
+        BasicRejectOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
     },
     types::FieldTable,
 };
@@ -11,15 +11,15 @@ use shared::{
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
     utilities::{config::Config, errors::AppError},
 };
-use tracing::info;
+use tracing::{error, info};
 
-use crate::services::kubernetes::DeploymentService;
+use crate::services::kubernetes_service::KubernetesService;
 
 pub async fn start_rabbitmq_consumer(
     amqp: Amqp,
+    config: Config,
     database: Database,
     kubernetes: Kubernetes,
-    config: Config,
 ) -> Result<(), AppError> {
     let channel = amqp.channel().await?;
 
@@ -40,7 +40,7 @@ pub async fn start_rabbitmq_consumer(
         .await?;
 
     // Declare queues
-    for queue_name in &["compute.provision", "compute.scale", "compute.delete"] {
+    for queue_name in &["compute.create", "compute.scale", "compute.delete"] {
         channel
             .queue_declare(
                 queue_name,
@@ -66,14 +66,14 @@ pub async fn start_rabbitmq_consumer(
             .await?;
     }
 
-    // Set QoS (prefetch)
+    // Set QoS (prefetch), a consumer will only receive up to 10 messages that it has not yet acknowledged
     channel.basic_qos(10, BasicQosOptions::default()).await?;
 
     // Start consumers
-    let provision_consumer = channel
+    let create_consumer = channel
         .basic_consume(
-            "compute.provision",
-            "provisioner",
+            "compute.create",
+            "creater",
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
@@ -100,35 +100,35 @@ pub async fn start_rabbitmq_consumer(
     info!("✅ RabbitMQ consumers started");
 
     // Spawn task for provision consumer
-    tokio::spawn(handle_provision_messages(
-        provision_consumer,
+    tokio::spawn(handle_create_messages(
+        config.clone(),
         database.clone(),
         kubernetes.clone(),
-        config.clone(),
+        create_consumer,
     ));
 
     // Spawn task for scale consumer
     tokio::spawn(handle_scale_messages(
-        scale_consumer,
         database.clone(),
         kubernetes.clone(),
+        scale_consumer,
     ));
 
     // Spawn task for delete consumer
     tokio::spawn(handle_delete_messages(
-        delete_consumer,
         database.clone(),
         kubernetes.clone(),
+        delete_consumer,
     ));
 
     Ok(())
 }
 
-async fn handle_provision_messages(
-    mut consumer: Consumer,
+async fn handle_create_messages(
+    config: Config,
     database: Database,
     kubernetes: Kubernetes,
-    config: Config,
+    mut consumer: Consumer,
 ) {
     while let Some(delivery) = consumer.next().await {
         match delivery {
@@ -147,7 +147,7 @@ async fn handle_provision_messages(
 
                         if let (Some(deployment_id), Some(user_id)) = (deployment_id, user_id) {
                             // Process deployment creation
-                            match DeploymentService::create(
+                            match KubernetesService::create(
                                 &database.pool,
                                 &kubernetes.client,
                                 user_id,
@@ -200,7 +200,7 @@ async fn handle_provision_messages(
     }
 }
 
-async fn handle_scale_messages(mut consumer: Consumer, database: Database, kubernetes: Kubernetes) {
+async fn handle_scale_messages(database: Database, kubernetes: Kubernetes, mut consumer: Consumer) {
     while let Some(delivery) = consumer.next().await {
         match delivery {
             Ok(delivery) => match serde_json::from_slice::<serde_json::Value>(&delivery.data) {
@@ -216,7 +216,7 @@ async fn handle_scale_messages(mut consumer: Consumer, database: Database, kuber
                     if let (Some(deployment_id), Some(user_id), Some(replicas)) =
                         (deployment_id, user_id, replicas)
                     {
-                        match DeploymentService::scale(
+                        match KubernetesService::scale(
                             &database.pool,
                             &kubernetes.client,
                             deployment_id,
@@ -227,7 +227,9 @@ async fn handle_scale_messages(mut consumer: Consumer, database: Database, kuber
                         {
                             Ok(_) => {
                                 info!("✅ Deployment {} scaled to {}", deployment_id, replicas);
-                                delivery.ack(BasicAckOptions::default()).await.ok();
+                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                    error!("Failed to ack message: {}", e);
+                                }
                             }
                             Err(e) => {
                                 tracing::error!("Failed to scale: {}", e);
@@ -256,9 +258,9 @@ async fn handle_scale_messages(mut consumer: Consumer, database: Database, kuber
 }
 
 async fn handle_delete_messages(
-    mut consumer: Consumer,
     database: Database,
     kubernetes: Kubernetes,
+    mut consumer: Consumer,
 ) {
     while let Some(delivery) = consumer.next().await {
         match delivery {
@@ -272,7 +274,7 @@ async fn handle_delete_messages(
                         .and_then(|s| uuid::Uuid::parse_str(s).ok());
 
                     if let (Some(deployment_id), Some(user_id)) = (deployment_id, user_id) {
-                        match DeploymentService::delete(
+                        match KubernetesService::delete(
                             &database.pool,
                             &kubernetes.client,
                             deployment_id,
@@ -282,7 +284,9 @@ async fn handle_delete_messages(
                         {
                             Ok(_) => {
                                 info!("✅ Deployment {} deleted", deployment_id);
-                                delivery.ack(BasicAckOptions::default()).await.ok();
+                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                    error!("Failed to ack message: {}", e);
+                                }
                             }
                             Err(e) => {
                                 tracing::error!("Failed to delete: {}", e);

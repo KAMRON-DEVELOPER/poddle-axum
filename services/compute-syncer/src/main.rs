@@ -5,8 +5,10 @@ use std::net::SocketAddr;
 
 use crate::{
     services::prometheus::Prometheus,
-    utilities::deployment_status_syncer::deployment_status_syncer,
-    utilities::metrics_scraper::metrics_scraper,
+    utilities::{
+        deployment_status_syncer::deployment_status_syncer, metrics_scraper::metrics_scraper,
+        reconcilation_loop::reconciliation_loop,
+    },
 };
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
@@ -85,9 +87,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("📈 Starting metrics scraper");
     let metrics_handle = tokio::spawn(metrics_scraper(
-        kubernetes.client,
+        kubernetes.client.clone(),
         prometheus.client,
         redis.connection,
+    ));
+
+    tokio::spawn(reconciliation_loop(
+        database.pool.clone(),
+        kubernetes.client.clone(),
     ));
 
     // Start HTTP server for health checks

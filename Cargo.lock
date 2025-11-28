@@ -754,6 +754,7 @@ dependencies = [
 name = "compute-api"
 version = "0.1.0"
 dependencies = [
+ "async-stream",
  "axum",
  "bigdecimal",
  "chrono",

@@ -3,6 +3,7 @@ pub mod implementations;
 pub mod models;
 pub mod repository;
 pub mod schemas;
+pub mod see;
 pub mod websocket;
 
 use crate::utilities::app_state::AppState;
@@ -34,7 +35,11 @@ pub fn routes() -> Router<AppState> {
                 .delete(handlers::delete_deployment),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics",
-            get(websocket::deployment_metrics_stream),
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/ws",
+            get(websocket::ws_metrics),
+        )
+        .route(
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/see",
+            get(see::stream_metrics),
         )
 }

@@ -1,7 +1,4 @@
-use crate::{
-    features::repository::{DeploymentRepository, ProjectRepository},
-    services::compute_cache::ComputeCache,
-};
+use crate::features::repository::{DeploymentRepository, ProjectRepository};
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -14,20 +11,16 @@ use lapin::{
     types::FieldTable,
 };
 use shared::{
-    models::DeploymentStatus,
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentResponse, MessageResponse,
         ScaleDeploymentRequest, UpdateProjectRequest,
     },
-    services::{
-        amqp::{self, Amqp},
-        redis::Redis,
-    },
+    services::amqp::Amqp,
 };
 use shared::{
     schemas::{ListResponse, Pagination},
     services::database::Database,
-    utilities::{config::Config, errors::AppError, jwt::Claims},
+    utilities::{errors::AppError, jwt::Claims},
 };
 use tracing::{debug, info};
 use uuid::Uuid;
@@ -129,14 +122,9 @@ pub async fn delete_project(
 pub async fn get_deployments(
     claims: Claims,
     Path(project_id): Path<Uuid>,
-    State(redis): State<Redis>,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-
-    let mut cache = ComputeCache(redis.connection);
-
-    let d = cache.get_deployments_state(project_id).await?;
 
     let deployments =
         DeploymentRepository::get_all_by_project(&database.pool, project_id, user_id).await?;
@@ -222,7 +210,7 @@ pub async fn create_deployment(
     // Declare queue for provisioner
     channel
         .queue_declare(
-            "compute.provision",
+            "compute.create",
             QueueDeclareOptions {
                 durable: true,
                 exclusive: false,
@@ -237,9 +225,9 @@ pub async fn create_deployment(
     // Bind queue to exchange
     channel
         .queue_bind(
-            "compute.provision",
+            "compute.create",
             "compute",
-            "compute.provision",
+            "compute.create",
             QueueBindOptions::default(),
             FieldTable::default(),
         )

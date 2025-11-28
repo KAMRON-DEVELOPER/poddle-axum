@@ -31,5 +31,6 @@ k8s-openapi.workspace = true
 schemars.workspace = true
 futures.workspace = true
 redis-macros.workspace = true
+async-stream.workspace = true
 tokio-stream = "0.1.17"
 once_cell = "1.21.3"

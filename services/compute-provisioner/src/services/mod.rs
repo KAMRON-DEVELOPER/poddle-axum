@@ -1,2 +1,2 @@
 pub mod consumer;
-pub mod kubernetes;
+pub mod kubernetes_service;
