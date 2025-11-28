@@ -1,3 +1,4 @@
+use futures::{StreamExt, TryStreamExt};
 use lapin::{
     Consumer,
     options::{

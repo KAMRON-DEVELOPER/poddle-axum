@@ -168,7 +168,7 @@ pub async fn get_deployments(
 
 pub async fn get_deployment(
     claims: Claims,
-    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
@@ -251,7 +251,7 @@ pub async fn create_deployment(
         "user_id": user_id,
         "project_id": project_id,
         "action": "create",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "timestamp": chrono::Utc::now().timestamp(),
     });
 
     let payload = serde_json::to_vec(&message)?;
@@ -267,11 +267,11 @@ pub async fn create_deployment(
             },
             &payload,
             BasicProperties::default()
-                .with_delivery_mode(2) // persistent
+                .with_delivery_mode(2)
                 .with_content_type("application/json".into()),
         )
         .await?
-        .await?; // Wait for confirmation
+        .await?;
 
     info!(
         "Published deployment creation message for {}",
@@ -342,9 +342,8 @@ pub async fn delete_deployment(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
 
-    // Mark as deleting in database
-    DeploymentRepository::update_status(&database.pool, deployment_id, DeploymentStatus::Deleting)
-        .await?;
+    // Deleting from database
+    DeploymentRepository::delete(&database.pool, deployment_id, user_id).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
@@ -355,7 +354,7 @@ pub async fn delete_deployment(
         "user_id": user_id,
         "project_id": project_id,
         "action": "delete",
-        "timestamp": chrono::Utc::now().to_rfc3339(),
+        "timestamp": chrono::Utc::now().timestamp(),
     });
 
     let payload = serde_json::to_vec(&message)?;

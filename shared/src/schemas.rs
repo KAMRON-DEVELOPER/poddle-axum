@@ -203,7 +203,7 @@ impl MessageResponse {
 // POD METRICS
 // ============================================
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRedisValue)]
 #[serde(rename_all = "camelCase")]
 pub enum PodPhase {
     Pending,
@@ -213,7 +213,7 @@ pub enum PodPhase {
     Unknown,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
 #[serde(rename_all = "camelCase")]
 pub struct PodMetrics {
     pub pod_name: String,
@@ -228,7 +228,7 @@ pub struct PodMetrics {
 // DEPLOYMENT METRICS
 // ============================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, FromRedisValue, ToRedisArgs)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentMetrics {
     pub deployment_id: String,

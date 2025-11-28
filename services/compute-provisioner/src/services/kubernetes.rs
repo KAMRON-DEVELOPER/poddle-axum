@@ -16,6 +16,8 @@ use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
+use shared::models::ResourceSpec;
+use shared::schemas::CreateDeploymentRequest;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::error;
@@ -68,7 +70,7 @@ impl DeploymentService {
         project_id: Uuid,
         base_domain: &str,
         req: CreateDeploymentRequest,
-    ) -> Result<DeploymentResponse, AppError> {
+    ) -> Result<(), AppError> {
         let namespace = Self::get_user_namespace(k8s_client, user_id).await?;
 
         // Generate unique deployment name
@@ -101,29 +103,10 @@ impl DeploymentService {
         // Start database transaction
         let mut tx = pool.begin().await?;
 
-        // Create deployment record
-        let deployment = DeploymentRepository::create(
-            &mut tx,
-            user_id,
-            project_id,
-            &req.name,
-            &req.image,
-            env_vars_json.clone(),
-            req.replicas,
-            resources_json.clone(),
-            labels_json,
-            &namespace,
-            &deployment_name,
-        )
-        .await?;
-
-        // Commit transaction
-        tx.commit().await?;
-
         // Create Kubernetes resources (secrets are NOT stored in DB)
         let secrets = req.secrets.unwrap_or_default();
 
-        match Self::create_k8s_resources(
+        Self::create_k8s_resources(
             k8s_client,
             &namespace,
             &deployment_name,
@@ -136,56 +119,9 @@ impl DeploymentService {
             env_vars,
             secrets,
         )
-        .await
-        {
-            Ok(_) => {
-                // Update status to running
-                DeploymentRepository::update_status(pool, deployment.id, DeploymentStatus::Running)
-                    .await?;
+        .await?;
 
-                // Log success event
-                DeploymentEventRepository::create(
-                    pool,
-                    deployment.id,
-                    "deployment_created",
-                    Some(&format!("Deployment created at {}", external_url)),
-                )
-                .await?;
-
-                info!("Deployment {} created successfully", deployment.id);
-
-                Ok(DeploymentResponse {
-                    id: deployment.id,
-                    project_id: deployment.project_id,
-                    name: deployment.name,
-                    image: deployment.image,
-                    status: DeploymentStatus::Running,
-                    replicas: deployment.replicas,
-                    resources,
-                    external_url: Some(external_url),
-                    created_at: deployment.created_at,
-                    updated_at: deployment.updated_at,
-                })
-            }
-            Err(e) => {
-                error!("Failed to create K8s resources: {}", e);
-
-                // Update status to failed
-                DeploymentRepository::update_status(pool, deployment.id, DeploymentStatus::Failed)
-                    .await?;
-
-                // Log failure event
-                DeploymentEventRepository::create(
-                    pool,
-                    deployment.id,
-                    "deployment_failed",
-                    Some(&format!("Failed to create K8s resources: {}", e)),
-                )
-                .await?;
-
-                Err(e)
-            }
-        }
+        Ok(())
     }
 
     /// Create all Kubernetes resources (Secret, Deployment, Service, Ingress)
@@ -515,11 +451,7 @@ impl DeploymentService {
         deployment_id: Uuid,
         user_id: Uuid,
         new_replicas: i32,
-    ) -> Result<DeploymentResponse, AppError> {
-        let deployment =
-            DeploymentRepository::update_replicas(pool, deployment_id, user_id, new_replicas)
-                .await?;
-
+    ) -> Result<(), AppError> {
         let deployments_api: Api<K8sDeployment> =
             Api::namespaced(k8s_client.clone(), &deployment.cluster_namespace);
 
@@ -538,28 +470,9 @@ impl DeploymentService {
             .await
             .map_err(|e| AppError::InternalError(format!("Failed to scale deployment: {}", e)))?;
 
-        DeploymentEventRepository::create(
-            pool,
-            deployment.id,
-            "deployment_scaled",
-            Some(&format!("Scaled to {} replicas", new_replicas)),
-        )
-        .await?;
-
         let resources: ResourceSpec = serde_json::from_value(deployment.resources.clone())?;
 
-        Ok(DeploymentResponse {
-            id: deployment.id,
-            project_id: deployment.project_id,
-            name: deployment.name,
-            image: deployment.image,
-            status: deployment.status,
-            replicas: deployment.replicas,
-            resources,
-            external_url: None,
-            created_at: deployment.created_at,
-            updated_at: deployment.updated_at,
-        })
+        Ok(())
     }
 
     /// Delete deployment and all K8s resources
@@ -569,8 +482,6 @@ impl DeploymentService {
         deployment_id: Uuid,
         user_id: Uuid,
     ) -> Result<(), AppError> {
-        let deployment = DeploymentRepository::get_by_id(pool, deployment_id, user_id).await?;
-
         let namespace = &deployment.cluster_namespace;
         let name = &deployment.cluster_deployment_name;
         let delete_params = DeleteParams::default();
@@ -602,9 +513,7 @@ impl DeploymentService {
         k8s_client: &Client,
         deployment_id: Uuid,
         user_id: Uuid,
-    ) -> Result<DeploymentDetailResponse, AppError> {
-        let deployment = DeploymentRepository::get_by_id(pool, deployment_id, user_id).await?;
-
+    ) -> Result<(), AppError> {
         // Get live K8s deployment status
         let deployments_api: Api<K8sDeployment> =
             Api::namespaced(k8s_client.clone(), &deployment.cluster_namespace);
@@ -643,22 +552,6 @@ impl DeploymentService {
             Err(_) => None,
         };
 
-        Ok(DeploymentDetailResponse {
-            id: deployment.id,
-            project_id: deployment.project_id,
-            name: deployment.name,
-            image: deployment.image,
-            status: deployment.status,
-            replicas: deployment.replicas,
-            ready_replicas,
-            resources,
-            env_vars,
-            secret_keys: vec![], // Don't expose secret keys
-            labels,
-            external_url,
-            cluster_namespace: deployment.cluster_namespace,
-            created_at: deployment.created_at,
-            updated_at: deployment.updated_at,
-        })
+        Ok(())
     }
 }

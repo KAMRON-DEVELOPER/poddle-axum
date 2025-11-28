@@ -3285,6 +3285,8 @@ dependencies = [
  "rustls",
  "rustls-native-certs",
  "ryu",
+ "serde",
+ "serde_json",
  "sha1_smol",
  "socket2",
  "tokio",

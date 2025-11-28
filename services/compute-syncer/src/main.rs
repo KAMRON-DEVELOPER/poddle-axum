@@ -85,8 +85,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     info!("📈 Starting metrics scraper");
     let metrics_handle = tokio::spawn(metrics_scraper(
-        prometheus.client.clone(),
-        redis.connection.clone(),
+        kubernetes.client,
+        prometheus.client,
+        redis.connection,
     ));
 
     // Start HTTP server for health checks
