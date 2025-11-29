@@ -19,4 +19,4 @@ metadata:
   namespace: metallb-system
 spec:
   ipAddressPools:
-    - default-pool
+    - ip-address-pool
