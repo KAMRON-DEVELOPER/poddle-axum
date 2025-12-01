@@ -12,6 +12,7 @@ use shared::{
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
     utilities::{config::Config, errors::AppError},
 };
+use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
 use crate::services::{kubernetes_service::KubernetesService, vault_service::VaultService};
@@ -99,31 +100,83 @@ pub async fn start_rabbitmq_consumer(
         )
         .await?;
 
-    info!("✅ RabbitMQ consumers started");
+    // Create a JoinSet to hold our tasks
+    let mut set = JoinSet::new();
 
-    // Spawn task for provision consumer
-    tokio::spawn(handle_create_messages(
+    set.spawn(handle_create_messages(
         config.clone(),
         database.clone(),
         kubernetes.clone(),
         create_consumer,
     ));
 
-    // Spawn task for update consumer
-    tokio::spawn(handle_update_messages(
+    set.spawn(handle_update_messages(
         config.clone(),
         database.clone(),
         kubernetes.clone(),
         update_consumer,
     ));
 
-    // Spawn task for delete consumer
-    tokio::spawn(handle_delete_messages(
+    set.spawn(handle_delete_messages(
         config.clone(),
         database.clone(),
         kubernetes.clone(),
         delete_consumer,
     ));
+
+    info!("✅ RabbitMQ consumers started");
+
+    // Wait for ANY task in the set to exit
+    // If one of them crashes or finishes, this loop will catch it.
+    while let Some(res) = set.join_next().await {
+        match res {
+            Ok(_) => error!("A consumer task finished unexpectedly!"),
+            Err(e) => error!("A consumer task panicked: {}", e),
+        }
+        // Optional: We can break here to crash the whole service
+        // or we could add logic to restart just the specific task.
+        break;
+    }
+
+    // Clean up the rest
+    set.shutdown().await;
+
+    // Spawn task for provision consumer
+    // let create_handle = tokio::spawn(handle_create_messages(
+    //     config.clone(),
+    //     database.clone(),
+    //     kubernetes.clone(),
+    //     create_consumer,
+    // ));
+
+    // Spawn task for update consumer
+    // let update_handle = tokio::spawn(handle_update_messages(
+    //     config.clone(),
+    //     database.clone(),
+    //     kubernetes.clone(),
+    //     update_consumer,
+    // ));
+
+    // Spawn task for delete consumer
+    // let delete_handle = tokio::spawn(handle_delete_messages(
+    //     config.clone(),
+    //     database.clone(),
+    //     kubernetes.clone(),
+    //     delete_consumer,
+    // ));
+
+    // Wait for the consumers. If any of them crash or finish, this block will resolve.
+    // tokio::select! {
+    //     _ = create_handle => {
+    //         error!("Create consumer task finished unexpectedly");
+    //     }
+    //     _ = update_handle => {
+    //         error!("Update consumer task finished unexpectedly");
+    //     }
+    //     _ = delete_handle => {
+    //         error!("Delete consumer task finished unexpectedly");
+    //     }
+    // }
 
     Ok(())
 }
