@@ -164,6 +164,8 @@ pub struct DeploymentDetailResponse {
     pub secret_keys: Option<Vec<String>>,
     pub environment_variables: HashMap<String, String>,
     pub labels: Option<HashMap<String, String>>,
+    pub subdomain: Option<String>,
+    pub custom_domain: Option<String>,
     pub cluster_namespace: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,

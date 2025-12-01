@@ -165,6 +165,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     secret_keys VARCHAR(64) [],
     -- environment_variables JSONB DEFAULT '{}'::jsonb
     environment_variables JSONB,
+    -- resources JSONB NOT NULL DEFAULT '{"cpuRequestMillicores":250,"cpuLimitMillicores":500,"memoryRequestMb":256,"memoryLimitMb":512}'::jsonb
     resources JSONB NOT NULL,
     labels JSONB,
     status deployment_status NOT NULL DEFAULT 'queued',
