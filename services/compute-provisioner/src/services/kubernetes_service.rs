@@ -90,7 +90,6 @@ impl KubernetesService {
 
     pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
-        let project_id = message.project_id;
         let deployment_id = message.deployment_id;
         info!("🚀 Creating K8s resources for deployment {}", deployment_id);
 
@@ -131,7 +130,9 @@ impl KubernetesService {
 
         info!("📍 External URL: {}", external_url);
 
-        // Create all K8s resources
+        let env_vars = message.environment_variables.unwrap_or_default();
+        let secrets = message.secrets.unwrap_or_default();
+
         self.create_k8s_resources(
             &namespace,
             &deployment_name,
@@ -141,20 +142,24 @@ impl KubernetesService {
             message.replicas,
             &message.resources,
             &external_url,
-            message.env_vars,
-            message.secrets,
+            env_vars,
+            secrets,
         )
         .await?;
 
-        // Update deployment status to 'starting'
         sqlx::query!(
             r#"
             UPDATE deployments
-            SET status = 'starting', external_url = $2
+            SET status = 'starting',
+                external_url = $2,
+                cluster_namespace = $3,
+                cluster_deployment_name = $4
             WHERE id = $1
             "#,
             deployment_id,
-            external_url
+            external_url,
+            namespace,
+            deployment_name
         )
         .execute(&self.pool)
         .await?;
@@ -164,7 +169,6 @@ impl KubernetesService {
         Ok(())
     }
 
-    /// Create all Kubernetes resources (Secret, Deployment, Service, Ingress)
     async fn create_k8s_resources(
         &self,
         namespace: &str,
@@ -174,25 +178,21 @@ impl KubernetesService {
         container_port: i32,
         replicas: i32,
         resources: &ResourceSpec,
-        subdomain: &str,
-        custmom_domain: &str,
+        external_url: &str,
         env_vars: HashMap<String, String>,
         secrets: HashMap<String, String>,
     ) -> Result<(), AppError> {
-        // Common labels
         let mut labels = BTreeMap::new();
         labels.insert("app".to_string(), name.to_string());
         labels.insert("deployment-id".to_string(), deployment_id.to_string());
         labels.insert("managed-by".to_string(), "poddle".to_string());
 
-        // 1. Create Secret (if any secrets provided)
         let secret_name = format!("{}-secrets", name);
         if !secrets.is_empty() {
             self.create_k8s_secret(namespace, &secret_name, &labels, secrets.clone())
                 .await?;
         }
 
-        // 2. Create Deployment
         self.create_k8s_deployment(
             namespace,
             name,
@@ -210,11 +210,9 @@ impl KubernetesService {
         )
         .await?;
 
-        // 3. Create Service
         self.create_k8s_service(namespace, name, container_port, &labels)
             .await?;
 
-        // 4. Create Ingress
         self.create_k8s_ingress(namespace, name, external_url, &labels)
             .await?;
 
@@ -521,55 +519,101 @@ impl KubernetesService {
         Ok(())
     }
 
-    /// Update deployment replicas
     pub async fn update(&self, message: UpdateDeploymentMessage) -> Result<(), AppError> {
+        let deployment_id = message.deployment_id;
+        let user_id = message.user_id;
+
+        let deployment = sqlx::query!(
+            r#"
+            SELECT cluster_namespace, cluster_deployment_name
+            FROM deployments
+            WHERE id = $1 AND user_id = $2
+            "#,
+            deployment_id,
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFoundError("Deployment not found".to_string()))?;
+
+        let namespace = deployment.cluster_namespace;
+        let name = deployment.cluster_deployment_name;
+
         let deployments_api: Api<K8sDeployment> =
-            Api::namespaced(client.clone(), &deployment.cluster_namespace);
+            Api::namespaced(self.client.clone(), &namespace);
 
-        let patch = serde_json::json!({
-            "spec": {
-                "replicas": new_replicas
-            }
-        });
+        if let Some(replicas) = message.replicas {
+            let patch = serde_json::json!({
+                "spec": {
+                    "replicas": replicas
+                }
+            });
 
-        deployments_api
-            .patch(
-                &deployment.cluster_deployment_name,
-                &PatchParams::default(),
-                &Patch::Strategic(patch),
+            deployments_api
+                .patch(&name, &PatchParams::default(), &Patch::Strategic(patch))
+                .await
+                .map_err(|e| {
+                    AppError::InternalError(format!("Failed to update deployment: {}", e))
+                })?;
+
+            sqlx::query!(
+                r#"UPDATE deployments SET replicas = $2 WHERE id = $1"#,
+                deployment_id,
+                replicas
             )
-            .await
-            .map_err(|e| AppError::InternalError(format!("Failed to scale deployment: {}", e)))?;
+            .execute(&self.pool)
+            .await?;
 
-        let resources: ResourceSpec = serde_json::from_value(deployment.resources.clone())?;
+            info!("✅ Deployment {} scaled to {} replicas", deployment_id, replicas);
+        }
 
         Ok(())
     }
 
-    /// Delete deployment and all K8s resources
     pub async fn delete(&self, message: DeleteDeploymentMessage) -> Result<(), AppError> {
-        let namespace = &deployment.cluster_namespace;
-        let name = &deployment.cluster_deployment_name;
+        let deployment_id = message.deployment_id;
+        let user_id = message.user_id;
+
+        let deployment = sqlx::query!(
+            r#"
+            SELECT cluster_namespace, cluster_deployment_name
+            FROM deployments
+            WHERE id = $1 AND user_id = $2
+            "#,
+            deployment_id,
+            user_id
+        )
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFoundError("Deployment not found".to_string()))?;
+
+        let namespace = deployment.cluster_namespace;
+        let name = deployment.cluster_deployment_name;
+
         let delete_params = DeleteParams::default();
 
-        // Delete in reverse order (Ingress -> Service -> Deployment -> Secret)
-        let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), namespace);
-        let _ = ingress_api.delete(name, &delete_params).await;
+        let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), &namespace);
+        let _ = ingress_api.delete(&name, &delete_params).await;
 
-        let service_api: Api<Service> = Api::namespaced(client.clone(), namespace);
-        let _ = service_api.delete(name, &delete_params).await;
+        let service_api: Api<Service> = Api::namespaced(self.client.clone(), &namespace);
+        let _ = service_api.delete(&name, &delete_params).await;
 
-        let deployment_api: Api<K8sDeployment> = Api::namespaced(client.clone(), namespace);
-        let _ = deployment_api.delete(name, &delete_params).await;
+        let deployment_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &namespace);
+        let _ = deployment_api.delete(&name, &delete_params).await;
 
         let secret_name = format!("{}-secrets", name);
-        let secret_api: Api<K8sSecret> = Api::namespaced(client.clone(), namespace);
+        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &namespace);
         let _ = secret_api.delete(&secret_name, &delete_params).await;
 
-        // Delete from database
-        DeploymentRepository::delete(pool, deployment_id, user_id).await?;
+        sqlx::query!(
+            r#"DELETE FROM deployments WHERE id = $1 AND user_id = $2"#,
+            deployment_id,
+            user_id
+        )
+        .execute(&self.pool)
+        .await?;
 
-        info!("Deployment {} deleted successfully", deployment_id);
+        info!("✅ Deployment {} deleted successfully", deployment_id);
         Ok(())
     }
 }

@@ -21,7 +21,7 @@ pub async fn start_rabbitmq_consumer(
     config: Config,
     database: Database,
     kubernetes: Kubernetes,
-    vault_service: VaultService,
+    _vault_service: VaultService,
 ) -> Result<(), AppError> {
     let channel = amqp.channel().await?;
 
@@ -219,7 +219,7 @@ async fn handle_update_messages(
                 match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
                         info!(
-                            "📏 Scaling deployment {} to {} replicas",
+                            "📏 Updating deployment {:?} (replicas: {:?})",
                             message.deployment_id, message.replicas
                         );
 
@@ -234,8 +234,8 @@ async fn handle_update_messages(
                         match kubernetes_service.update(message.clone()).await {
                             Ok(_) => {
                                 info!(
-                                    "✅ Deployment {} updated to {}",
-                                    message.deployment_id, message.replicas
+                                    "✅ Deployment {:?} updated successfully",
+                                    message.deployment_id
                                 );
 
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
