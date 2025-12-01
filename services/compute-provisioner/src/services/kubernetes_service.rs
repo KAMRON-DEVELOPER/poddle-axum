@@ -151,13 +151,11 @@ impl KubernetesService {
             r#"
             UPDATE deployments
             SET status = 'starting',
-                external_url = $2,
-                cluster_namespace = $3,
-                cluster_deployment_name = $4
+                cluster_namespace = $2,
+                cluster_deployment_name = $3
             WHERE id = $1
             "#,
             deployment_id,
-            external_url,
             namespace,
             deployment_name
         )
@@ -539,8 +537,7 @@ impl KubernetesService {
         let namespace = deployment.cluster_namespace;
         let name = deployment.cluster_deployment_name;
 
-        let deployments_api: Api<K8sDeployment> =
-            Api::namespaced(self.client.clone(), &namespace);
+        let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &namespace);
 
         if let Some(replicas) = message.replicas {
             let patch = serde_json::json!({
@@ -564,7 +561,10 @@ impl KubernetesService {
             .execute(&self.pool)
             .await?;
 
-            info!("✅ Deployment {} scaled to {} replicas", deployment_id, replicas);
+            info!(
+                "✅ Deployment {} scaled to {} replicas",
+                deployment_id, replicas
+            );
         }
 
         Ok(())
