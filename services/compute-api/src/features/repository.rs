@@ -248,10 +248,32 @@ impl DeploymentRepository {
         user_id: Uuid,
         req: UpdateDeploymentRequest,
     ) -> Result<Deployment, sqlx::Error> {
+        let resources = req
+            .resources
+            .as_ref()
+            .map(|r| serde_json::to_value(r).unwrap());
+        let labels = req
+            .labels
+            .as_ref()
+            .map(|l| l.as_ref().map(|v| serde_json::to_value(v).unwrap()));
+        let env_vars = req
+            .environment_variables
+            .as_ref()
+            .map(|e| serde_json::to_value(e).unwrap());
+
         sqlx::query_as::<_, Deployment>(
             r#"
                 UPDATE deployments d
-                SET replicas = $3
+                SET 
+                    name = COALESCE($3, d.name),
+                    image = COALESCE($4, d.image),
+                    port = COALESCE($5, d.port),
+                    replicas = COALESCE($6, d.replicas),
+                    resources = COALESCE($7, d.resources),
+                    labels = COALESCE($8, d.labels),
+                    environment_variables = COALESCE($9, d.environment_variables),
+                    subdomain = COALESCE($10, d.subdomain),
+                    custom_domain = COALESCE($11, d.custom_domain)
                 FROM projects p
                 WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
                 RETURNING d.*
@@ -259,7 +281,15 @@ impl DeploymentRepository {
         )
         .bind(deployment_id)
         .bind(user_id)
+        .bind(&req.name)
+        .bind(&req.image)
+        .bind(req.port)
         .bind(req.replicas)
+        .bind(resources)
+        .bind(labels.flatten())
+        .bind(env_vars)
+        .bind(&req.subdomain)
+        .bind(&req.custom_domain)
         .fetch_one(pool)
         .await
     }

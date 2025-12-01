@@ -605,15 +605,7 @@ impl KubernetesService {
         let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &namespace);
         let _ = secret_api.delete(&secret_name, &delete_params).await;
 
-        sqlx::query!(
-            r#"DELETE FROM deployments WHERE id = $1 AND user_id = $2"#,
-            deployment_id,
-            user_id
-        )
-        .execute(&self.pool)
-        .await?;
-
-        info!("✅ Deployment {} deleted successfully", deployment_id);
+        info!("✅ K8s resources deleted for deployment {}", deployment_id);
         Ok(())
     }
 }
