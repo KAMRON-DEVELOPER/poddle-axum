@@ -31,7 +31,7 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}",
             get(handlers::get_deployment)
-                .patch(handlers::scale_deployment)
+                .patch(handlers::update_deployment)
                 .delete(handlers::delete_deployment),
         )
         .route(

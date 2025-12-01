@@ -103,7 +103,7 @@ pub struct CreateDeploymentRequest {
 
     pub secrets: Option<HashMap<String, String>>,
 
-    pub resources: Option<ResourceSpec>,
+    pub resources: ResourceSpec,
 
     pub labels: Option<HashMap<String, String>>,
 
@@ -120,21 +120,20 @@ static SUBDOMAIN: Lazy<Regex> =
 static CUSTOM_DOMAIN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$").unwrap());
 
-#[derive(Deserialize, Validate, Debug)]
+#[derive(Deserialize, Validate, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDeploymentRequest {
-    #[validate(range(min = 0, max = 10))]
+    pub name: Option<String>,
+    pub image: Option<String>,
+    #[validate(range(min = 0, max = 100))]
     pub replicas: Option<i32>,
+    pub port: Option<i32>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
     pub resources: Option<ResourceSpec>,
-}
-
-#[derive(Deserialize, Validate, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ScaleDeploymentRequest {
-    #[validate(range(min = 0, max = 10))]
-    pub replicas: i32,
+    pub labels: Option<Option<HashMap<String, String>>>,
+    pub subdomain: Option<String>,
+    pub custom_domain: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -254,8 +253,8 @@ pub struct CreateDeploymentMessage {
     pub image: String,
     pub replicas: i32,
     pub port: i32,
-    pub environment_variables: HashMap<String, String>,
-    pub secrets: HashMap<String, String>,
+    pub environment_variables: Option<HashMap<String, String>>,
+    pub secrets: Option<HashMap<String, String>>,
     pub resources: ResourceSpec,
     pub labels: Option<HashMap<String, String>>,
     pub subdomain: Option<String>,
@@ -263,24 +262,22 @@ pub struct CreateDeploymentMessage {
     pub timestamp: i64,
 }
 
-impl CreateDeploymentMessage {
-    pub fn from_request(
-        deployment_id: Uuid,
-        user_id: Uuid,
-        project_id: Uuid,
-        req: CreateDeploymentRequest,
+impl From<(Uuid, Uuid, Uuid, CreateDeploymentRequest)> for CreateDeploymentMessage {
+    fn from(
+        (user_id, project_id, deployment_id, req): (Uuid, Uuid, Uuid, CreateDeploymentRequest),
     ) -> Self {
         Self {
             user_id,
             project_id,
             deployment_id,
+
             name: req.name,
             image: req.image,
             replicas: req.replicas,
             port: req.port,
-            environment_variables: req.environment_variables.unwrap_or_default(),
-            secrets: req.secrets.unwrap_or_default(),
-            resources: req.resources.unwrap_or_default(),
+            environment_variables: req.environment_variables,
+            secrets: req.secrets,
+            resources: req.resources,
             labels: req.labels,
             subdomain: req.subdomain,
             custom_domain: req.custom_domain,
@@ -308,6 +305,30 @@ pub struct UpdateDeploymentMessage {
     pub subdomain: Option<String>,
     pub custom_domain: Option<String>,
     pub timestamp: i64,
+}
+
+impl From<(Uuid, Uuid, Uuid, UpdateDeploymentRequest)> for UpdateDeploymentMessage {
+    fn from(
+        (user_id, project_id, deployment_id, req): (Uuid, Uuid, Uuid, UpdateDeploymentRequest),
+    ) -> Self {
+        Self {
+            user_id,
+            project_id,
+            deployment_id,
+
+            name: req.name,
+            image: req.image,
+            replicas: req.replicas,
+            port: req.port,
+            environment_variables: req.environment_variables,
+            secrets: req.secrets,
+            resources: req.resources,
+            labels: req.labels,
+            subdomain: req.subdomain,
+            custom_domain: req.custom_domain,
+            timestamp: chrono::Utc::now().timestamp(),
+        }
+    }
 }
 
 /// Message sent to compute.delete queue

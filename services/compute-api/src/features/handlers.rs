@@ -13,8 +13,8 @@ use lapin::{
 use shared::{
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ScaleDeploymentRequest,
-        UpdateDeploymentMessage, UpdateProjectRequest,
+        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, UpdateDeploymentMessage,
+        UpdateDeploymentRequest, UpdateProjectRequest,
     },
     services::amqp::Amqp,
 };
@@ -142,7 +142,6 @@ pub async fn get_deployments(
                 status: d.status,
                 replicas: d.replicas,
                 resources,
-                external_url: None,
                 created_at: d.created_at,
                 updated_at: d.updated_at,
             }
@@ -236,7 +235,7 @@ pub async fn create_deployment(
         .await?;
 
     // Prepare message
-    let message = CreateDeploymentMessage::from_request(deployment.id, user_id, project_id, req);
+    let message: CreateDeploymentMessage = (deployment.id, user_id, project_id, req).into();
 
     let payload = serde_json::to_vec(&message)?;
 
@@ -268,12 +267,12 @@ pub async fn create_deployment(
     Ok((StatusCode::CREATED, Json(deployment)))
 }
 
-pub async fn scale_deployment(
+pub async fn update_deployment(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
     State(amqp): State<Amqp>,
-    Json(req): Json<ScaleDeploymentRequest>,
+    Json(req): Json<UpdateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     req.validate()?;
 
@@ -281,20 +280,13 @@ pub async fn scale_deployment(
 
     // Update deployment in database
     let deployment =
-        DeploymentRepository::update_replicas(&database.pool, deployment_id, user_id, req.replicas)
-            .await?;
+        DeploymentRepository::update(&database.pool, deployment_id, user_id, req.clone()).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
 
     // Prepare message
-    let message = UpdateDeploymentMessage {
-        deployment_id,
-        user_id,
-        project_id,
-        replicas: req.replicas,
-        timestamp: chrono::Utc::now().timestamp(),
-    };
+    let message: UpdateDeploymentMessage = (user_id, project_id, deployment_id, req).into();
 
     let payload = serde_json::to_vec(&message)?;
 
@@ -302,7 +294,7 @@ pub async fn scale_deployment(
     channel
         .basic_publish(
             "compute",
-            "compute.scale",
+            "compute.update",
             BasicPublishOptions::default(),
             &payload,
             BasicProperties::default()

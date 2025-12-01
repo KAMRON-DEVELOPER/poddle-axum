@@ -1,4 +1,7 @@
-use shared::{models::ResourceSpec, schemas::Pagination};
+use shared::{
+    models::ResourceSpec,
+    schemas::{Pagination, UpdateDeploymentRequest},
+};
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
@@ -184,7 +187,8 @@ impl DeploymentRepository {
             &Uuid::new_v4().to_string()[..8]
         );
 
-        let env_vars = serde_json::to_value(&req.env_vars).unwrap_or(serde_json::json!({}));
+        let environment_variables =
+            serde_json::to_value(&req.environment_variables).unwrap_or(serde_json::json!({}));
         let resources = serde_json::to_value(&req.resources)
             .unwrap_or_else(|_| serde_json::to_value(&ResourceSpec::default()).unwrap());
         let labels = req
@@ -195,7 +199,7 @@ impl DeploymentRepository {
         sqlx::query_as::<_, Deployment>(
             r#"
                 INSERT INTO deployments (
-                    user_id, project_id, name, image, replicas, port, env_vars, resources,
+                    user_id, project_id, name, image, replicas, port, environment_variables, resources,
                     labels, subdomain, cluster_namespace, cluster_deployment_name
                 )
                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
@@ -208,7 +212,7 @@ impl DeploymentRepository {
         .bind(&req.image)
         .bind(req.replicas)
         .bind(req.port)
-        .bind(env_vars)
+        .bind(environment_variables)
         .bind(resources)
         .bind(labels)
         .bind(&req.subdomain)
@@ -238,11 +242,11 @@ impl DeploymentRepository {
         Ok(())
     }
 
-    pub async fn update_replicas(
+    pub async fn update(
         pool: &PgPool,
         deployment_id: Uuid,
         user_id: Uuid,
-        replicas: i32,
+        req: UpdateDeploymentRequest,
     ) -> Result<Deployment, sqlx::Error> {
         sqlx::query_as::<_, Deployment>(
             r#"
@@ -255,7 +259,7 @@ impl DeploymentRepository {
         )
         .bind(deployment_id)
         .bind(user_id)
-        .bind(replicas)
+        .bind(req.replicas)
         .fetch_one(pool)
         .await
     }
