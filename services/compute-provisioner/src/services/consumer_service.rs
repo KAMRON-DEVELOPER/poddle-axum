@@ -14,13 +14,14 @@ use shared::{
 };
 use tracing::{error, info, warn};
 
-use crate::services::kubernetes::KubernetesService;
+use crate::services::{kubernetes_service::KubernetesService, vault_service::VaultService};
 
 pub async fn start_rabbitmq_consumer(
     amqp: Amqp,
     config: Config,
     database: Database,
     kubernetes: Kubernetes,
+    vault_service: VaultService,
 ) -> Result<(), AppError> {
     let channel = amqp.channel().await?;
 

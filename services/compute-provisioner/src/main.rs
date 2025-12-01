@@ -3,7 +3,7 @@ pub mod utilities;
 
 use std::net::SocketAddr;
 
-use crate::services::consumer_service::start_rabbitmq_consumer;
+use crate::services::{consumer_service::start_rabbitmq_consumer, vault_service::VaultService};
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
@@ -70,10 +70,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // let http_client = reqwest::ClientBuilder::new()
     //     .redirect(reqwest::redirect::Policy::none())
     //     .build()?;
+    let vault = VaultService::init(&config).await?;
 
     // Spawn background tasks
     info!("📊 Starting compute provisioner");
-    let consumer_handle = tokio::spawn(start_rabbitmq_consumer(amqp, config, database, kubernetes));
+    let consumer_handle = tokio::spawn(start_rabbitmq_consumer(
+        amqp, config, database, kubernetes, vault,
+    ));
 
     // Start HTTP server for health checks
     let _server_handle = tokio::spawn(start_health_server());

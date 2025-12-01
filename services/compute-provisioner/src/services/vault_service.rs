@@ -3,6 +3,7 @@ use std::sync::Arc;
 
 use shared::utilities::config::Config;
 use shared::utilities::errors::AppError;
+use tracing::info;
 use uuid::Uuid;
 use vaultrs::client::{Client, VaultClient, VaultClientSettingsBuilder};
 
@@ -17,8 +18,7 @@ pub struct VaultService {
 
 impl VaultService {
     pub async fn init(config: &Config) -> Result<Self, AppError> {
-        let jwt = tokio::fs::read_to_string("/var/run/secrets/kubernetes.io/serviceaccount/token")
-            .await?;
+        info!("🔐 Initializing Vault client");
 
         let mut client = VaultClient::new(
             VaultClientSettingsBuilder::default()
@@ -30,7 +30,7 @@ impl VaultService {
             &client,
             &config.vault_auth_mount,
             &config.vault_auth_role,
-            &jwt,
+            &config.k8s_sa_token,
         )
         .await?;
 
@@ -38,7 +38,7 @@ impl VaultService {
 
         Ok(Self {
             client: Arc::new(client),
-            kv_mount: config.vault_auth_mount.clone(),
+            kv_mount: config.vault_kv_mount.clone(),
         })
     }
 

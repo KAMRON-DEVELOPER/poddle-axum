@@ -22,7 +22,7 @@ pub struct Config {
     // KUBERNETES
     pub k8s_in_cluster: bool,
     pub k8s_config_path: Option<String>,
-    pub k8s_encryption_key: String,
+    pub k8s_sa_token: String,
 
     pub vault_address: String,
     pub vault_auth_mount: String,
@@ -95,13 +95,19 @@ pub struct Config {
 
 impl Config {
     pub async fn init() -> Result<Self, AppError> {
-        let k8s_encryption_key =
-            get_config_value("K8S_ENCRYPTION_KEY", Some("K8S_ENCRYPTION_KEY"), None, None).await?;
-
         let k8s_config_path =
             get_optional_config_value("K8S_KUBECONFIG", Some("K8S_KUBECONFIG"), None).await?;
         let k8s_in_cluster =
             get_config_value("K8S_IN_CLUSTER", Some("K8S_IN_CLUSTER"), None, Some(false)).await?;
+        let k8s_sa_token = get_config_value(
+            "K8S_SA_TOKEN",
+            Some("K8S_SA_TOKEN"),
+            Some(&PathBuf::from(
+                "/var/run/secrets/kubernetes.io/serviceaccount/token",
+            )),
+            None,
+        )
+        .await?;
 
         let vault_address = get_config_value(
             "VAULT_ADDR",
@@ -349,7 +355,7 @@ impl Config {
         let config = Config {
             k8s_in_cluster,
             k8s_config_path,
-            k8s_encryption_key,
+            k8s_sa_token,
             vault_address,
             vault_auth_mount,
             vault_auth_role,
