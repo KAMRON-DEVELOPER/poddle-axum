@@ -8,7 +8,7 @@ use lapin::{
     types::FieldTable,
 };
 use shared::{
-    schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, ScaleDeploymentMessage},
+    schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
     utilities::{config::Config, errors::AppError},
 };
@@ -42,7 +42,7 @@ pub async fn start_rabbitmq_consumer(
         .await?;
 
     // Declare queues
-    for queue_name in &["compute.create", "compute.scale", "compute.delete"] {
+    for queue_name in &["compute.create", "compute.update", "compute.delete"] {
         channel
             .queue_declare(
                 queue_name,
@@ -81,10 +81,10 @@ pub async fn start_rabbitmq_consumer(
         )
         .await?;
 
-    let scale_consumer = channel
+    let update_consumer = channel
         .basic_consume(
-            "compute.scale",
-            "scaler",
+            "compute.update",
+            "updater",
             BasicConsumeOptions::default(),
             FieldTable::default(),
         )
@@ -109,12 +109,12 @@ pub async fn start_rabbitmq_consumer(
         create_consumer,
     ));
 
-    // Spawn task for scale consumer
-    tokio::spawn(handle_scale_messages(
+    // Spawn task for update consumer
+    tokio::spawn(handle_update_messages(
         config.clone(),
         database.clone(),
         kubernetes.clone(),
-        scale_consumer,
+        update_consumer,
     ));
 
     // Spawn task for delete consumer
@@ -205,18 +205,18 @@ async fn handle_create_messages(
     }
 }
 
-async fn handle_scale_messages(
+async fn handle_update_messages(
     config: Config,
     database: Database,
     kubernetes: Kubernetes,
     mut consumer: Consumer,
 ) {
-    info!("📏 Scale consumer started");
+    info!("📏 update consumer started");
 
     while let Some(delivery) = consumer.next().await {
         match delivery {
             Ok(delivery) => {
-                match serde_json::from_slice::<ScaleDeploymentMessage>(&delivery.data) {
+                match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
                         info!(
                             "📏 Scaling deployment {} to {} replicas",
@@ -231,10 +231,10 @@ async fn handle_scale_messages(
                             cluster_issuer: config.cluster_issuer.clone(),
                         };
 
-                        match kubernetes_service.scale(message.clone()).await {
+                        match kubernetes_service.update(message.clone()).await {
                             Ok(_) => {
                                 info!(
-                                    "✅ Deployment {} scaled to {}",
+                                    "✅ Deployment {} updated to {}",
                                     message.deployment_id, message.replicas
                                 );
 
@@ -243,7 +243,7 @@ async fn handle_scale_messages(
                                 }
                             }
                             Err(e) => {
-                                error!("Failed to scale deployment: {}", e);
+                                error!("Failed to update deployment: {}", e);
 
                                 delivery
                                     .nack(BasicNackOptions {
@@ -256,7 +256,7 @@ async fn handle_scale_messages(
                         }
                     }
                     Err(e) => {
-                        error!("Failed to parse ScaleDeploymentMessage: {}", e);
+                        error!("Failed to parse updateDeploymentMessage: {}", e);
                         delivery
                             .reject(BasicRejectOptions { requeue: false })
                             .await
@@ -264,7 +264,7 @@ async fn handle_scale_messages(
                     }
                 }
             }
-            Err(e) => error!("Scale consumer error: {}", e),
+            Err(e) => error!("update consumer error: {}", e),
         }
     }
 }

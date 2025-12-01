@@ -12,8 +12,8 @@ use vaultrs::kv2;
 
 #[derive(Clone)]
 pub struct VaultService {
-    pub client: Arc<VaultClient>,
     pub kv_mount: String,
+    pub client: Arc<VaultClient>,
 }
 
 impl VaultService {

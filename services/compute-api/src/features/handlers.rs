@@ -13,8 +13,8 @@ use lapin::{
 use shared::{
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ScaleDeploymentMessage,
-        ScaleDeploymentRequest, UpdateProjectRequest,
+        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ScaleDeploymentRequest,
+        UpdateDeploymentMessage, UpdateProjectRequest,
     },
     services::amqp::Amqp,
 };
@@ -288,7 +288,7 @@ pub async fn scale_deployment(
     let channel = amqp.channel().await?;
 
     // Prepare message
-    let message = ScaleDeploymentMessage {
+    let message = UpdateDeploymentMessage {
         deployment_id,
         user_id,
         project_id,

@@ -254,14 +254,12 @@ pub struct CreateDeploymentMessage {
     pub image: String,
     pub replicas: i32,
     pub port: i32,
-
     pub environment_variables: HashMap<String, String>,
     pub secrets: HashMap<String, String>,
     pub resources: ResourceSpec,
     pub labels: Option<HashMap<String, String>>,
     pub subdomain: Option<String>,
     pub custom_domain: Option<String>,
-
     pub timestamp: i64,
 }
 
@@ -273,9 +271,9 @@ impl CreateDeploymentMessage {
         req: CreateDeploymentRequest,
     ) -> Self {
         Self {
-            deployment_id,
             user_id,
             project_id,
+            deployment_id,
             name: req.name,
             image: req.image,
             replicas: req.replicas,
@@ -294,11 +292,21 @@ impl CreateDeploymentMessage {
 /// Message sent to compute.scale queue
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct ScaleDeploymentMessage {
-    pub deployment_id: Uuid,
+pub struct UpdateDeploymentMessage {
     pub user_id: Uuid,
     pub project_id: Uuid,
-    pub replicas: i32,
+    pub deployment_id: Uuid,
+
+    pub name: Option<String>,
+    pub image: Option<String>,
+    pub replicas: Option<i32>,
+    pub port: Option<i32>,
+    pub environment_variables: Option<HashMap<String, String>>,
+    pub secrets: Option<HashMap<String, String>>,
+    pub resources: Option<ResourceSpec>,
+    pub labels: Option<Option<HashMap<String, String>>>,
+    pub subdomain: Option<String>,
+    pub custom_domain: Option<String>,
     pub timestamp: i64,
 }
 
@@ -306,8 +314,8 @@ pub struct ScaleDeploymentMessage {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteDeploymentMessage {
-    pub deployment_id: Uuid,
     pub user_id: Uuid,
     pub project_id: Uuid,
+    pub deployment_id: Uuid,
     pub timestamp: i64,
 }

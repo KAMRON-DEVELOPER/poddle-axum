@@ -21,6 +21,8 @@ use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
 use shared::models::ResourceSpec;
 use shared::schemas::CreateDeploymentMessage;
+use shared::schemas::DeleteDeploymentMessage;
+use shared::schemas::UpdateDeploymentMessage;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::error;
@@ -519,13 +521,8 @@ impl KubernetesService {
         Ok(())
     }
 
-    /// Scale deployment replicas
-    pub async fn scale(
-        &self,
-        deployment_id: Uuid,
-        user_id: Uuid,
-        new_replicas: i32,
-    ) -> Result<(), AppError> {
+    /// Update deployment replicas
+    pub async fn update(&self, message: UpdateDeploymentMessage) -> Result<(), AppError> {
         let deployments_api: Api<K8sDeployment> =
             Api::namespaced(client.clone(), &deployment.cluster_namespace);
 
@@ -550,7 +547,7 @@ impl KubernetesService {
     }
 
     /// Delete deployment and all K8s resources
-    pub async fn delete(&self, deployment_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
+    pub async fn delete(&self, message: DeleteDeploymentMessage) -> Result<(), AppError> {
         let namespace = &deployment.cluster_namespace;
         let name = &deployment.cluster_deployment_name;
         let delete_params = DeleteParams::default();
