@@ -125,13 +125,13 @@ static CUSTOM_DOMAIN: Lazy<Regex> =
 pub struct UpdateDeploymentRequest {
     pub name: Option<String>,
     pub image: Option<String>,
+    pub port: Option<i32>,
     #[validate(range(min = 0, max = 100))]
     pub replicas: Option<i32>,
-    pub port: Option<i32>,
-    pub environment_variables: Option<HashMap<String, String>>,
-    pub secrets: Option<HashMap<String, String>>,
     pub resources: Option<ResourceSpec>,
     pub labels: Option<Option<HashMap<String, String>>>,
+    pub secrets: Option<HashMap<String, String>>,
+    pub environment_variables: Option<HashMap<String, String>>,
     pub subdomain: Option<String>,
     pub custom_domain: Option<String>,
 }
@@ -161,8 +161,8 @@ pub struct DeploymentDetailResponse {
     pub replicas: i32,
     pub ready_replicas: Option<i32>,
     pub resources: ResourceSpec,
+    pub secret_keys: Option<Vec<String>>,
     pub environment_variables: HashMap<String, String>,
-    pub secret_keys: Vec<String>,
     pub labels: Option<HashMap<String, String>>,
     pub cluster_namespace: String,
     pub created_at: DateTime<Utc>,
