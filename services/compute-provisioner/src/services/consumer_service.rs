@@ -14,7 +14,7 @@ use shared::{
 };
 use tracing::{error, info, warn};
 
-use crate::services::kubernetes_service::KubernetesService;
+use crate::services::kubernetes::KubernetesService;
 
 pub async fn start_rabbitmq_consumer(
     amqp: Amqp,
@@ -110,6 +110,7 @@ pub async fn start_rabbitmq_consumer(
 
     // Spawn task for scale consumer
     tokio::spawn(handle_scale_messages(
+        config.clone(),
         database.clone(),
         kubernetes.clone(),
         scale_consumer,
@@ -117,6 +118,7 @@ pub async fn start_rabbitmq_consumer(
 
     // Spawn task for delete consumer
     tokio::spawn(handle_delete_messages(
+        config.clone(),
         database.clone(),
         kubernetes.clone(),
         delete_consumer,
@@ -144,17 +146,16 @@ async fn handle_create_messages(
                             message.deployment_id, message.image, message.replicas
                         );
 
+                        let kubernetes_service = KubernetesService {
+                            client: kubernetes.client.clone(),
+                            pool: database.pool.clone(),
+                            base_domain: config.base_domain.clone(),
+                            enable_tls: config.enable_tls,
+                            cluster_issuer: config.cluster_issuer.clone(),
+                        };
+
                         // Now we have ALL the data we need without a database query!
-                        match KubernetesService::create(
-                            &database.pool,
-                            &kubernetes.client,
-                            message.user_id,
-                            message.deployment_id,
-                            &config.base_domain,
-                            message.clone(),
-                        )
-                        .await
-                        {
+                        match kubernetes_service.create(message.clone()).await {
                             Ok(_) => {
                                 info!(
                                     "✅ Deployment {} created successfully",
@@ -203,7 +204,12 @@ async fn handle_create_messages(
     }
 }
 
-async fn handle_scale_messages(database: Database, kubernetes: Kubernetes, mut consumer: Consumer) {
+async fn handle_scale_messages(
+    config: Config,
+    database: Database,
+    kubernetes: Kubernetes,
+    mut consumer: Consumer,
+) {
     info!("📏 Scale consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -216,15 +222,15 @@ async fn handle_scale_messages(database: Database, kubernetes: Kubernetes, mut c
                             message.deployment_id, message.replicas
                         );
 
-                        match KubernetesService::scale(
-                            &database.pool,
-                            &kubernetes.client,
-                            message.deployment_id,
-                            message.user_id,
-                            message.replicas,
-                        )
-                        .await
-                        {
+                        let kubernetes_service = KubernetesService {
+                            client: kubernetes.client.clone(),
+                            pool: database.pool.clone(),
+                            base_domain: config.base_domain.clone(),
+                            enable_tls: config.enable_tls,
+                            cluster_issuer: config.cluster_issuer.clone(),
+                        };
+
+                        match kubernetes_service.scale(message.clone()).await {
                             Ok(_) => {
                                 info!(
                                     "✅ Deployment {} scaled to {}",
@@ -263,6 +269,7 @@ async fn handle_scale_messages(database: Database, kubernetes: Kubernetes, mut c
 }
 
 async fn handle_delete_messages(
+    config: Config,
     database: Database,
     kubernetes: Kubernetes,
     mut consumer: Consumer,
@@ -276,14 +283,15 @@ async fn handle_delete_messages(
                     Ok(message) => {
                         info!("🗑️ Deleting deployment {}", message.deployment_id);
 
-                        match KubernetesService::delete(
-                            &database.pool,
-                            &kubernetes.client,
-                            message.deployment_id,
-                            message.user_id,
-                        )
-                        .await
-                        {
+                        let kubernetes_service = KubernetesService {
+                            client: kubernetes.client.clone(),
+                            pool: database.pool.clone(),
+                            base_domain: config.base_domain.clone(),
+                            enable_tls: config.enable_tls,
+                            cluster_issuer: config.cluster_issuer.clone(),
+                        };
+
+                        match kubernetes_service.delete(message.clone()).await {
                             Ok(_) => {
                                 info!("✅ Deployment {} deleted", message.deployment_id);
 

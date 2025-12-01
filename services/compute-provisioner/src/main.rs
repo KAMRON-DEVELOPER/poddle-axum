@@ -3,7 +3,7 @@ pub mod utilities;
 
 use std::net::SocketAddr;
 
-use crate::services::consumer::start_rabbitmq_consumer;
+use crate::services::consumer_service::start_rabbitmq_consumer;
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},

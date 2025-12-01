@@ -23,7 +23,7 @@ pub async fn build_tonic(config: &Config) -> Result<Channel, AppError> {
         .ca_certificate(ca_certificate)
         .identity(identity);
 
-    let channel = Channel::from_shared(config.server_addres.clone())?
+    let channel = Channel::from_shared(config.server_address.clone())?
         .tls_config(tls_config)?
         .connect()
         .await?;

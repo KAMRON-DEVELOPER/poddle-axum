@@ -96,37 +96,36 @@ pub struct CreateDeploymentRequest {
     #[validate(range(min = 1, max = 10))]
     pub replicas: i32,
 
-    /// Port that the container exposes
     #[validate(range(min = 1, max = 65535))]
     pub port: i32,
 
-    /// Environment variables (non-sensitive)
-    pub env_vars: Option<HashMap<String, String>>,
+    pub environment_variables: Option<HashMap<String, String>>,
 
-    /// Secret environment variables (will be encrypted)
     pub secrets: Option<HashMap<String, String>>,
 
-    /// Resource limits
     pub resources: Option<ResourceSpec>,
 
-    /// Custom labels for the deployment
     pub labels: Option<HashMap<String, String>>,
 
-    /// Subdomain for the deployment (optional, auto-generated if not provided)
     #[validate(length(min = 3, max = 63), regex(path = *SUBDOMAIN))]
     pub subdomain: Option<String>,
+
+    #[validate(length(min = 3, max = 253), regex(path = *CUSTOM_DOMAIN))]
+    pub custom_domain: Option<String>,
 }
 
 static SUBDOMAIN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$").unwrap());
+
+static CUSTOM_DOMAIN: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$").unwrap());
 
 #[derive(Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDeploymentRequest {
     #[validate(range(min = 0, max = 10))]
     pub replicas: Option<i32>,
-
-    pub env_vars: Option<HashMap<String, String>>,
+    pub environment_variables: Option<HashMap<String, String>>,
     pub secrets: Option<HashMap<String, String>>,
     pub resources: Option<ResourceSpec>,
 }
@@ -148,7 +147,6 @@ pub struct DeploymentResponse {
     pub status: DeploymentStatus,
     pub replicas: i32,
     pub resources: ResourceSpec,
-    pub external_url: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -164,10 +162,9 @@ pub struct DeploymentDetailResponse {
     pub replicas: i32,
     pub ready_replicas: Option<i32>,
     pub resources: ResourceSpec,
-    pub env_vars: HashMap<String, String>,
-    pub secret_keys: Vec<String>, // Only return keys, not values
+    pub environment_variables: HashMap<String, String>,
+    pub secret_keys: Vec<String>,
     pub labels: Option<HashMap<String, String>>,
-    pub external_url: Option<String>,
     pub cluster_namespace: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -258,11 +255,12 @@ pub struct CreateDeploymentMessage {
     pub replicas: i32,
     pub port: i32,
 
-    pub env_vars: HashMap<String, String>,
+    pub environment_variables: HashMap<String, String>,
     pub secrets: HashMap<String, String>,
     pub resources: ResourceSpec,
     pub labels: Option<HashMap<String, String>>,
     pub subdomain: Option<String>,
+    pub custom_domain: Option<String>,
 
     pub timestamp: i64,
 }
@@ -282,11 +280,12 @@ impl CreateDeploymentMessage {
             image: req.image,
             replicas: req.replicas,
             port: req.port,
-            env_vars: req.env_vars.unwrap_or_default(),
+            environment_variables: req.environment_variables.unwrap_or_default(),
             secrets: req.secrets.unwrap_or_default(),
             resources: req.resources.unwrap_or_default(),
             labels: req.labels,
             subdomain: req.subdomain,
+            custom_domain: req.custom_domain,
             timestamp: chrono::Utc::now().timestamp(),
         }
     }

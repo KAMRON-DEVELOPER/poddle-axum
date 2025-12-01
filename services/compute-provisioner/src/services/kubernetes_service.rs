@@ -28,10 +28,11 @@ use tracing::info;
 use uuid::Uuid;
 
 pub struct KubernetesService {
-    client: Client,
-    base_domain: String,
-    enable_tls: bool,
-    cluster_issuer: String,
+    pub client: Client,
+    pub pool: PgPool,
+    pub base_domain: String,
+    pub enable_tls: bool,
+    pub cluster_issuer: String,
 }
 
 impl KubernetesService {
@@ -85,14 +86,10 @@ impl KubernetesService {
         }
     }
 
-    pub async fn create(
-        pool: &PgPool,
-        client: &Client,
-        user_id: Uuid,
-        deployment_id: Uuid,
-        base_domain: &str,
-        message: CreateDeploymentMessage,
-    ) -> Result<(), AppError> {
+    pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
+        let user_id = message.user_id;
+        let project_id = message.project_id;
+        let deployment_id = message.deployment_id;
         info!("🚀 Creating K8s resources for deployment {}", deployment_id);
 
         // Update status to 'provisioning'
@@ -104,11 +101,11 @@ impl KubernetesService {
             "#,
             deployment_id
         )
-        .execute(pool)
+        .execute(&self.pool)
         .await?;
 
         // Get or create namespace
-        let namespace = Self::get_namespace_or_create(client, user_id).await?;
+        let namespace = Self::get_namespace_or_create(&self.client, user_id).await?;
 
         // Generate unique deployment name
         let deployment_name = format!(
@@ -128,13 +125,12 @@ impl KubernetesService {
                 .replace("_", "-")
         });
 
-        let external_url = format!("{}.{}", subdomain, base_domain);
+        let external_url = format!("{}.{}", subdomain, self.base_domain);
 
         info!("📍 External URL: {}", external_url);
 
         // Create all K8s resources
-        Self::create_k8s_resources(
-            client,
+        self.create_k8s_resources(
             &namespace,
             &deployment_name,
             &deployment_id,
@@ -158,7 +154,7 @@ impl KubernetesService {
             deployment_id,
             external_url
         )
-        .execute(pool)
+        .execute(&self.pool)
         .await?;
 
         info!("✅ K8s resources created for deployment {}", deployment_id);
@@ -168,7 +164,7 @@ impl KubernetesService {
 
     /// Create all Kubernetes resources (Secret, Deployment, Service, Ingress)
     async fn create_k8s_resources(
-        client: &Client,
+        &self,
         namespace: &str,
         name: &str,
         deployment_id: &Uuid,
@@ -176,7 +172,8 @@ impl KubernetesService {
         container_port: i32,
         replicas: i32,
         resources: &ResourceSpec,
-        external_url: &str,
+        subdomain: &str,
+        custmom_domain: &str,
         env_vars: HashMap<String, String>,
         secrets: HashMap<String, String>,
     ) -> Result<(), AppError> {
@@ -189,13 +186,12 @@ impl KubernetesService {
         // 1. Create Secret (if any secrets provided)
         let secret_name = format!("{}-secrets", name);
         if !secrets.is_empty() {
-            Self::create_k8s_secret(client, namespace, &secret_name, &labels, secrets.clone())
+            self.create_k8s_secret(namespace, &secret_name, &labels, secrets.clone())
                 .await?;
         }
 
         // 2. Create Deployment
-        Self::create_k8s_deployment(
-            client,
+        self.create_k8s_deployment(
             namespace,
             name,
             image,
@@ -213,23 +209,25 @@ impl KubernetesService {
         .await?;
 
         // 3. Create Service
-        Self::create_k8s_service(client, namespace, name, container_port, &labels).await?;
+        self.create_k8s_service(namespace, name, container_port, &labels)
+            .await?;
 
         // 4. Create Ingress
-        Self::create_k8s_ingress(client, namespace, name, external_url, &labels).await?;
+        self.create_k8s_ingress(namespace, name, external_url, &labels)
+            .await?;
 
         Ok(())
     }
 
     /// Create Kubernetes Secret (secrets stored only in K8s, not in DB)
     async fn create_k8s_secret(
-        client: &Client,
+        &self,
         namespace: &str,
         secret_name: &str,
         labels: &BTreeMap<String, String>,
         secrets: HashMap<String, String>,
     ) -> Result<(), AppError> {
-        let secrets_api: Api<K8sSecret> = Api::namespaced(client.clone(), namespace);
+        let secrets_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), namespace);
 
         let mut string_data = BTreeMap::new();
         for (key, value) in secrets {
@@ -258,7 +256,7 @@ impl KubernetesService {
 
     /// Create Kubernetes Deployment
     async fn create_k8s_deployment(
-        client: &Client,
+        &self,
         namespace: &str,
         name: &str,
         image: &str,
@@ -269,7 +267,7 @@ impl KubernetesService {
         env_vars: &HashMap<String, String>,
         secret_name: Option<&str>,
     ) -> Result<(), AppError> {
-        let deployments_api: Api<K8sDeployment> = Api::namespaced(client.clone(), namespace);
+        let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), namespace);
 
         // Build environment variables
         let mut container_env = vec![];
@@ -377,13 +375,13 @@ impl KubernetesService {
 
     /// Create Kubernetes Service
     async fn create_k8s_service(
-        client: &Client,
+        &self,
         namespace: &str,
         name: &str,
         container_port: i32,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
-        let services_api: Api<Service> = Api::namespaced(client.clone(), namespace);
+        let services_api: Api<Service> = Api::namespaced(self.client.clone(), namespace);
 
         let service = Service {
             metadata: ObjectMeta {
@@ -419,13 +417,12 @@ impl KubernetesService {
     /// Create Kubernetes Ingress with Traefik
     async fn create_k8s_ingress(
         &self,
-        client: &Client,
         namespace: &str,
         name: &str,
         external_url: &str,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
-        let ingress_api: Api<Ingress> = Api::namespaced(client.clone(), namespace);
+        let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), namespace);
 
         let mut annotations = BTreeMap::new();
 
@@ -524,8 +521,7 @@ impl KubernetesService {
 
     /// Scale deployment replicas
     pub async fn scale(
-        pool: &PgPool,
-        client: &Client,
+        &self,
         deployment_id: Uuid,
         user_id: Uuid,
         new_replicas: i32,
@@ -554,12 +550,7 @@ impl KubernetesService {
     }
 
     /// Delete deployment and all K8s resources
-    pub async fn delete(
-        pool: &PgPool,
-        client: &Client,
-        deployment_id: Uuid,
-        user_id: Uuid,
-    ) -> Result<(), AppError> {
+    pub async fn delete(&self, deployment_id: Uuid, user_id: Uuid) -> Result<(), AppError> {
         let namespace = &deployment.cluster_namespace;
         let name = &deployment.cluster_deployment_name;
         let delete_params = DeleteParams::default();

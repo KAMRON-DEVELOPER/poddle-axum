@@ -12,15 +12,22 @@ use crate::utilities::errors::AppError;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub server_addres: String,
+    pub server_address: String,
     pub frontend_endpoint: String,
 
     pub base_domain: String,
+    pub enable_tls: bool,
+    pub cluster_issuer: String,
 
     // KUBERNETES
     pub k8s_in_cluster: bool,
     pub k8s_config_path: Option<String>,
     pub k8s_encryption_key: String,
+
+    pub vault_address: String,
+    pub vault_auth_mount: String,
+    pub vault_auth_role: String,
+    pub vault_kv_mount: String,
 
     pub prometheus_url: String,
 
@@ -88,15 +95,53 @@ pub struct Config {
 
 impl Config {
     pub async fn init() -> Result<Self, AppError> {
-        let k8s_encryption_key = std::env::var("K8S_ENCRYPTION_KEY")
-            .expect("K8S_ENCRYPTION_KEY must be set - generate with: openssl rand -base64 32");
+        let k8s_encryption_key =
+            get_config_value("K8S_ENCRYPTION_KEY", Some("K8S_ENCRYPTION_KEY"), None, None).await?;
 
         let k8s_config_path =
             get_optional_config_value("K8S_KUBECONFIG", Some("K8S_KUBECONFIG"), None).await?;
         let k8s_in_cluster =
             get_config_value("K8S_IN_CLUSTER", Some("K8S_IN_CLUSTER"), None, Some(false)).await?;
 
-        let base_domain = std::env::var("BASE_DOMAIN").unwrap_or_else(|_| "poddle.uz".to_string());
+        let vault_address = get_config_value(
+            "VAULT_ADDR",
+            Some("VAULT_ADDR"),
+            None,
+            Some("http://vault.poddle.uz:8200".to_string()),
+        )
+        .await?;
+        let vault_auth_mount = get_config_value(
+            "VAULT_AUTH_MOUNT",
+            Some("VAULT_AUTH_MOUNT"),
+            None,
+            Some("kubernetes".to_string()),
+        )
+        .await?;
+        let vault_auth_role = get_config_value(
+            "VAULT_AUTH_ROLE",
+            Some("VAULT_AUTH_ROLE"),
+            None,
+            Some("vso".to_string()),
+        )
+        .await?;
+        let vault_kv_mount = get_config_value(
+            "VAULT_KV_MOUNT",
+            Some("VAULT_KV_MOUNT"),
+            None,
+            Some("kvv2".to_string()),
+        )
+        .await?;
+
+        let base_domain = get_config_value(
+            "BASE_DOMAIN",
+            Some("BASE_DOMAIN"),
+            None,
+            Some("poddle.uz".to_string()),
+        )
+        .await?;
+        let enable_tls = get_config_value("ENABLE_TLS", Some("ENABLE_TLS"), None, None).await?;
+        let cluster_issuer =
+            get_config_value("CLUSTER_ISSUER", Some("CLUSTER_ISSUER"), None, None).await?;
 
         let server_addres = get_config_value(
             "SERVER_ADDRES",
@@ -305,8 +350,14 @@ impl Config {
             k8s_in_cluster,
             k8s_config_path,
             k8s_encryption_key,
+            vault_address,
+            vault_auth_mount,
+            vault_auth_role,
+            vault_kv_mount,
             base_domain,
-            server_addres,
+            enable_tls,
+            cluster_issuer,
+            server_address: server_addres,
             frontend_endpoint,
             base_dir,
             tracing_level,

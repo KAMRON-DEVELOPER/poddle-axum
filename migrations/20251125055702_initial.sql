@@ -155,24 +155,21 @@ CREATE TABLE IF NOT EXISTS deployments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    -- Deployment config
     name VARCHAR(128) NOT NULL,
     image VARCHAR(500) NOT NULL,
     replicas INTEGER NOT NULL DEFAULT 1 CHECK (replicas >= 1),
     port INT NOT NULL,
-    -- K8s identifiers
     cluster_namespace VARCHAR(63) NOT NULL,
     cluster_deployment_name VARCHAR(63) NOT NULL,
-    -- Configuration (JSONB for flexibility)
-    env_vars JSONB NOT NULL DEFAULT '{}'::jsonb,
+    vault_secret_path VARCHAR(250),
+    secret_keys: VARCHAR(64) [],
+    environment_variables JSONB NOT NULL DEFAULT '{}'::jsonb,
     resources JSONB NOT NULL,
     labels JSONB,
     node_selector JSONB,
-    -- Status
     status deployment_status NOT NULL DEFAULT 'queued',
-    -- External access
     subdomain VARCHAR(63),
-    external_url TEXT,
+    custom_domain VARCHAR(253),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE(cluster_namespace, cluster_deployment_name)
