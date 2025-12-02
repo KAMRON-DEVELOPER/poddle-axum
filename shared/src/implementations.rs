@@ -56,13 +56,10 @@ impl From<Deployment> for DeploymentResponse {
             port: d.port,
             vault_secret_path: d.vault_secret_path,
             secret_keys: d.secret_keys,
-            environment_variables: d
-                .environment_variables
-                .and_then(|j| j.0)
-                .or_else(|| Some(HashMap::new())),
+            environment_variables: d.environment_variables.and_then(|j| j.0).or_else(|| None),
             replicas: d.replicas,
             resources: d.resources.0,
-            labels: d.labels.and_then(|j| j.0).or_else(|| Some(HashMap::new())),
+            labels: d.labels.and_then(|j| j.0).or_else(|| None),
             status: d.status,
             cluster_namespace: d.cluster_namespace,
             cluster_deployment_name: d.cluster_deployment_name,
