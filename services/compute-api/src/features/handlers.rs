@@ -11,11 +11,10 @@ use lapin::{
     types::FieldTable,
 };
 use shared::{
-    models::ResourceSpec,
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-        DeleteDeploymentMessage, DeploymentDetailResponse, DeploymentResponse, MessageResponse,
-        UpdateDeploymentMessage, UpdateDeploymentRequest, UpdateProjectRequest,
+        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, UpdateDeploymentMessage,
+        UpdateDeploymentRequest, UpdateProjectRequest,
     },
     services::amqp::Amqp,
 };
@@ -125,23 +124,8 @@ pub async fn get_deployments(
     let deployments =
         DeploymentRepository::get_all_by_project(&database.pool, project_id, user_id).await?;
 
-    let response: Vec<DeploymentResponse> = deployments
-        .into_iter()
-        .map(|d| {
-            let resources = serde_json::from_value(d.resources).unwrap_or_default();
-            DeploymentResponse {
-                id: d.id,
-                project_id: d.project_id,
-                name: d.name,
-                image: d.image,
-                status: d.status,
-                replicas: d.replicas,
-                resources,
-                created_at: d.created_at,
-                updated_at: d.updated_at,
-            }
-        })
-        .collect();
+    // Into::into == |d: Deployment| -> DeploymentResponse d.into()
+    let response: Vec<DeploymentResponse> = deployments.into_iter().map(Into::into).collect();
 
     Ok(Json(ListResponse {
         total: i64::try_from(response.len()).unwrap_or_else(|_| 0),
@@ -156,37 +140,10 @@ pub async fn get_deployment(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let d = DeploymentRepository::get_by_id(&database.pool, user_id, deployment_id).await?;
+    let deployment =
+        DeploymentRepository::get_by_id(&database.pool, user_id, deployment_id).await?;
 
-    let resources: ResourceSpec = serde_json::from_value(d.resources).unwrap_or_default();
-    let environment_variables = d
-        .environment_variables
-        .map(|v| serde_json::from_value(v).unwrap_or_default())
-        .unwrap_or_default();
-    let labels = d
-        .labels
-        .map(|v| serde_json::from_value(v).unwrap_or_default());
-
-    let response = DeploymentDetailResponse {
-        id: d.id,
-        project_id: d.project_id,
-        name: d.name,
-        image: d.image,
-        status: d.status,
-        replicas: d.replicas,
-        ready_replicas: None,
-        resources,
-        secret_keys: d.secret_keys,
-        environment_variables,
-        labels,
-        subdomain: d.subdomain,
-        custom_domain: d.custom_domain,
-        cluster_namespace: d.cluster_namespace,
-        created_at: d.created_at,
-        updated_at: d.updated_at,
-    };
-
-    Ok(Json(response))
+    Ok(Json(deployment))
 }
 
 pub async fn create_deployment(

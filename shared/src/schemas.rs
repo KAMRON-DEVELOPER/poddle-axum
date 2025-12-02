@@ -8,7 +8,6 @@ use uuid::Uuid;
 use validator::Validate;
 
 use crate::models::{DeploymentStatus, ResourceSpec};
-use crate::utilities::errors::AppError;
 
 #[derive(Serialize, Debug)]
 pub struct ListResponse<T> {
@@ -30,32 +29,6 @@ fn default_offset() -> i64 {
 
 fn default_limit() -> i64 {
     20
-}
-
-impl Pagination {
-    pub fn validate(&self) -> Result<(), AppError> {
-        if self.offset < 0 {
-            return Err(AppError::ValidationError(
-                "Offset must be positive".to_string(),
-            ));
-        }
-
-        if self.limit < 0 {
-            return Err(AppError::ValidationError("Limit must positive".to_string()));
-        } else if self.limit == 0 {
-            return Err(AppError::ValidationError(
-                "Limit must not be zero!".to_string(),
-            ));
-        }
-
-        if self.limit > 100 {
-            return Err(AppError::ValidationError(
-                "Limit cannot exceed 100".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
 }
 
 // ============================================
@@ -140,33 +113,22 @@ pub struct UpdateDeploymentRequest {
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentResponse {
     pub id: Uuid,
+    pub user_id: Uuid,
     pub project_id: Uuid,
     pub name: String,
     pub image: String,
-    pub status: DeploymentStatus,
-    pub replicas: i32,
-    pub resources: ResourceSpec,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-#[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct DeploymentDetailResponse {
-    pub id: Uuid,
-    pub project_id: Uuid,
-    pub name: String,
-    pub image: String,
-    pub status: DeploymentStatus,
-    pub replicas: i32,
-    pub ready_replicas: Option<i32>,
-    pub resources: ResourceSpec,
+    pub port: i32,
+    pub vault_secret_path: Option<String>,
     pub secret_keys: Option<Vec<String>>,
-    pub environment_variables: HashMap<String, String>,
+    pub environment_variables: Option<HashMap<String, String>>,
+    pub replicas: i32,
+    pub resources: ResourceSpec,
     pub labels: Option<HashMap<String, String>>,
+    pub status: DeploymentStatus,
+    pub cluster_namespace: String,
+    pub cluster_deployment_name: String,
     pub subdomain: Option<String>,
     pub custom_domain: Option<String>,
-    pub cluster_namespace: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -187,14 +149,6 @@ pub struct DeploymentEventResponse {
 #[derive(Serialize, Debug)]
 pub struct MessageResponse {
     pub message: String,
-}
-
-impl MessageResponse {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
 }
 
 // ============================================
@@ -264,30 +218,6 @@ pub struct CreateDeploymentMessage {
     pub timestamp: i64,
 }
 
-impl From<(Uuid, Uuid, Uuid, CreateDeploymentRequest)> for CreateDeploymentMessage {
-    fn from(
-        (user_id, project_id, deployment_id, req): (Uuid, Uuid, Uuid, CreateDeploymentRequest),
-    ) -> Self {
-        Self {
-            user_id,
-            project_id,
-            deployment_id,
-
-            name: req.name,
-            image: req.image,
-            replicas: req.replicas,
-            port: req.port,
-            environment_variables: req.environment_variables,
-            secrets: req.secrets,
-            resources: req.resources,
-            labels: req.labels,
-            subdomain: req.subdomain,
-            custom_domain: req.custom_domain,
-            timestamp: chrono::Utc::now().timestamp(),
-        }
-    }
-}
-
 /// Message sent to compute.scale queue
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -307,30 +237,6 @@ pub struct UpdateDeploymentMessage {
     pub subdomain: Option<String>,
     pub custom_domain: Option<String>,
     pub timestamp: i64,
-}
-
-impl From<(Uuid, Uuid, Uuid, UpdateDeploymentRequest)> for UpdateDeploymentMessage {
-    fn from(
-        (user_id, project_id, deployment_id, req): (Uuid, Uuid, Uuid, UpdateDeploymentRequest),
-    ) -> Self {
-        Self {
-            user_id,
-            project_id,
-            deployment_id,
-
-            name: req.name,
-            image: req.image,
-            replicas: req.replicas,
-            port: req.port,
-            environment_variables: req.environment_variables,
-            secrets: req.secrets,
-            resources: req.resources,
-            labels: req.labels,
-            subdomain: req.subdomain,
-            custom_domain: req.custom_domain,
-            timestamp: chrono::Utc::now().timestamp(),
-        }
-    }
 }
 
 /// Message sent to compute.delete queue

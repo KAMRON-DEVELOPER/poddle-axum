@@ -1,5 +1,8 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::types::Json;
 use sqlx::{FromRow, Type};
 use uuid::Uuid;
 
@@ -63,10 +66,10 @@ pub struct Deployment {
     pub port: i32,
     pub vault_secret_path: Option<String>,
     pub secret_keys: Option<Vec<String>>,
-    pub environment_variables: Option<serde_json::Value>,
+    pub environment_variables: Option<Json<HashMap<String, String>>>,
     pub replicas: i32,
-    pub resources: serde_json::Value,
-    pub labels: Option<serde_json::Value>,
+    pub resources: Json<ResourceSpec>,
+    pub labels: Option<Json<HashMap<String, String>>>,
     pub status: DeploymentStatus,
     pub cluster_namespace: String,
     pub cluster_deployment_name: String,
@@ -91,7 +94,7 @@ pub struct DeploymentEvent {
 // ============================================
 
 /// Resource specification stored in the `resources` JSONB field
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceSpec {
     pub cpu_request_millicores: i32,
