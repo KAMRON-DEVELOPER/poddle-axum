@@ -90,14 +90,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         result = consumer_handle => {
             match result {
-                Ok(Ok(())) => info!("Status syncer completed"),
-            Ok(Err(e)) => info!("Status syncer error: {}", e),
-            Err(e) => info!("Status syncer panicked: {}", e),
+                Ok(Ok(())) => info!("Status provisioner completed"),
+            Ok(Err(e)) => info!("Status provisioner error: {}", e),
+            Err(e) => info!("Status provisioner panicked: {}", e),
             }
         }
     }
 
-    info!("👋 Compute-syncer shutting down");
+    info!("👋 Compute-provisioner shutting down");
 
     Ok(())
 }
