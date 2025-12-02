@@ -17,7 +17,7 @@ pub async fn stream_metrics(
     let mut connection = redis.connection.clone();
 
     let stream = async_stream::stream! {
-        let mut interval = tokio::time::interval(Duration::from_secs(25));
+        let mut interval = tokio::time::interval(Duration::from_secs(30));
 
         loop {
             interval.tick().await;
