@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Initialize tracing
     let filter = EnvFilter::new(
-        "compute-provisioner=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
+        "compute_provisioner=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
     );
     let timer = LocalTime::new(format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second]"

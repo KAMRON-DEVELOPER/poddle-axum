@@ -69,13 +69,7 @@ pub async fn create_project(
 
     let user_id: Uuid = claims.sub;
 
-    let project = ProjectRepository::create(
-        &database.pool,
-        user_id,
-        &req.name,
-        req.description.as_deref(),
-    )
-    .await?;
+    let project = ProjectRepository::create(&database.pool, user_id, req).await?;
 
     Ok((StatusCode::CREATED, Json(project)))
 }

@@ -93,15 +93,15 @@ pub struct CreateDeploymentRequest {
     #[validate(length(min = 1, max = 500))]
     pub image: String,
 
-    #[validate(range(min = 1, max = 10))]
-    pub replicas: i32,
-
     #[validate(range(min = 1, max = 65535))]
     pub port: i32,
 
-    pub environment_variables: Option<HashMap<String, String>>,
+    #[validate(range(min = 1, max = 10))]
+    pub replicas: i32,
 
     pub secrets: Option<HashMap<String, String>>,
+
+    pub environment_variables: Option<HashMap<String, String>>,
 
     pub resources: ResourceSpec,
 

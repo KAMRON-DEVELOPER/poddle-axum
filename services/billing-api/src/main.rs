@@ -48,7 +48,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = Config::init().await?;
 
     let filter =
-        EnvFilter::new("billing=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
+        EnvFilter::new("billing_api=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
     let timer = LocalTime::new(format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second]"
     ));

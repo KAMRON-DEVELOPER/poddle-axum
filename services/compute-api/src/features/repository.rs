@@ -1,6 +1,6 @@
 use shared::{
     models::ResourceSpec,
-    schemas::{Pagination, UpdateDeploymentRequest},
+    schemas::{CreateProjectRequest, Pagination, UpdateDeploymentRequest},
 };
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -71,8 +71,7 @@ impl ProjectRepository {
     pub async fn create(
         pool: &PgPool,
         user_id: Uuid,
-        name: &str,
-        description: Option<&str>,
+        req: CreateProjectRequest,
     ) -> Result<Project, sqlx::Error> {
         sqlx::query_as::<_, Project>(
             r#"
@@ -82,8 +81,8 @@ impl ProjectRepository {
             "#,
         )
         .bind(user_id)
-        .bind(name)
-        .bind(description)
+        .bind(req.name)
+        .bind(req.description)
         .fetch_one(pool)
         .await
     }
