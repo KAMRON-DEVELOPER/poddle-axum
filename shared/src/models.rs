@@ -19,7 +19,7 @@ pub enum DeploymentStatus {
     Healthy,
     Unhealthy,
     Degraded,
-    Scaling,
+    Updating,
     Suspended,
     Failed,
 }
@@ -33,7 +33,7 @@ impl std::fmt::Display for DeploymentStatus {
             Self::Healthy => write!(f, "healthy"),
             Self::Unhealthy => write!(f, "unhealthy"),
             Self::Degraded => write!(f, "degraded"),
-            Self::Scaling => write!(f, "scaling"),
+            Self::Updating => write!(f, "updating"),
             Self::Suspended => write!(f, "suspended"),
             Self::Failed => write!(f, "failed"),
         }

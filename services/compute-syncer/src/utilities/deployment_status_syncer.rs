@@ -263,7 +263,7 @@ fn determine_deployment_status(
     }
 
     if updated != desired {
-        return DeploymentStatus::Scaling;
+        return DeploymentStatus::Updating;
     }
 
     DeploymentStatus::Unhealthy

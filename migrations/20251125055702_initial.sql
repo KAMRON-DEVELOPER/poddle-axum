@@ -30,8 +30,8 @@ DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
     'unhealthy',
     -- 6. Expected 3 replicas, but only 2 are ready
     'degraded',
-    -- 7. Moving from 2 to 5 replicas
-    'scaling',
+    -- 7. Updating some paramert of the deployment
+    'updating',
     -- 8. Stopped by user or billing
     'suspended',
     -- 9. Configuration error (Image pull backoff, etc.)

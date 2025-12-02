@@ -145,7 +145,7 @@ fn determine_status(desired: i32, ready: i32, available: i32, updated: i32) -> D
     }
 
     if updated != desired {
-        return DeploymentStatus::Scaling;
+        return DeploymentStatus::Updating;
     }
 
     DeploymentStatus::Unhealthy
