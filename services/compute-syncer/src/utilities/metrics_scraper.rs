@@ -178,7 +178,7 @@ pub async fn get_deployment_metrics(
             .await?;
 
         pod_metrics.push(PodMetrics {
-            pod_name: pod_name.clone(),
+            name: pod_name.clone(),
             phase: PodPhase::Running, // This should come from watcher cache
             cpu_millicores: cpu.unwrap_or(0.0),
             memory_bytes: memory.unwrap_or(0),
