@@ -31,7 +31,7 @@ async fn scrape_and_cache_metrics(
     // Query CPU usage per pod
     let cpu_query = r#"
         sum(rate(container_cpu_usage_seconds_total{
-            pod=~".*",
+            namespace=~"user-.*",
             container!="",
             container!="POD"
         }[5m])) by (pod, namespace)

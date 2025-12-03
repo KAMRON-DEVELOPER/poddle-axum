@@ -16,9 +16,9 @@ use shared::{
     utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;
-use tokio::signal;
+use tokio::{signal, task::JoinSet};
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::{
     EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
@@ -77,49 +77,41 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()?;
     let prometheus = Prometheus::new(&config, http_client.clone()).await?;
 
-    // Spawn background tasks
-    info!("📊 Starting deployment status syncer");
-    let status_handle = tokio::spawn(deployment_status_syncer(
+    let mut set = JoinSet::new();
+
+    // Spawn tasks into the set
+    set.spawn(deployment_status_syncer(
         database.pool.clone(),
         kubernetes.client.clone(),
         redis.connection.clone(),
     ));
-
-    info!("📈 Starting metrics scraper");
-    let metrics_handle = tokio::spawn(metrics_scraper(
+    set.spawn(metrics_scraper(
         kubernetes.client.clone(),
         prometheus.client,
         redis.connection,
     ));
-
-    tokio::spawn(reconciliation_loop(
+    set.spawn(reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),
     ));
-
-    // Start HTTP server for health checks
-    let _server_handle = tokio::spawn(start_health_server());
+    set.spawn(start_health_server());
 
     info!("✅ All background tasks started");
 
-    // Wait for shutdown signal
+    // Unified shutdown logic
     tokio::select! {
         _ = shutdown_signal() => {
             info!("🛑 Shutdown signal received");
+            set.shutdown().await;
         }
-        result = status_handle => {
+        Some(result) = set.join_next() => {
             match result {
-                Ok(Ok(())) => info!("Status syncer completed"),
-                Ok(Err(e)) => info!("Status syncer error: {}", e),
-                Err(e) => info!("Status syncer panicked: {}", e),
+                Ok(Ok(())) => error!("A background task exited unexpectedly!"),
+                Ok(Err(e)) => error!("Task failed: {}", e),
+                Err(e) => error!("Task panic: {}", e),
             }
-        }
-        result = metrics_handle => {
-            match result {
-                Ok(Ok(())) => info!("Metrics scraper completed"),
-                Ok(Err(e)) => info!("Metrics scraper error: {}", e),
-                Err(e) => info!("Metrics scraper panicked: {}", e),
-            }
+            // Optional: trigger shutdown if a critical task dies
+            set.shutdown().await;
         }
     }
 

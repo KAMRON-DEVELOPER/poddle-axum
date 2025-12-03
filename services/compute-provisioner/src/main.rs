@@ -10,9 +10,9 @@ use shared::{
     utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;
-use tokio::signal;
+use tokio::{signal, task::JoinSet};
 use tower_http::trace::{DefaultOnResponse, TraceLayer};
-use tracing::info;
+use tracing::{error, info};
 use tracing_subscriber::{
     EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
@@ -72,28 +72,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     .build()?;
     let vault = VaultService::init(&config).await?;
 
+    let mut set = JoinSet::new();
+
     // Spawn background tasks
-    info!("📊 Starting compute provisioner");
-    let consumer_handle = tokio::spawn(start_rabbitmq_consumer(
+    set.spawn(start_rabbitmq_consumer(
         amqp, config, database, kubernetes, vault,
     ));
-
-    // Start HTTP server for health checks
-    let _server_handle = tokio::spawn(start_health_server());
+    set.spawn(start_health_server());
 
     info!("✅ All background tasks started");
 
-    // Wait for shutdown signal
+    // Unified shutdown logic
     tokio::select! {
         _ = shutdown_signal() => {
             info!("🛑 Shutdown signal received");
+            set.shutdown().await;
         }
-        result = consumer_handle => {
+        // If ANY task exits (crashes or finishes), this branch runs
+        Some(result) = set.join_next() => {
             match result {
-                Ok(Ok(())) => info!("Status provisioner completed"),
-            Ok(Err(e)) => info!("Status provisioner error: {}", e),
-            Err(e) => info!("Status provisioner panicked: {}", e),
+                Ok(Ok(())) => error!("A background task exited unexpectedly!"),
+                Ok(Err(e)) => error!("Task failed: {}", e),
+                Err(e) => error!("Task panic: {}", e),
             }
+            // Optional: trigger shutdown if a critical task dies
+            set.shutdown().await;
         }
     }
 

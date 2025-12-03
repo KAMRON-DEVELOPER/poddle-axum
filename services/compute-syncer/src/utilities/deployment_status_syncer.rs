@@ -15,18 +15,15 @@ pub async fn deployment_status_syncer(
     client: KubeClient,
     mut redis: MultiplexedConnection,
 ) -> Result<(), AppError> {
-    // We need to watch ALL namespaces since each user has their own namespace
+    let wc = Config::default().labels("managed-by=poddle");
+
     let deployments: Api<K8sDeployment> = Api::all(client.clone());
     let pods: Api<Pod> = Api::all(client.clone());
 
-    let deployment_config = Config::default();
-    let pod_config = Config::default();
+    let mut deployment_stream = kube::runtime::watcher(deployments, wc.clone()).boxed();
+    let mut pod_stream = kube::runtime::watcher(pods, wc).boxed();
 
-    let mut deployment_stream = kube::runtime::watcher(deployments, deployment_config).boxed();
-    let mut pod_stream = kube::runtime::watcher(pods, pod_config).boxed();
-
-    info!("🔍 Starting Kubernetes watchers for deployments and pods");
-
+    info!("🔍 Starting Kubernetes watchers (filtered by managed-by=poddle)");
     loop {
         tokio::select! {
             Some(event) = deployment_stream.next() => {
@@ -142,13 +139,10 @@ async fn handle_deployment_event(
                 .await?;
             }
         }
-        Ok(Event::Init) | Ok(Event::InitApply(_)) | Ok(Event::InitDone) => {
-            // Initial sync events - can be used for bootstrapping
-            info!("🔄 Watcher initialization event");
-        }
-        Err(e) => {
-            error!("⚠️ Watcher error: {}", e);
-        }
+        Ok(Event::Init) => info!("Watcher started init phase"),
+        Ok(Event::InitApply(_)) => {}
+        Ok(Event::InitDone) => info!("✅ Watcher initialization complete - State synced"),
+        Err(e) => error!("⚠️ Watcher error: {}", e),
     }
 
     Ok(())
