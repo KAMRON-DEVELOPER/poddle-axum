@@ -37,13 +37,13 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
 
     for db_deployment in db_deployments {
         let namespace = &db_deployment.cluster_namespace;
-        let name = &db_deployment.cluster_deployment_name;
+        let deployment_name = &db_deployment.cluster_deployment_name;
         let deployment_id = db_deployment.id;
 
         // Try to fetch from Kubernetes
         let deployments_api: Api<K8sDeployment> = Api::namespaced(client.clone(), namespace);
 
-        match deployments_api.get(name).await {
+        match deployments_api.get(deployment_name).await {
             Ok(k8s_deployment) => {
                 // Deployment exists in K8s, check if status matches
                 let spec = k8s_deployment.spec.as_ref().unwrap();
