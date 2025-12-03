@@ -12,18 +12,11 @@ impl Prometheus {
     pub async fn new(config: &Config, http_client: HttpClient) -> Result<Self, AppError> {
         let client = Client::from(http_client, &config.prometheus_url)?;
 
-        let ping_query = "up";
-
-        match client.query(ping_query).get().await {
-            Ok(_) => {
-                info!(
-                    "✅ Prometheus connection verified at {}",
-                    config.prometheus_url
-                );
-            }
+        match client.query("up").get().await {
+            Ok(_) => info!("✅ Successfully connected to Prometheus!"),
             Err(e) => {
                 return Err(AppError::InternalError(format!(
-                    "Prometheus connectivity check failed: {}",
+                    "Failed to connect to Prometheus: {}. Check URL and credentials.",
                     e
                 )));
             }
