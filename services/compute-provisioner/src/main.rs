@@ -153,7 +153,7 @@ async fn start_health_server() -> Result<(), AppError> {
         .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
         .layer(tracing_layer);
 
-    let addr = "0.0.0.0:8006";
+    let addr = "0.0.0.0:8004";
     info!("🏥 Health check server running on {}", addr);
 
     let listener = tokio::net::TcpListener::bind(addr).await?;
