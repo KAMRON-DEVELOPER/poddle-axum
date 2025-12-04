@@ -24,6 +24,12 @@ pub struct Config {
     pub k8s_config_path: Option<String>,
     pub k8s_sa_token: String,
 
+    pub label_selector: String,
+    pub scrape_interval_seconds: u64,
+    pub history_points_to_keep: usize,
+    pub cache_ttl_seconds: u64,
+    pub prometheus_window: String,
+
     pub vault_address: String,
     pub vault_auth_mount: String,
     pub vault_auth_role: String,
@@ -106,6 +112,37 @@ impl Config {
                 "/var/run/secrets/kubernetes.io/serviceaccount/token",
             )),
             None,
+        )
+        .await?;
+
+        let label_selector = get_config_value(
+            "LABEL_SELECTOR",
+            Some("LABEL_SELECTOR"),
+            None,
+            Some("managed-by=poddle".to_string()),
+        )
+        .await?;
+        let scrape_interval_seconds = get_config_value(
+            "SCRAPE_INTERVAL_SECONDS",
+            Some("SCRAPE_INTERVAL_SECONDS"),
+            None,
+            Some(15),
+        )
+        .await?;
+        let history_points_to_keep = get_config_value(
+            "HISTORY_POINTS_TO_KEEP",
+            Some("HISTORY_POINTS_TO_KEEP"),
+            None,
+            Some(60),
+        )
+        .await?;
+        let cache_ttl_seconds =
+            get_config_value("CACHE_TTL_SECS", Some("CACHE_TTL_SECONDS"), None, Some(90)).await?;
+        let prometheus_window = get_config_value(
+            "PROMETHEUS_WINDOW",
+            Some("PROMETHEUS_WINDOW"),
+            None,
+            Some("5m".to_string()),
         )
         .await?;
 
@@ -356,6 +393,11 @@ impl Config {
             k8s_in_cluster,
             k8s_config_path,
             k8s_sa_token,
+            label_selector,
+            scrape_interval_seconds,
+            history_points_to_keep,
+            cache_ttl_seconds,
+            prometheus_window,
             vault_address,
             vault_auth_mount,
             vault_auth_role,

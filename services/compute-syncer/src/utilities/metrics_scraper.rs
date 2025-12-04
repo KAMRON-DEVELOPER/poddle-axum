@@ -1,34 +1,39 @@
-use kube::Client as KubeClient;
 use prometheus_http_query::Client as PrometheusClient;
 use redis::aio::MultiplexedConnection;
 use shared::schemas::{DeploymentMetrics, PodMetrics, PodPhase};
+use shared::utilities::config::Config;
 use shared::utilities::errors::AppError;
 use std::time::Duration;
 use tracing::{error, info};
 
 pub async fn metrics_scraper(
-    _client: KubeClient,
+    config: Config,
     prometheus: PrometheusClient,
     mut connection: MultiplexedConnection,
 ) -> Result<(), AppError> {
     info!("📈 Starting Prometheus metrics scraper");
+    info!(
+        "⚙️  Scrape interval: {}s, History points: {}",
+        config.scrape_interval_seconds, config.history_points_to_keep
+    );
 
-    let mut interval = tokio::time::interval(Duration::from_secs(30));
+    let mut interval = tokio::time::interval(Duration::from_secs(config.scrape_interval_seconds));
 
     loop {
         interval.tick().await;
 
-        if let Err(e) = scrape_and_cache_metrics(&prometheus, &mut connection).await {
+        if let Err(e) = scrape_and_cache_metrics(&config, &prometheus, &mut connection).await {
             error!("Failed to scrape metrics: {}", e);
         }
     }
 }
 
 async fn scrape_and_cache_metrics(
+    config: &Config,
     prometheus: &PrometheusClient,
     connection: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
-    // Query CPU usage per pod
+    // Query CPU usage per deployment (aggregated by deployment-id label)
     let cpu_query = r#"
         sum(rate(container_cpu_usage_seconds_total{
             namespace=~"user-.*",
@@ -37,9 +42,10 @@ async fn scrape_and_cache_metrics(
         }[5m])) by (pod, namespace)
     "#;
 
-    // Query memory usage per pod
+    // Query memory usage per deployment
     let memory_query = r#"
         sum(container_memory_working_set_bytes{
+            namespace=~"user-.*",
             pod=~".*",
             container!="",
             container!="POD"

@@ -85,11 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         kubernetes.client.clone(),
         redis.connection.clone(),
     ));
-    set.spawn(metrics_scraper(
-        kubernetes.client.clone(),
-        prometheus.client,
-        redis.connection,
-    ));
+    set.spawn(metrics_scraper(config, prometheus.client, redis.connection));
     set.spawn(reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),

@@ -15,13 +15,13 @@ pub async fn deployment_status_syncer(
     client: KubeClient,
     mut redis: MultiplexedConnection,
 ) -> Result<(), AppError> {
-    let wc = Config::default().labels("managed-by=poddle");
+    let watcher_config = Config::default().labels("managed-by=poddle");
 
     let deployments: Api<K8sDeployment> = Api::all(client.clone());
     let pods: Api<Pod> = Api::all(client.clone());
 
-    let mut deployment_stream = kube::runtime::watcher(deployments, wc.clone()).boxed();
-    let mut pod_stream = kube::runtime::watcher(pods, wc).boxed();
+    let mut deployment_stream = kube::runtime::watcher(deployments, watcher_config.clone()).boxed();
+    let mut pod_stream = kube::runtime::watcher(pods, watcher_config).boxed();
 
     info!("🔍 Starting Kubernetes watchers (filtered by managed-by=poddle)");
     loop {
@@ -95,9 +95,9 @@ async fn handle_deployment_event(
             // Update database
             sqlx::query!(
                 r#"
-                UPDATE deployments
-                SET status = $2, updated_at = NOW()
-                WHERE id = $1
+                    UPDATE deployments
+                    SET status = $2, updated_at = NOW()
+                    WHERE id = $1
                 "#,
                 deployment_id,
                 new_status as DeploymentStatus
@@ -202,9 +202,9 @@ async fn handle_pod_event(
 
                 sqlx::query!(
                     r#"
-                    UPDATE deployments
-                    SET status = 'unhealthy', updated_at = NOW()
-                    WHERE id = $1
+                        UPDATE deployments
+                        SET status = 'unhealthy', updated_at = NOW()
+                        WHERE id = $1
                     "#,
                     deployment_id
                 )

@@ -54,6 +54,15 @@ pub struct UpdateProjectRequest {
 }
 
 // ============================================
+// RESPONSE WRAPPERS
+// ============================================
+
+#[derive(Serialize, Debug)]
+pub struct MessageResponse {
+    pub message: String,
+}
+
+// ============================================
 // DEPLOYMENT SCHEMAS
 // ============================================
 
@@ -143,57 +152,6 @@ pub struct DeploymentEventResponse {
 }
 
 // ============================================
-// RESPONSE WRAPPERS
-// ============================================
-
-#[derive(Serialize, Debug)]
-pub struct MessageResponse {
-    pub message: String,
-}
-
-// ============================================
-// POD METRICS
-// ============================================
-
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub enum PodPhase {
-    Pending,
-    Running,
-    Succeeded,
-    Failed,
-    Unknown,
-}
-
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct PodMetrics {
-    pub name: String,
-    pub phase: PodPhase,
-    pub cpu_millicores: f64,
-    pub memory_bytes: u64,
-    pub restarts: u32,
-    pub started_at: Option<i64>,
-}
-
-// ============================================
-// DEPLOYMENT METRICS
-// ============================================
-
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct DeploymentMetrics {
-    pub deployment_id: String,
-    pub status: DeploymentStatus,
-    pub replicas: i32,
-    pub ready_replicas: i32,
-    pub available_replicas: i32,
-    pub unavailable_replicas: i32,
-    pub pods: Vec<PodMetrics>,
-    pub timestamp: i64,
-}
-
-// ============================================
 // RABBITMQ MESSAGE TYPES
 // ============================================
 
@@ -247,4 +205,98 @@ pub struct DeleteDeploymentMessage {
     pub project_id: Uuid,
     pub deployment_id: Uuid,
     pub timestamp: i64,
+}
+
+// ============================================
+// POD METRICS
+// ============================================
+
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub enum PodPhase {
+    Pending,
+    Running,
+    Succeeded,
+    Failed,
+    Unknown,
+}
+
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PodMetrics {
+    pub name: String,
+    pub phase: PodPhase,
+    pub cpu_millicores: f64,
+    pub memory_bytes: u64,
+    pub restarts: u32,
+    pub started_at: Option<i64>,
+}
+
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentMetrics {
+    pub deployment_id: String,
+    pub status: DeploymentStatus,
+    pub replicas: i32,
+    pub ready_replicas: i32,
+    pub available_replicas: i32,
+    pub unavailable_replicas: i32,
+    pub pods: Vec<PodMetrics>,
+    pub timestamp: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct MetricPoint {
+    pub ts: i64,
+    pub v: f64,
+}
+
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct CachedMetrics {
+    pub current: f64,
+    pub histories: Vec<MetricPoint>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PodMetricsDetailed {
+    pub name: String,
+    pub phase: PodPhase,
+    pub restarts: u32,
+    pub started_at: Option<i64>,
+
+    pub cpu_millicores_current: f64,
+    pub memory_mb_current: f64,
+
+    pub cpu_history: Vec<MetricPoint>,
+    pub memory_history: Vec<MetricPoint>,
+}
+
+// ============================================
+// DEPLOYMENT METRICS
+// ============================================
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentMetricsSummary {
+    pub deployment_id: String,
+    pub status: DeploymentStatus,
+    pub replicas_desired: i32,
+    pub replicas_ready: i32,
+    pub replicas_available: i32,
+
+    pub cpu_millicores_current: f64,
+    pub memory_mb_current: f64,
+
+    pub cpu_history: Vec<MetricPoint>,
+    pub memory_history: Vec<MetricPoint>,
+
+    pub last_updated: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentMetricsDetailed {
+    pub summary: DeploymentMetricsSummary,
+    pub pods: Vec<PodMetricsDetailed>,
 }
