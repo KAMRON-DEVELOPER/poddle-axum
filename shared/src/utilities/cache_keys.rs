@@ -1,8 +1,5 @@
 pub struct CacheKeys;
 
-// deployment:{uuid}:metrics:aggregate
-// deployment:{uuid}:pod:{pod_name}:metrics
-
 impl CacheKeys {
     pub fn deployment_status(deployment_id: &str) -> String {
         format!("deployment:{}:status", deployment_id)

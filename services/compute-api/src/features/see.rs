@@ -6,18 +6,23 @@ use axum::{
 };
 use futures::Stream;
 use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
-use shared::{schemas::PodMetrics, services::redis::Redis, utilities::errors::AppError};
+use shared::{
+    schemas::PodMetrics,
+    services::redis::Redis,
+    utilities::{config::Config, errors::AppError},
+};
 use uuid::Uuid;
 
 pub async fn stream_metrics(
     Path(deployment_id): Path<Uuid>,
     State(redis): State<Redis>,
+    State(config): State<Config>,
 ) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
     let deployment_id = deployment_id.to_string();
     let mut connection = redis.connection.clone();
 
     let stream = async_stream::stream! {
-        let mut interval = tokio::time::interval(Duration::from_secs(30));
+        let mut interval = tokio::time::interval(Duration::from_secs(config.scrape_interval_seconds));
 
         loop {
             interval.tick().await;
