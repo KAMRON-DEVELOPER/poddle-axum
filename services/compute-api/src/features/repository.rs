@@ -410,20 +410,27 @@ impl CacheRepository {
         warn!("cpu_results: {:?}", cpu_results);
         warn!("mem_results: {:?}", mem_results);
 
-        let parse_metrics = |json_opt: Option<String>| -> Vec<MetricPoint> {
+        // Helper to parse JSON. Handles Option<String> -> Vec<MetricPoint>
+        let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
             json_opt
-                .as_deref() // Convert Option<String> to Option<&str> for parsing
-                .and_then(|json| serde_json::from_str::<Vec<Vec<MetricPoint>>>(json).ok())
-                .and_then(|mut outer| outer.pop()) // Extract inner array
-                .unwrap_or_default() // Return empty vec if None or Parse Error
+                .map(|json| {
+                    serde_json::from_str::<Vec<Vec<MetricPoint>>>(json)
+                        .ok()
+                        .and_then(|mut outer| outer.pop())
+                        .unwrap_or_default()
+                })
+                .unwrap_or_default()
         };
 
-        let deployment_metrics = cpu_results
-            .into_iter()
-            .zip(mem_results)
-            .map(|(cpu, mem)| DeploymentMetrics {
-                cpu_history: parse_metrics(cpu),
-                memory_history: parse_metrics(mem),
+        let deployment_metrics = (0..deployment_ids.len())
+            .map(|i| {
+                let cpu_val = cpu_results.get(i).and_then(|v| v.as_ref());
+                let mem_val = mem_results.get(i).and_then(|v| v.as_ref());
+
+                DeploymentMetrics {
+                    cpu_history: parse_metrics(cpu_val),
+                    memory_history: parse_metrics(mem_val),
+                }
             })
             .collect();
 
