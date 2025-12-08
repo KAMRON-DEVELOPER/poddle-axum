@@ -154,6 +154,8 @@ pub async fn get_deployments(
         .map(|pair| pair.into())
         .collect();
 
+    info!("data: {:?}", data);
+
     Ok(Json(ListResponse { data, total }))
 }
 

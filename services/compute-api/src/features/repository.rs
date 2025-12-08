@@ -413,26 +413,57 @@ impl CacheRepository {
         warn!("cpu_results: {:?}", cpu_results);
         warn!("mem_results: {:?}", mem_results);
 
-        let parse_metrics = |opt_json: Option<String>| -> Vec<MetricPoint> {
-            match opt_json {
-                Some(json_str) => {
-                    // Parse "[ [...points...] ]" -> inner vector
-                    serde_json::from_str::<Vec<Vec<MetricPoint>>>(&json_str)
-                        .map(|mut v| v.pop().unwrap_or_default())
-                        .unwrap_or_default()
+        fn parse_series(json_opt: Option<String>) -> Vec<MetricPoint> {
+            match json_opt {
+                Some(raw) => {
+                    // RedisJSON MGET returns [["points"],["points"],...]
+                    let parsed = serde_json::from_str::<Vec<Vec<MetricPoint>>>(&raw);
+                    match parsed {
+                        Ok(mut outer) => outer.pop().unwrap_or_default(),
+                        Err(_) => Vec::new(),
+                    }
                 }
-                None => Vec::new(), // Handle missing key gracefully
+                None => Vec::new(),
             }
-        };
+        }
 
-        let deployment_metrics = cpu_results
-            .into_iter()
-            .zip(mem_results)
-            .map(|(cpu_opt, mem_opt)| DeploymentMetrics {
-                cpu_history: parse_metrics(cpu_opt),
-                memory_history: parse_metrics(mem_opt),
-            })
-            .collect();
+        let mut deployment_metrics = Vec::with_capacity(deployment_ids.len());
+
+        for idx in 0..deployment_ids.len() {
+            let cpu_json = cpu_results.get(idx).cloned().unwrap_or(None);
+            let mem_json = mem_results.get(idx).cloned().unwrap_or(None);
+
+            let cpu_points = parse_series(cpu_json);
+            let mem_points = parse_series(mem_json);
+
+            deployment_metrics.push(DeploymentMetrics {
+                cpu_history: cpu_points,
+                memory_history: mem_points,
+            });
+        }
+
+        Ok(deployment_metrics)
+
+        // let parse_metrics = |opt_json: Option<String>| -> Vec<MetricPoint> {
+        //     match opt_json {
+        //         Some(json_str) => {
+        //             // Parse "[ [...points...] ]" -> inner vector
+        //             serde_json::from_str::<Vec<Vec<MetricPoint>>>(&json_str)
+        //                 .map(|mut v| v.pop().unwrap_or_default())
+        //                 .unwrap_or_default()
+        //         }
+        //         None => Vec::new(), // Handle missing key gracefully
+        //     }
+        // };
+
+        // let deployment_metrics = cpu_results
+        //     .into_iter()
+        //     .zip(mem_results)
+        //     .map(|(cpu_opt, mem_opt)| DeploymentMetrics {
+        //         cpu_history: parse_metrics(cpu_opt),
+        //         memory_history: parse_metrics(mem_opt),
+        //     })
+        //     .collect();
 
         // // Add bounds checking
         // if results.len() != 2 {
@@ -462,6 +493,6 @@ impl CacheRepository {
         //     })
         //     .collect();
 
-        Ok(deployment_metrics)
+        // Ok(deployment_metrics)
     }
 }
