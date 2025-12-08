@@ -136,6 +136,8 @@ pub async fn get_deployments(
         }));
     }
 
+    info!("total, deployments: {}, {:?}", total, deployments);
+
     let deployment_ids = deployments.iter().map(|d| d.id).collect();
     let deployment_metrics = CacheRepository::get_deployment_metrics(
         points_count,
@@ -143,6 +145,8 @@ pub async fn get_deployments(
         &mut redis.connection,
     )
     .await?;
+
+    info!("deployment_metrics: {:?}", deployment_metrics);
 
     let data: Vec<DeploymentResponse> = deployments
         .into_iter()

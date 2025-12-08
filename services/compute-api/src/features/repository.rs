@@ -388,58 +388,79 @@ impl CacheRepository {
         deployment_ids: Vec<Uuid>,
         connection: &mut MultiplexedConnection,
     ) -> Result<Vec<DeploymentMetrics>, AppError> {
-        let keys = CacheKeys::deployment_metrics(&deployment_ids);
+        if deployment_ids.is_empty() {
+            return Ok(Vec::new());
+        }
 
+        let keys = CacheKeys::deployment_metrics(&deployment_ids);
         let cpu_path = format!("$.cpu_history[-{}:]", points_count);
         let mem_path = format!("$.memory_history[-{}:]", points_count);
 
-        warn!("keys: {:?}", keys);
-        warn!("cpu_path: {}", cpu_path);
-        warn!("mem_path: {}", mem_path);
-
         let mut p = pipe();
-
-        warn!("pipe createed");
-
-        // Queue two MGET commands in the pipeline
         let _ = p.json_get(&keys, &cpu_path); // JSON.MGET for CPU
         let _ = p.json_get(&keys, &mem_path); // JSON.MGET for Memory 
 
-        // Execute pipeline - returns 2 results (CPU array, Memory array)
-        let results: Vec<String> = p
+        // let results: Vec<String> = p
+        //     .query_async(connection)
+        //     .await
+        //     .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
+
+        let (cpu_results, mem_results): (Vec<Option<String>>, Vec<Option<String>>) = p
             .query_async(connection)
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
-        warn!("results: {:?}", results);
+        warn!("cpu_results: {:?}", cpu_results);
+        warn!("mem_results: {:?}", mem_results);
 
-        // Add bounds checking
-        if results.len() != 2 {
-            return Err(AppError::InternalError(format!(
-                "Expected 2 results from pipeline, got {}",
-                results.len()
-            )));
-        }
+        let parse_metrics = |opt_json: Option<String>| -> Vec<MetricPoint> {
+            match opt_json {
+                Some(json_str) => {
+                    // Parse "[ [...points...] ]" -> inner vector
+                    serde_json::from_str::<Vec<Vec<MetricPoint>>>(&json_str)
+                        .map(|mut v| v.pop().unwrap_or_default())
+                        .unwrap_or_default()
+                }
+                None => Vec::new(), // Handle missing key gracefully
+            }
+        };
 
-        // The first result is CPU data for all keys
-        let cpu_arrays: Vec<Vec<Vec<MetricPoint>>> = serde_json::from_str(&results[0])
-            .map_err(|e| AppError::InternalError(format!("Failed to parse CPU metrics: {}", e)))?;
-
-        // The second result is Memory data for all keys
-        let mem_arrays: Vec<Vec<Vec<MetricPoint>>> =
-            serde_json::from_str(&results[1]).map_err(|e| {
-                AppError::InternalError(format!("Failed to parse memory metrics: {}", e))
-            })?;
-
-        // Combine results
-        let deployment_metrics = cpu_arrays
+        let deployment_metrics = cpu_results
             .into_iter()
-            .zip(mem_arrays)
-            .map(|(cpu, mem)| DeploymentMetrics {
-                cpu_history: cpu.into_iter().next().unwrap_or_default(),
-                memory_history: mem.into_iter().next().unwrap_or_default(),
+            .zip(mem_results)
+            .map(|(cpu_opt, mem_opt)| DeploymentMetrics {
+                cpu_history: parse_metrics(cpu_opt),
+                memory_history: parse_metrics(mem_opt),
             })
             .collect();
+
+        // // Add bounds checking
+        // if results.len() != 2 {
+        //     return Err(AppError::InternalError(format!(
+        //         "Expected 2 results from pipeline, got {}",
+        //         results.len()
+        //     )));
+        // }
+
+        // // The first result is CPU data for all keys
+        // let cpu_arrays: Vec<Vec<Vec<MetricPoint>>> = serde_json::from_str(&results[0])
+        //     .map_err(|e| AppError::InternalError(format!("Failed to parse CPU metrics: {}", e)))?;
+
+        // // The second result is Memory data for all keys
+        // let mem_arrays: Vec<Vec<Vec<MetricPoint>>> =
+        //     serde_json::from_str(&results[1]).map_err(|e| {
+        //         AppError::InternalError(format!("Failed to parse memory metrics: {}", e))
+        //     })?;
+
+        // // Combine results
+        // let deployment_metrics = cpu_arrays
+        //     .into_iter()
+        //     .zip(mem_arrays)
+        //     .map(|(cpu, mem)| DeploymentMetrics {
+        //         cpu_history: cpu.into_iter().next().unwrap_or_default(),
+        //         memory_history: mem.into_iter().next().unwrap_or_default(),
+        //     })
+        //     .collect();
 
         Ok(deployment_metrics)
     }
