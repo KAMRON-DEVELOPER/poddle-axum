@@ -44,6 +44,10 @@ async fn scrape(
     prometheus: &PrometheusClient,
     mut redis: Redis,
 ) -> Result<(), AppError> {
+    // labels are stored in kube-state-metrics and it exports a specific metric called kube_pod_labels
+    // JOIN kube_pod_labels with container metrics
+    // container_cpu_usage_seconds_total comes from cAdvisor (embedded in Kubelet).
+    // It knows about low-level details like pod, namespace, and image, but it is unaware of your high-level Kubernetes labels
     let cpu_query = r#"
         sum(
             rate(
@@ -52,9 +56,12 @@ async fn scrape(
                     container!="POD",
                     namespace=~"user-.*"
                 }[5m]
-            )
+            ) 
+            * on(pod, namespace) group_left(label_deployment_id)
+            kube_pod_labels{label_managed_by="poddle"}
         ) by (pod, namespace, label_deployment_id)
     "#;
+
     let memory_query = r#"
         sum(
             container_memory_working_set_bytes{
@@ -62,6 +69,8 @@ async fn scrape(
                 container!="POD",
                 namespace=~"user-.*"
             }
+            * on(pod, namespace) group_left(label_deployment_id)
+            kube_pod_labels{label_managed_by="poddle"}
         ) by (pod, namespace, label_deployment_id)
     "#;
 
@@ -76,6 +85,9 @@ async fn scrape(
         prometheus.query(memory_query).get().await.map_err(|e| {
             AppError::InternalError(format!("Prometheus memory query failed: {}", e))
         })?;
+
+    info!("cpu_result: {:?}", cpu_result);
+    info!("memory_result: {:?}", memory_result);
 
     // Aggregate in Memory
     let mut aggregates: HashMap<String, AggregatedValue> = HashMap::new();
