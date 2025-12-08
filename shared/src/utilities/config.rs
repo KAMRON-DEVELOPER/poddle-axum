@@ -26,7 +26,7 @@ pub struct Config {
 
     pub label_selector: String,
     pub scrape_interval_seconds: u64,
-    pub history_points_to_keep: usize,
+    pub history_points_to_keep: u64,
     pub cache_ttl_seconds: u64,
     pub prometheus_window: String,
 

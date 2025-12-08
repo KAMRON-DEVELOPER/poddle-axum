@@ -443,7 +443,7 @@ pub async fn get_user_handler(
     claims: Claims,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
-    debug!("claims: {:#?}", claims);
+    debug!("claims: {:?}", claims);
 
     let user = sqlx::query_as!(
         User,

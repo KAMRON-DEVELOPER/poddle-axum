@@ -393,7 +393,7 @@ impl CacheRepository {
             return Ok(Vec::new());
         }
 
-        let keys = CacheKeys::deployment_metrics(&deployment_ids);
+        let keys = CacheKeys::deployments_metrics(&deployment_ids);
         let cpu_path = format!("$.cpu_history[-{}:]", points_count);
         let mem_path = format!("$.memory_history[-{}:]", points_count);
 

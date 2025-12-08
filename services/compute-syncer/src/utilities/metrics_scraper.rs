@@ -1,7 +1,7 @@
 use prometheus_http_query::Client as PrometheusClient;
 use redis::aio::MultiplexedConnection;
-use shared::utilities::config::Config;
 use shared::utilities::errors::AppError;
+use shared::utilities::{cache_keys::CacheKeys, config::Config};
 use std::time::Duration;
 use tracing::{error, info};
 
@@ -21,14 +21,14 @@ pub async fn metrics_scraper(
     loop {
         interval.tick().await;
 
-        if let Err(e) = scrape_and_cache_metrics(&config, &prometheus, &mut connection).await {
+        if let Err(e) = scrape(&config, &prometheus, &mut connection).await {
             error!("Failed to scrape metrics: {}", e);
         }
     }
 }
 
-async fn scrape_and_cache_metrics(
-    _config: &Config,
+async fn scrape(
+    config: &Config,
     prometheus: &PrometheusClient,
     connection: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
@@ -62,6 +62,8 @@ async fn scrape_and_cache_metrics(
         })?;
 
     let default_ns = "default".to_string();
+    let ttl = config.scrape_interval_seconds * config.history_points_to_keep;
+    // let cache_key = CacheKeys::pod_metrics(pod_id);
 
     // Process CPU metrics
     if let prometheus_http_query::response::Data::Vector(cpu_vector) = cpu_result.data() {
