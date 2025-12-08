@@ -257,9 +257,11 @@ pub struct PodMetrics {
 // DEPLOYMENT METRICS
 // ============================================
 
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Debug)]
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentMetrics {
+    #[serde(default)]
     pub cpu_history: Vec<MetricPoint>,
+    #[serde(default)]
     pub memory_history: Vec<MetricPoint>,
 }

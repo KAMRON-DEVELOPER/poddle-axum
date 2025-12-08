@@ -18,8 +18,8 @@ pub async fn stream_metrics(
     Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    let status_channel = ChannelNames::deployment_status(deployment_id);
-    let metrics_channel = ChannelNames::deployment_metrics(deployment_id);
+    let status_channel = ChannelNames::deployment_status(deployment_id.to_string().as_ref());
+    let metrics_channel = ChannelNames::deployment_metrics(deployment_id.to_string().as_ref());
     let channels = [status_channel.clone(), metrics_channel.clone()];
 
     let mut pubsub = redis.pubsub().await.map_err(|err| {

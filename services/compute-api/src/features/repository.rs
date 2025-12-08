@@ -385,7 +385,7 @@ pub struct CacheRepository;
 impl CacheRepository {
     pub async fn get_deployment_metrics(
         points_count: u64,
-        deployment_ids: Vec<Uuid>,
+        deployment_ids: Vec<&str>,
         connection: &mut MultiplexedConnection,
     ) -> Result<Vec<DeploymentMetrics>, AppError> {
         // Safety check for Redis syntax

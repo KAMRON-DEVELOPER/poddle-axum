@@ -143,7 +143,8 @@ pub async fn get_deployments(
         }));
     }
 
-    let deployment_ids = deployments.iter().map(|d| d.id).collect();
+    let deployment_ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
+    let deployment_ids: Vec<&str> = deployment_ids.iter().map(|s| s.as_str()).collect();
     let deployment_metrics = CacheRepository::get_deployment_metrics(
         points_count,
         deployment_ids,
