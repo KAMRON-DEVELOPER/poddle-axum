@@ -1,4 +1,4 @@
-use crate::features::repository::{DeploymentRepository, ProjectRepository};
+use crate::features::repository::{CacheRepository, DeploymentRepository, ProjectRepository};
 use axum::{
     Json,
     extract::{Path, Query, State},
@@ -13,10 +13,11 @@ use lapin::{
 use shared::{
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, UpdateDeploymentMessage,
-        UpdateDeploymentRequest, UpdateProjectRequest,
+        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ProjectPageQuery,
+        UpdateDeploymentMessage, UpdateDeploymentRequest, UpdateProjectRequest,
     },
-    services::amqp::Amqp,
+    services::{amqp::Amqp, redis::Redis},
+    utilities::config::Config,
 };
 use shared::{
     schemas::{ListResponse, Pagination},
@@ -117,20 +118,31 @@ pub async fn delete_project(
 pub async fn get_deployments(
     claims: Claims,
     Path(project_id): Path<Uuid>,
+    Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
     State(database): State<Database>,
+    State(mut redis): State<Redis>,
+    State(config): State<Config>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
+    let points_count = minutes * 60 / config.scrape_interval_seconds;
 
-    let deployments =
+    let (total, deployments) =
         DeploymentRepository::get_all_by_project(&database.pool, project_id, user_id).await?;
+    let deployment_ids = deployments.iter().map(|d| d.id).collect();
+    let deployment_metrics = CacheRepository::get_deployment_metrics(
+        points_count,
+        deployment_ids,
+        &mut redis.connection,
+    )
+    .await?;
 
-    // Into::into == |d: Deployment| -> DeploymentResponse d.into()
-    let response: Vec<DeploymentResponse> = deployments.into_iter().map(Into::into).collect();
+    let data: Vec<DeploymentResponse> = deployments
+        .into_iter()
+        .zip(deployment_metrics.into_iter())
+        .map(|pair| pair.into())
+        .collect();
 
-    Ok(Json(ListResponse {
-        total: i64::try_from(response.len()).unwrap_or_else(|_| 0),
-        data: response,
-    }))
+    Ok(Json(ListResponse { data, total }))
 }
 
 pub async fn get_deployment(

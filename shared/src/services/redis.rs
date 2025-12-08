@@ -1,18 +1,25 @@
 use crate::utilities::{config::Config, errors::AppError};
 use redis::{
     Client, ClientTlsConfig, ConnectionAddr, ConnectionInfo, ProtocolVersion, RedisConnectionInfo,
-    TlsCertificates, aio::MultiplexedConnection,
+    TlsCertificates,
+    aio::{MultiplexedConnection, PubSub},
 };
 use tracing::info;
 
 #[derive(Clone)]
 pub struct Redis {
+    pub client: Client,
     pub connection: MultiplexedConnection,
 }
 
 impl Redis {
     pub async fn new(config: &Config) -> Result<Self, AppError> {
-        let redis_url = config.redis_url.clone();
+        let mut redis_url = config.redis_url.clone();
+
+        let protocol = "?protocol=resp3";
+        if !redis_url.contains(protocol) {
+            redis_url.push_str(protocol);
+        }
 
         if let Some(client_cert) = &config.client_cert
             && let Some(client_key) = &config.client_key
@@ -49,7 +56,7 @@ impl Redis {
 
             let connection = client.get_multiplexed_tokio_connection().await?;
 
-            return Ok(Self { connection });
+            return Ok(Self { client, connection });
         }
         let client = Client::open(redis_url)?;
 
@@ -58,13 +65,10 @@ impl Redis {
 
         let connection = client.get_multiplexed_tokio_connection().await?;
 
-        Ok(Self { connection })
+        Ok(Self { client, connection })
     }
 
-    // pub async fn set_user(&self) {
-    //     let mut user_data = BTreeMap::new();
-    //     user_data.insert("city", "New York");
-    //     user_data.insert("occupation", "Engineer");
-    //     self.connection.hset_multiple("user:2", &user_data).await?;
-    // }
+    pub async fn pubsub(&self) -> Result<PubSub, AppError> {
+        Ok(self.client.get_async_pubsub().await?)
+    }
 }

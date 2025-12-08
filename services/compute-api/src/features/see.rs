@@ -1,59 +1,45 @@
-use std::{convert::Infallible, time::Duration};
-
 use axum::{
     extract::{Path, State},
-    response::{Sse, sse::Event},
+    http::StatusCode,
+    response::{
+        Sse,
+        sse::{Event, KeepAlive},
+    },
 };
 use futures::Stream;
-use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
-use shared::{
-    schemas::PodMetrics,
-    services::redis::Redis,
-    utilities::{config::Config, errors::AppError},
-};
+use std::convert::Infallible;
+use tokio_stream::StreamExt;
+
+use shared::{services::redis::Redis, utilities::channel_names::ChannelNames};
+use tracing::{error, info};
 use uuid::Uuid;
 
 pub async fn stream_metrics(
-    Path(deployment_id): Path<Uuid>,
+    Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(redis): State<Redis>,
-    State(config): State<Config>,
-) -> Sse<impl Stream<Item = Result<Event, Infallible>>> {
-    let deployment_id = deployment_id.to_string();
-    let mut connection = redis.connection.clone();
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    let status_channel = ChannelNames::deployment_status(deployment_id);
+    let metrics_channel = ChannelNames::deployment_metrics(deployment_id);
+    let channels = [status_channel.clone(), metrics_channel.clone()];
 
-    let stream = async_stream::stream! {
-        let mut interval = tokio::time::interval(Duration::from_secs(config.scrape_interval_seconds));
+    let mut pubsub = redis.pubsub().await.map_err(|err| {
+        error!("Failed to connect to Redis PubSub: {}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-        loop {
-            interval.tick().await;
+    pubsub.subscribe(&channels).await.map_err(|err| {
+        error!("Failed to subscribe to channels: {}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
 
-            match get_deployment_metrics(&mut connection, &deployment_id).await {
-                Ok(metrics) => {
-                    let payload = serde_json::to_string(&metrics).unwrap();
-                    yield Ok(Event::default().data(payload));
-                }
-                Err(err) => {
-                    yield Ok(
-                        Event::default()
-                            .data(format!("error: {}", err))
-                    );
-                }
-            }
-        }
-    };
+    info!("Subscribed to channels: {:?}", channels);
 
-    Sse::new(stream)
-}
+    let stream = pubsub.into_on_message().map(move |msg| {
+        let channel = msg.get_channel_name();
+        let payload: String = msg.get_payload().unwrap_or_default();
 
-async fn get_deployment_metrics(
-    connection: &mut MultiplexedConnection,
-    deployment_id: &str,
-) -> Result<Vec<PodMetrics>, AppError> {
-    let key = format!("deployment:{}:metrics", deployment_id);
+        Ok(Event::default().event(channel).data(payload))
+    });
 
-    let metrics = connection
-        .json_get::<_, _, Vec<PodMetrics>>(key, "$")
-        .await?;
-
-    Ok(metrics)
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }

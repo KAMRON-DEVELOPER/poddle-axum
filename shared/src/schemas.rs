@@ -31,6 +31,16 @@ fn default_limit() -> i64 {
     20
 }
 
+#[derive(Deserialize, Serialize, Debug)]
+pub struct ProjectPageQuery {
+    #[serde(default = "project_page_minutes")]
+    pub minutes: u64,
+}
+
+fn project_page_minutes() -> u64 {
+    0
+}
+
 // ============================================
 // PROJECT SCHEMAS
 // ============================================
@@ -140,6 +150,9 @@ pub struct DeploymentResponse {
     pub custom_domain: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+
+    pub cpu_history: Vec<MetricPoint>,
+    pub memory_history: Vec<MetricPoint>,
 }
 
 #[derive(Serialize, Debug)]
@@ -223,8 +236,8 @@ pub enum PodPhase {
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct MetricPoint {
-    pub ts: i64, // Unix timestamp in seconds
-    pub v: f64,  // Metric value (millicores for CPU, MB for memory)
+    pub ts: i64,
+    pub v: f64,
 }
 
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
@@ -234,9 +247,8 @@ pub struct PodMetrics {
     pub phase: PodPhase,
     pub restarts: u32,
 
-    // History arrays - 2880 points each
-    pub cpu_history: Vec<MetricPoint>,    // 46KB
-    pub memory_history: Vec<MetricPoint>, // 46KB
+    pub cpu_history: Vec<MetricPoint>,
+    pub memory_history: Vec<MetricPoint>,
 
     pub started_at: Option<i64>,
 }
@@ -248,14 +260,6 @@ pub struct PodMetrics {
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentMetrics {
-    pub deployment_id: String,
-    pub status: DeploymentStatus,
-    pub replicas: i32,
-    pub ready_replicas: i32,
-
-    // Aggregated history
-    pub total_cpu_history: Vec<MetricPoint>,    // 46KB
-    pub total_memory_history: Vec<MetricPoint>, // 46KB
-
-    pub last_updated: i64,
+    pub cpu_history: Vec<MetricPoint>,
+    pub memory_history: Vec<MetricPoint>,
 }

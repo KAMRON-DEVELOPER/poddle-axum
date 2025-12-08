@@ -3,8 +3,8 @@ use uuid::Uuid;
 use crate::{
     models::Deployment,
     schemas::{
-        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, MessageResponse,
-        Pagination, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentMetrics, DeploymentResponse,
+        MessageResponse, Pagination, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
     utilities::errors::AppError,
 };
@@ -43,8 +43,8 @@ impl Pagination {
     }
 }
 
-impl From<Deployment> for DeploymentResponse {
-    fn from(d: Deployment) -> Self {
+impl DeploymentResponse {
+    pub fn from_parts(d: Deployment, dm: DeploymentMetrics) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -65,6 +65,38 @@ impl From<Deployment> for DeploymentResponse {
             custom_domain: d.custom_domain,
             created_at: d.created_at,
             updated_at: d.updated_at,
+
+            cpu_history: dm.cpu_history,
+            memory_history: dm.memory_history,
+        }
+    }
+}
+
+impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
+    fn from((d, dm): (Deployment, DeploymentMetrics)) -> Self {
+        Self {
+            id: d.id,
+            user_id: d.user_id,
+            project_id: d.project_id,
+            name: d.name,
+            image: d.image,
+            port: d.port,
+            vault_secret_path: d.vault_secret_path,
+            secret_keys: d.secret_keys,
+            environment_variables: d.environment_variables.and_then(|j| j.0).or_else(|| None),
+            replicas: d.replicas,
+            resources: d.resources.0,
+            labels: d.labels.and_then(|j| j.0).or_else(|| None),
+            status: d.status,
+            cluster_namespace: d.cluster_namespace,
+            cluster_deployment_name: d.cluster_deployment_name,
+            subdomain: d.subdomain,
+            custom_domain: d.custom_domain,
+            created_at: d.created_at,
+            updated_at: d.updated_at,
+
+            cpu_history: dm.cpu_history,
+            memory_history: dm.memory_history,
         }
     }
 }

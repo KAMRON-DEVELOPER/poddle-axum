@@ -1,31 +1,12 @@
+use uuid::Uuid;
+
 pub struct CacheKeys;
 
 impl CacheKeys {
-    pub fn deployment_status(deployment_id: &str) -> String {
-        format!("deployment:{}:status", deployment_id)
-    }
-
-    pub fn deployment_summary(deployment_id: &str) -> String {
-        format!("deployment:{}:summary", deployment_id)
-    }
-
-    pub fn deployment_detailed(deployment_id: &str) -> String {
-        format!("deployment:{}:detailed", deployment_id)
-    }
-
-    /// metric_type: "cpu" or "memory"
-    pub fn deployment_history(deployment_id: &str, metric_type: &str) -> String {
-        format!(
-            "metrics:deployment:{}:history:{}",
-            deployment_id, metric_type
-        )
-    }
-
-    /// metric_type: "cpu" or "memory"
-    pub fn pod_history(namespace: &str, pod_name: &str, metric_type: &str) -> String {
-        format!(
-            "metrics:pod:{}:{}:history:{}",
-            namespace, pod_name, metric_type
-        )
+    pub fn deployment_metrics(deployment_ids: &Vec<Uuid>) -> Vec<String> {
+        deployment_ids
+            .iter()
+            .map(|id| format!("deployment:{}:metrics", id))
+            .collect()
     }
 }

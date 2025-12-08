@@ -1,6 +1,11 @@
+use redis::{aio::MultiplexedConnection, pipe};
+
 use shared::{
     models::ResourceSpec,
-    schemas::{CreateProjectRequest, Pagination, UpdateDeploymentRequest},
+    schemas::{
+        CreateProjectRequest, DeploymentMetrics, MetricPoint, Pagination, UpdateDeploymentRequest,
+    },
+    utilities::{cache_keys::CacheKeys, errors::AppError},
 };
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -138,20 +143,37 @@ impl DeploymentRepository {
         pool: &PgPool,
         project_id: Uuid,
         user_id: Uuid,
-    ) -> Result<Vec<Deployment>, sqlx::Error> {
-        sqlx::query_as::<_, Deployment>(
+    ) -> Result<(i64, Vec<Deployment>), sqlx::Error> {
+        let deployments = sqlx::query_as::<_, Deployment>(
             r#"
                 SELECT d.*
                 FROM deployments d
                 INNER JOIN projects p ON d.project_id = p.id
-                WHERE d.project_id = $1 AND p.owner_id = $2
+                WHERE p.owner_id = $1 AND d.project_id = $2
                 ORDER BY d.created_at DESC
             "#,
         )
         .bind(project_id)
         .bind(user_id)
         .fetch_all(pool)
-        .await
+        .await?;
+
+        let row = sqlx::query!(
+            r#"
+                SELECT COUNT(*) as count
+                FROM deployments d
+                INNER JOIN projects p ON d.project_id = p.id
+                WHERE p.owner_id = $1 AND d.project_id = $2
+            "#,
+            user_id,
+            project_id
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let total = row.count.unwrap_or(0);
+
+        Ok((total, deployments))
     }
 
     pub async fn get_by_id(
@@ -354,5 +376,62 @@ impl DeploymentEventRepository {
         .bind(limit)
         .fetch_all(pool)
         .await
+    }
+}
+
+pub struct CacheRepository;
+
+impl CacheRepository {
+    pub async fn get_deployment_metrics(
+        points_count: u64,
+        deployment_ids: Vec<Uuid>,
+        connection: &mut MultiplexedConnection,
+    ) -> Result<Vec<DeploymentMetrics>, AppError> {
+        let keys = CacheKeys::deployment_metrics(&deployment_ids);
+
+        let cpu_path = format!("$.cpu_history[-{}:]", points_count);
+        let mem_path = format!("$.memory_history[-{}:]", points_count);
+
+        let mut p = pipe();
+
+        // Queue two MGET commands in the pipeline
+        let _ = p.json_get(&keys, &cpu_path); // JSON.MGET for CPU
+        let _ = p.json_get(&keys, &mem_path); // JSON.MGET for Memory 
+
+        // Execute pipeline - returns 2 results (CPU array, Memory array)
+        let results: Vec<String> = p
+            .query_async(connection)
+            .await
+            .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
+
+        // Add bounds checking
+        if results.len() != 2 {
+            return Err(AppError::InternalError(format!(
+                "Expected 2 results from pipeline, got {}",
+                results.len()
+            )));
+        }
+
+        // The first result is CPU data for all keys
+        let cpu_arrays: Vec<Vec<Vec<MetricPoint>>> = serde_json::from_str(&results[0])
+            .map_err(|e| AppError::InternalError(format!("Failed to parse CPU metrics: {}", e)))?;
+
+        // The second result is Memory data for all keys
+        let mem_arrays: Vec<Vec<Vec<MetricPoint>>> =
+            serde_json::from_str(&results[1]).map_err(|e| {
+                AppError::InternalError(format!("Failed to parse memory metrics: {}", e))
+            })?;
+
+        // Combine results
+        let deployment_metrics = cpu_arrays
+            .into_iter()
+            .zip(mem_arrays)
+            .map(|(cpu, mem)| DeploymentMetrics {
+                cpu_history: cpu.into_iter().next().unwrap_or_default(),
+                memory_history: mem.into_iter().next().unwrap_or_default(),
+            })
+            .collect();
+
+        Ok(deployment_metrics)
     }
 }
