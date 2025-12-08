@@ -127,7 +127,8 @@ pub async fn get_deployments(
     let points_count = minutes * 60 / config.scrape_interval_seconds;
 
     let (total, deployments) =
-        DeploymentRepository::get_all_by_project(&database.pool, project_id, user_id).await?;
+        DeploymentRepository::get_all_by_project(user_id, project_id, &database.pool).await?;
+    warn!("user_id, project_id: {}, {:?}", user_id, project_id);
     warn!("total, deployments: {}, {:?}", total, deployments);
     let deployment_ids = deployments.iter().map(|d| d.id).collect();
     let deployment_metrics = CacheRepository::get_deployment_metrics(

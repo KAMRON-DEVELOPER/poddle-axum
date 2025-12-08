@@ -141,9 +141,9 @@ impl DeploymentRepository {
     }
 
     pub async fn get_all_by_project(
-        pool: &PgPool,
-        project_id: Uuid,
         user_id: Uuid,
+        project_id: Uuid,
+        pool: &PgPool,
     ) -> Result<(i64, Vec<Deployment>), sqlx::Error> {
         let deployments = sqlx::query_as::<_, Deployment>(
             r#"
