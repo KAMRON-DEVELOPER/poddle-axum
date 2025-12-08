@@ -129,7 +129,14 @@ pub async fn get_deployments(
     let (total, deployments) =
         DeploymentRepository::get_all_by_project(user_id, project_id, &database.pool).await?;
 
-    if total == 0 {
+    // if total == 0 {
+    //     return Ok(Json(ListResponse {
+    //         data: vec![],
+    //         total: 0,
+    //     }));
+    // }
+
+    if deployments.is_empty() {
         return Ok(Json(ListResponse {
             data: vec![],
             total: 0,
