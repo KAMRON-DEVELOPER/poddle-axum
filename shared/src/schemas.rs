@@ -38,7 +38,7 @@ pub struct ProjectPageQuery {
 }
 
 fn project_page_minutes() -> u64 {
-    0
+    5
 }
 
 // ============================================

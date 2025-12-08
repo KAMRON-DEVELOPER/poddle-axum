@@ -154,8 +154,8 @@ impl DeploymentRepository {
                 ORDER BY d.created_at DESC
             "#,
         )
-        .bind(project_id)
         .bind(user_id)
+        .bind(project_id)
         .fetch_all(pool)
         .await?;
 
