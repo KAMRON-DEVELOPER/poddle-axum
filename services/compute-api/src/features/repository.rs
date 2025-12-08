@@ -8,6 +8,7 @@ use shared::{
     utilities::{cache_keys::CacheKeys, errors::AppError},
 };
 use sqlx::{PgPool, Postgres, Transaction};
+use tracing::warn;
 use uuid::Uuid;
 
 use shared::{
@@ -392,7 +393,13 @@ impl CacheRepository {
         let cpu_path = format!("$.cpu_history[-{}:]", points_count);
         let mem_path = format!("$.memory_history[-{}:]", points_count);
 
+        warn!("keys: {:?}", keys);
+        warn!("cpu_path: {}", cpu_path);
+        warn!("mem_path: {}", mem_path);
+
         let mut p = pipe();
+
+        warn!("pipe createed");
 
         // Queue two MGET commands in the pipeline
         let _ = p.json_get(&keys, &cpu_path); // JSON.MGET for CPU
@@ -403,6 +410,8 @@ impl CacheRepository {
             .query_async(connection)
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
+
+        warn!("results: {:?}", results);
 
         // Add bounds checking
         if results.len() != 2 {

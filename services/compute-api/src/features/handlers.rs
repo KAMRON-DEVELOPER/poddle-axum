@@ -24,7 +24,7 @@ use shared::{
     services::database::Database,
     utilities::{errors::AppError, jwt::Claims},
 };
-use tracing::{debug, info};
+use tracing::{debug, info, warn};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -128,6 +128,7 @@ pub async fn get_deployments(
 
     let (total, deployments) =
         DeploymentRepository::get_all_by_project(&database.pool, project_id, user_id).await?;
+    warn!("total, deployments: {}, {:?}", total, deployments);
     let deployment_ids = deployments.iter().map(|d| d.id).collect();
     let deployment_metrics = CacheRepository::get_deployment_metrics(
         points_count,

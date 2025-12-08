@@ -1,6 +1,5 @@
 use prometheus_http_query::Client as PrometheusClient;
 use redis::aio::MultiplexedConnection;
-use shared::schemas::{DeploymentMetrics, PodMetrics, PodPhase};
 use shared::utilities::config::Config;
 use shared::utilities::errors::AppError;
 use std::time::Duration;
@@ -29,11 +28,10 @@ pub async fn metrics_scraper(
 }
 
 async fn scrape_and_cache_metrics(
-    config: &Config,
+    _config: &Config,
     prometheus: &PrometheusClient,
     connection: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
-    // Query CPU usage per deployment (aggregated by deployment-id label)
     let cpu_query = r#"
         sum(rate(container_cpu_usage_seconds_total{
             namespace=~"user-.*",
@@ -42,7 +40,6 @@ async fn scrape_and_cache_metrics(
         }[5m])) by (pod, namespace)
     "#;
 
-    // Query memory usage per deployment
     let memory_query = r#"
         sum(container_memory_working_set_bytes{
             namespace=~"user-.*",
@@ -154,53 +151,4 @@ async fn scrape_and_cache_metrics(
     }
 
     Ok(())
-}
-
-// Helper function to retrieve cached metrics for API responses
-pub async fn get_deployment_metrics(
-    connection: &mut MultiplexedConnection,
-    deployment_id: &str,
-    pod_names: Vec<String>,
-) -> Result<DeploymentMetrics, AppError> {
-    let cpu_key = format!("metrics:deployment:{}:cpu_total", deployment_id);
-    let _cpu_total: Option<f64> = redis::cmd("GET")
-        .arg(&cpu_key)
-        .query_async(connection)
-        .await?;
-
-    let mut pod_metrics = Vec::new();
-
-    for pod_name in pod_names {
-        let cpu_key = format!("metrics:pod:{}:cpu", pod_name);
-        let mem_key = format!("metrics:pod:{}:memory", pod_name);
-
-        let cpu: Option<f64> = redis::cmd("GET")
-            .arg(&cpu_key)
-            .query_async(connection)
-            .await?;
-        let memory: Option<u64> = redis::cmd("GET")
-            .arg(&mem_key)
-            .query_async(connection)
-            .await?;
-
-        pod_metrics.push(PodMetrics {
-            name: pod_name.clone(),
-            phase: PodPhase::Running, // This should come from watcher cache
-            cpu_millicores: cpu.unwrap_or(0.0),
-            memory_bytes: memory.unwrap_or(0),
-            restarts: 0,      // From watcher
-            started_at: None, // From watcher
-        });
-    }
-
-    Ok(DeploymentMetrics {
-        deployment_id: deployment_id.to_string(),
-        status: shared::models::DeploymentStatus::Healthy, // From DB
-        replicas: pod_metrics.len() as i32,
-        ready_replicas: pod_metrics.len() as i32,
-        available_replicas: pod_metrics.len() as i32,
-        unavailable_replicas: 0,
-        pods: pod_metrics,
-        timestamp: chrono::Utc::now().timestamp(),
-    })
 }
