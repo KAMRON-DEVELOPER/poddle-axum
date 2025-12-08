@@ -394,8 +394,8 @@ impl CacheRepository {
         }
 
         let keys = CacheKeys::deployments_metrics(&deployment_ids);
-        let cpu_path = format!("$.cpu_history[-{}:]", points_count);
-        let mem_path = format!("$.memory_history[-{}:]", points_count);
+        let cpu_path = format!("$.cpuHistory[-{}:]", points_count);
+        let mem_path = format!("$.memoryHistory[-{}:]", points_count);
 
         let mut p = pipe();
         let _ = p.json_get(&keys, &cpu_path); // JSON.MGET for CPU

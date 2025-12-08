@@ -143,11 +143,11 @@ async fn scrape(
             .arg("NX");
 
         // Append new points to history arrays
-        let _ = pipe.json_arr_append(&key, "$.cpu_history", &cpu_point);
-        let _ = pipe.json_arr_append(&key, "$.memory_history", &mem_point);
+        let _ = pipe.json_arr_append(&key, "$.cpuHistory", &cpu_point);
+        let _ = pipe.json_arr_append(&key, "$.memoryHistory", &mem_point);
 
-        let _ = pipe.json_arr_trim(&key, "$.cpu_history", -history_limit, -1);
-        let _ = pipe.json_arr_trim(&key, "$.memory_history", -history_limit, -1);
+        let _ = pipe.json_arr_trim(&key, "$.cpuHistory", -history_limit, -1);
+        let _ = pipe.json_arr_trim(&key, "$.memoryHistory", -history_limit, -1);
 
         let message = serde_json::json!({
             "cpu": cpu_point,
