@@ -402,13 +402,13 @@ impl CacheRepository {
         let _ = p.json_get(&keys, &mem_path); // JSON.MGET for Memory 
 
         // We expect two results from the pipeline: one Vec for CPU, one Vec for Memory
-        let (cpu_results, mem_results): (Vec<Option<String>>, Vec<Option<String>>) = p
+        let (cpu_results, memory_results): (Vec<Option<String>>, Vec<Option<String>>) = p
             .query_async(connection)
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
-        warn!("cpu_results: {:?}", cpu_results);
-        warn!("mem_results: {:?}", mem_results);
+        // warn!("cpu_results: {:?}", cpu_results);
+        // warn!("memory_results: {:?}", memory_results);
 
         // Helper to parse JSON. Handles Option<String> -> Vec<MetricPoint>
         let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
@@ -425,7 +425,7 @@ impl CacheRepository {
         let deployment_metrics = (0..deployment_ids.len())
             .map(|i| {
                 let cpu_val = cpu_results.get(i).and_then(|v| v.as_ref());
-                let mem_val = mem_results.get(i).and_then(|v| v.as_ref());
+                let mem_val = memory_results.get(i).and_then(|v| v.as_ref());
 
                 DeploymentMetrics {
                     cpu_history: parse_metrics(cpu_val),
