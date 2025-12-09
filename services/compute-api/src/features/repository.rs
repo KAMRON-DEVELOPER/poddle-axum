@@ -407,20 +407,26 @@ impl CacheRepository {
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
-        // warn!("cpu_results: {:?}", cpu_results);
-        // warn!("memory_results: {:?}", memory_results);
+        warn!("cpu_results: {:?}", cpu_results);
+        warn!("memory_results: {:?}", memory_results);
 
-        // Helper to parse JSON. Handles Option<String> -> Vec<MetricPoint>
+        // Helper to parse JSON
         let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
             json_opt
                 .map(|json| {
-                    serde_json::from_str::<Vec<Vec<MetricPoint>>>(json)
-                        .ok()
-                        .and_then(|mut outer| outer.pop())
-                        .unwrap_or_default()
+                    serde_json::from_str::<Vec<MetricPoint>>(json).unwrap_or_else(|e| {
+                        warn!("Failed to parse metrics JSON: {} | Content: {}", e, json);
+                        vec![]
+                    })
                 })
                 .unwrap_or_default()
         };
+
+        // let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
+        //     json_opt
+        //         .and_then(|json| serde_json::from_str::<Vec<MetricPoint>>(json).ok())
+        //         .unwrap_or_default()
+        // };
 
         let deployment_metrics = (0..deployment_ids.len())
             .map(|i| {
@@ -433,6 +439,8 @@ impl CacheRepository {
                 }
             })
             .collect();
+
+        warn!("deployment_metrics: {:?}", deployment_metrics);
 
         Ok(deployment_metrics)
     }

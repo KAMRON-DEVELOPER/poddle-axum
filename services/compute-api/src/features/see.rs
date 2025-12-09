@@ -33,6 +33,7 @@ pub async fn stream_metrics(
     let stream = pubsub.into_on_message().map(move |msg| {
         // let channel = msg.get_channel_name();
         let payload: String = msg.get_payload().unwrap_or_default();
+        // info!("payload in pubsub: {}", payload);
 
         // Ok(Event::default().event(channel).data(payload))
         Ok(Event::default().event("metrics").data(payload))
