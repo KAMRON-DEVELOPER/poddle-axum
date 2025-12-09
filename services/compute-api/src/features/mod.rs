@@ -39,7 +39,7 @@ pub fn routes() -> Router<AppState> {
             get(websocket::ws_metrics),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/see",
+            "/api/v1/projects/{project_id}/metrics/see",
             get(see::stream_metrics),
         )
 }

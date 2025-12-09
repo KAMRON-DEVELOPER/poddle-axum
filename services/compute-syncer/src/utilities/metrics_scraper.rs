@@ -59,7 +59,7 @@ async fn scrape(
             ) 
             * on(pod, namespace) group_left(label_deployment_id)
             kube_pod_labels{label_managed_by="poddle"}
-        ) by (pod, namespace, label_deployment_id)
+        ) by (pod, namespace, label_deployment_id, label_project_id)
     "#;
 
     let memory_query = r#"
@@ -71,7 +71,7 @@ async fn scrape(
             }
             * on(pod, namespace) group_left(label_deployment_id)
             kube_pod_labels{label_managed_by="poddle"}
-        ) by (pod, namespace, label_deployment_id)
+        ) by (pod, namespace, label_deployment_id, label_project_id)
     "#;
 
     // Execute queries
