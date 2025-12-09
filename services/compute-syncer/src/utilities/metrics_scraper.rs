@@ -86,8 +86,8 @@ async fn scrape(
             AppError::InternalError(format!("Prometheus memory query failed: {}", e))
         })?;
 
-    info!("cpu_result: {:?}", cpu_result);
-    info!("memory_result: {:?}", memory_result);
+    // info!("cpu_result: {:?}", cpu_result);
+    // info!("memory_result: {:?}", memory_result);
 
     // Aggregate in Memory
     let mut aggregates: HashMap<String, AggregatedValue> = HashMap::new();
@@ -125,7 +125,7 @@ async fn scrape(
             ts: now,
             v: values.cpu,
         };
-        let mem_point = MetricPoint {
+        let memory_point = MetricPoint {
             ts: now,
             v: values.memory,
         };
@@ -144,14 +144,14 @@ async fn scrape(
 
         // Append new points to history arrays
         let _ = pipe.json_arr_append(&key, "$.cpuHistory", &cpu_point);
-        let _ = pipe.json_arr_append(&key, "$.memoryHistory", &mem_point);
+        let _ = pipe.json_arr_append(&key, "$.memoryHistory", &memory_point);
 
         let _ = pipe.json_arr_trim(&key, "$.cpuHistory", -history_limit, -1);
         let _ = pipe.json_arr_trim(&key, "$.memoryHistory", -history_limit, -1);
 
         let message = serde_json::json!({
-            "cpu": cpu_point,
-            "memory": mem_point
+            "cpuHistory": cpu_point,
+            "memoryHistory": memory_point
         });
         pipe.publish(pubsub_channel, message.to_string());
 
