@@ -1,5 +1,6 @@
 use chrono::Utc;
 use prometheus_http_query::Client as PrometheusClient;
+use serde_json::json;
 use shared::schemas::{DeploymentMetrics, MetricPoint};
 use shared::services::redis::Redis;
 use shared::utilities::cache_keys::CacheKeys;
@@ -12,7 +13,6 @@ use tracing::{error, info};
 
 #[derive(Default)]
 struct AggregatedValue {
-    deployment_id: String,
     cpu: f64,
     memory: f64,
 }
@@ -51,146 +51,148 @@ async fn scrape(
     let cpu_query = r#"
         sum(
             rate(
-                container_cpu_usage_seconds_total{
-                    container!="",
-                    container!="POD",
-                    namespace=~"user-.*"
-                }[5m]
-            ) 
-            * on(pod, namespace) group_left(label_deployment_id)
+                container_cpu_usage_seconds_total{container!="",container!="POD",namespace=~"user-.*"}[5m]
+            )
+            * on(pod, namespace) group_left(label_deployment_id, label_project_id)
             kube_pod_labels{label_managed_by="poddle"}
         ) by (pod, namespace, label_deployment_id, label_project_id)
     "#;
 
     let memory_query = r#"
         sum(
-            container_memory_working_set_bytes{
-                container!="",
-                container!="POD",
-                namespace=~"user-.*"
-            }
-            * on(pod, namespace) group_left(label_deployment_id)
+            container_memory_working_set_bytes{container!="",container!="POD",namespace=~"user-.*"}
+            * on(pod, namespace) group_left(label_deployment_id, label_project_id)
             kube_pod_labels{label_managed_by="poddle"}
         ) by (pod, namespace, label_deployment_id, label_project_id)
     "#;
 
     // Execute queries
-    let cpu_result = prometheus
-        .query(cpu_query)
-        .get()
-        .await
-        .map_err(|e| AppError::InternalError(format!("Prometheus CPU query failed: {}", e)))?;
-
-    let memory_result =
-        prometheus.query(memory_query).get().await.map_err(|e| {
-            AppError::InternalError(format!("Prometheus memory query failed: {}", e))
-        })?;
+    let (cpu_result, memory_result) = tokio::try_join!(
+        prometheus.query(cpu_query).get(),
+        prometheus.query(memory_query).get()
+    )
+    .map_err(|e| AppError::InternalError(format!("Prometheus query failed: {}", e)))?;
 
     // info!("cpu_result: {:?}", cpu_result);
     // info!("memory_result: {:?}", memory_result);
 
-    // Aggregation
-    let mut project_aggregates: HashMap<String, Vec<AggregatedValue>> = HashMap::new();
+    // Aggregate Data
+    // Structure: ProjectID -> DeploymentID -> Values
+    let mut project_map: HashMap<String, HashMap<String, AggregatedValue>> = HashMap::new();
     let now = Utc::now().timestamp();
 
-    // Parse CPU
-    if let prometheus_http_query::response::Data::Vector(cpu_vector) = cpu_result.data() {
-        for sample in cpu_vector {
-            if let Some(project_id) = sample.metric().get("label_project_id") {
-                let val = sample.sample().value() * 1000.0;
-                project_aggregates
-                    .entry(project_id)
-                    .or_default()
-                    .push(AggregatedValue {
-                        deployment_id,
-                        cpu,
-                        memory,
-                    });
-            }
-        }
-    }
+    // Helper closure to process vector results
+    let mut process_vector = |data: &prometheus_http_query::response::Data, is_cpu: bool| {
+        if let prometheus_http_query::response::Data::Vector(vec) = data {
+            for instant_vector in vec {
+                let metric = instant_vector.metric();
 
-    // Parse Memory
-    if let prometheus_http_query::response::Data::Vector(memory_vector) = memory_result.data() {
-        for sample in memory_vector {
-            if let Some(project_id) = sample.metric().get("label_project_id") {
-                let val = sample.sample().value();
-                aggregates.entry(project_id.clone()).or_default().memory += val;
+                // Safely extract labels
+                if let (Some(project_id), Some(deployment_id)) = (
+                    metric.get("label_project_id"),
+                    metric.get("label_deployment_id"),
+                ) {
+                    let value = instant_vector.sample().value();
+
+                    let dep_entry = project_map
+                        .entry(project_id.clone())
+                        .or_default()
+                        .entry(deployment_id.clone())
+                        .or_default();
+
+                    if is_cpu {
+                        // CPU is usually in cores, multiply by 1000 for millicores
+                        dep_entry.cpu += value * 1000.0;
+                    } else {
+                        // Memory is in bytes, convert to MB if needed, or keep bytes.
+                        // Frontend usually expects MB. Here we keep raw bytes or convert:
+                        dep_entry.memory += value / 1024.0 / 1024.0;
+                    }
+                }
             }
         }
-    }
+    };
+
+    process_vector(cpu_result.data(), true);
+    process_vector(memory_result.data(), false);
 
     // Pipeline to Redis
     let mut pipe = redis::pipe();
     let history_limit = config.history_points_to_keep as i64;
+    let mut total_deployments = 0;
 
-    for (project_id, deployments) in project_aggregates {
-        let channel = ChannelNames::project_metrics(&project_id);
+    for (project_id, deployment_map) in project_map {
+        let mut project_payloads = Vec::new();
 
-        let payload = serde_json::json!({
-            "type": "metrics_update",
-            "timestamp": now,
-            "deployments": deployments.iter().map(|d| {
-                json!({
-                    "id": d.deployment_id,
-                    "cpu": d.cpu,
-                    "memory": d.memory
-                })
-            }).collect::<Vec<_>>()
-        });
+        for (deployment_id, aggregated_value) in deployment_map {
+            total_deployments += 1;
 
-        pipe.publish(channel, payload.to_string());
+            // Prepare Data Points
+            let cpu_point = MetricPoint {
+                ts: now,
+                v: aggregated_value.cpu,
+            };
+            let memory_point = MetricPoint {
+                ts: now,
+                v: aggregated_value.memory,
+            };
+
+            // Add to Project Payload
+            project_payloads.push(json!({
+                "id": deployment_id,
+                "cpu": aggregated_value.cpu,
+                "memory": aggregated_value.memory
+            }));
+
+            // Update Individual Deployment History (JSON.ARRAPPEND)
+            let key = CacheKeys::deployment_metrics(&deployment_id);
+
+            // Ensure key exists
+            let initial = DeploymentMetrics {
+                cpu_history: vec![],
+                memory_history: vec![],
+            };
+            pipe.cmd("JSON.SET")
+                .arg(&key)
+                .arg("$")
+                .arg(&initial)
+                .arg("NX")
+                .ignore();
+
+            // Append new points
+            let _ = pipe.json_arr_append(&key, "$.cpuHistory", &cpu_point);
+            let _ = pipe.json_arr_append(&key, "$.memoryHistory", &memory_point);
+
+            // Trim history
+            let _ = pipe.json_arr_trim(&key, "$.cpuHistory", -history_limit, -1);
+            let _ = pipe.json_arr_trim(&key, "$.memoryHistory", -history_limit, -1);
+
+            // Set TTL
+            let ttl = config.scrape_interval_seconds * config.history_points_to_keep;
+            pipe.expire(&key, ttl.try_into().unwrap()).ignore();
+        }
+
+        // Publish Project Batch Message
+        if !project_payloads.is_empty() {
+            let channel = ChannelNames::project_metrics(&project_id);
+            let message = json!({
+                "type": "metrics_update",
+                "timestamp": now,
+                "deployments": project_payloads
+            });
+            pipe.publish(channel, message.to_string()).ignore();
+        }
     }
 
-    for (deployment_id, values) in &aggregates {
-        let key = CacheKeys::deployment_metrics(deployment_id);
-        let pubsub_channel = ChannelNames::deployment_metrics(deployment_id);
+    // Execute Pipeline
+    if total_deployments > 0 {
+        let _: () = pipe
+            .query_async(&mut redis.connection)
+            .await
+            .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
-        let cpu_point = MetricPoint {
-            ts: now,
-            v: values.cpu,
-        };
-        let memory_point = MetricPoint {
-            ts: now,
-            v: values.memory,
-        };
-
-        // Initialize key if missing
-        // If key doesn't exist, create empty structure
-        let initial = DeploymentMetrics {
-            cpu_history: vec![],
-            memory_history: vec![],
-        };
-        pipe.cmd("JSON.SET")
-            .arg(&key)
-            .arg("$")
-            .arg(&initial)
-            .arg("NX");
-
-        // Append new points to history arrays
-        let _ = pipe.json_arr_append(&key, "$.cpuHistory", &cpu_point);
-        let _ = pipe.json_arr_append(&key, "$.memoryHistory", &memory_point);
-
-        let _ = pipe.json_arr_trim(&key, "$.cpuHistory", -history_limit, -1);
-        let _ = pipe.json_arr_trim(&key, "$.memoryHistory", -history_limit, -1);
-
-        let message = serde_json::json!({
-            "cpuHistory": cpu_point,
-            "memoryHistory": memory_point
-        });
-        pipe.publish(pubsub_channel, message.to_string());
-
-        let ttl = config.scrape_interval_seconds * config.history_points_to_keep;
-        pipe.expire(&key, ttl.try_into().unwrap());
+        info!("✅ Updated metrics for {} deployments", total_deployments);
     }
-
-    // Execute updates in ONE network round-trip
-    let _: () = pipe.query_async(&mut redis.connection).await?;
-
-    info!(
-        "✅ Aggregated and cached metrics for {} deployments",
-        aggregates.len()
-    );
 
     Ok(())
 }

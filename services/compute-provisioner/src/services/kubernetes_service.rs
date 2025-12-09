@@ -90,6 +90,7 @@ impl KubernetesService {
 
     pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
+        let project_id = message.project_id;
         let deployment_id = message.deployment_id;
         info!("🚀 Creating K8s resources for deployment {}", deployment_id);
 
@@ -136,6 +137,7 @@ impl KubernetesService {
         self.create_k8s_resources(
             &namespace,
             &deployment_name,
+            &project_id,
             &deployment_id,
             &message.image,
             message.port,
@@ -171,6 +173,7 @@ impl KubernetesService {
         &self,
         namespace: &str,
         name: &str,
+        project_id: &Uuid,
         deployment_id: &Uuid,
         image: &str,
         container_port: i32,
@@ -182,6 +185,7 @@ impl KubernetesService {
     ) -> Result<(), AppError> {
         let mut labels = BTreeMap::new();
         labels.insert("app".to_string(), name.to_string());
+        labels.insert("project-id".to_string(), project_id.to_string());
         labels.insert("deployment-id".to_string(), deployment_id.to_string());
         labels.insert("managed-by".to_string(), "poddle".to_string());
 
