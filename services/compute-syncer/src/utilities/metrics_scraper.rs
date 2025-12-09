@@ -1,7 +1,7 @@
 use chrono::Utc;
 use prometheus_http_query::Client as PrometheusClient;
 use serde_json::json;
-use shared::schemas::{DeploymentMetrics, MetricPoint};
+use shared::schemas::{DeploymentMetrics, MetricSnapshot};
 use shared::services::redis::Redis;
 use shared::utilities::cache_keys::CacheKeys;
 use shared::utilities::channel_names::ChannelNames;
@@ -10,12 +10,6 @@ use shared::utilities::errors::AppError;
 use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{error, info};
-
-#[derive(Default)]
-struct AggregatedValue {
-    cpu: f64,
-    memory: f64,
-}
 
 pub async fn metrics_scraper(
     config: Config,
@@ -78,7 +72,7 @@ async fn scrape(
 
     // Aggregate Data
     // Structure: ProjectID -> DeploymentID -> Values
-    let mut project_map: HashMap<String, HashMap<String, AggregatedValue>> = HashMap::new();
+    let mut project_map: HashMap<String, HashMap<String, MetricSnapshot>> = HashMap::new();
     let now = Utc::now().timestamp();
 
     // Helper closure to process vector results
@@ -94,7 +88,7 @@ async fn scrape(
                 ) {
                     let value = instant_vector.sample().value();
 
-                    let dep_entry = project_map
+                    let deployment_metric_point_entry = project_map
                         .entry(project_id.clone())
                         .or_default()
                         .entry(deployment_id.clone())
@@ -102,11 +96,11 @@ async fn scrape(
 
                     if is_cpu {
                         // CPU is usually in cores, multiply by 1000 for millicores
-                        dep_entry.cpu += value * 1000.0;
+                        deployment_metric_point_entry.cpu += value * 1000.0;
                     } else {
                         // Memory is in bytes, convert to MB if needed, or keep bytes.
                         // Frontend usually expects MB. Here we keep raw bytes or convert:
-                        dep_entry.memory += value / 1024.0 / 1024.0;
+                        deployment_metric_point_entry.memory += value / 1024.0 / 1024.0;
                     }
                 }
             }
@@ -127,16 +121,6 @@ async fn scrape(
         for (deployment_id, aggregated_value) in deployment_map {
             total_deployments += 1;
 
-            // Prepare Data Points
-            let cpu_point = MetricPoint {
-                ts: now,
-                v: aggregated_value.cpu,
-            };
-            let memory_point = MetricPoint {
-                ts: now,
-                v: aggregated_value.memory,
-            };
-
             // Add to Project Payload
             project_payloads.push(json!({
                 "id": deployment_id,
@@ -144,14 +128,10 @@ async fn scrape(
                 "memory": aggregated_value.memory
             }));
 
-            // Update Individual Deployment History (JSON.ARRAPPEND)
             let key = CacheKeys::deployment_metrics(&deployment_id);
 
             // Ensure key exists
-            let initial = DeploymentMetrics {
-                cpu_history: vec![],
-                memory_history: vec![],
-            };
+            let initial = DeploymentMetrics { history: vec![] };
             pipe.cmd("JSON.SET")
                 .arg(&key)
                 .arg("$")
@@ -159,15 +139,12 @@ async fn scrape(
                 .arg("NX")
                 .ignore();
 
-            // Append new points
-            let _ = pipe.json_arr_append(&key, "$.cpuHistory", &cpu_point);
-            let _ = pipe.json_arr_append(&key, "$.memoryHistory", &memory_point);
-
-            // Trim history
-            let _ = pipe.json_arr_trim(&key, "$.cpuHistory", -history_limit, -1);
-            let _ = pipe.json_arr_trim(&key, "$.memoryHistory", -history_limit, -1);
-
-            // Set TTL
+            let metric_snapshot = MetricSnapshot {
+                ts: now,
+                ..aggregated_value
+            };
+            let _ = pipe.json_arr_append(&key, "$.history", &metric_snapshot);
+            let _ = pipe.json_arr_trim(&key, "$.history", -history_limit, -1);
             let ttl = config.scrape_interval_seconds * config.history_points_to_keep;
             pipe.expire(&key, ttl.try_into().unwrap()).ignore();
         }

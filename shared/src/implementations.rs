@@ -66,8 +66,7 @@ impl DeploymentResponse {
             created_at: d.created_at,
             updated_at: d.updated_at,
 
-            cpu_history: dm.cpu_history,
-            memory_history: dm.memory_history,
+            history: dm.history,
         }
     }
 }
@@ -95,8 +94,7 @@ impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
             created_at: d.created_at,
             updated_at: d.updated_at,
 
-            cpu_history: dm.cpu_history,
-            memory_history: dm.memory_history,
+            history: dm.history,
         }
     }
 }

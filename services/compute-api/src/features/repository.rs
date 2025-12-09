@@ -3,7 +3,8 @@ use redis::{aio::MultiplexedConnection, pipe};
 use shared::{
     models::ResourceSpec,
     schemas::{
-        CreateProjectRequest, DeploymentMetrics, MetricPoint, Pagination, UpdateDeploymentRequest,
+        CreateProjectRequest, DeploymentMetrics, MetricSnapshot, Pagination,
+        UpdateDeploymentRequest,
     },
     utilities::{cache_keys::CacheKeys, errors::AppError},
 };
@@ -394,48 +395,36 @@ impl CacheRepository {
         }
 
         let keys = CacheKeys::deployments_metrics(&deployment_ids);
-        let cpu_path = format!("$.cpuHistory[-{}:]", points_count);
-        let mem_path = format!("$.memoryHistory[-{}:]", points_count);
+        let path = format!("$.history[-{}:]", points_count);
 
         let mut p = pipe();
-        let _ = p.json_get(&keys, &cpu_path); // JSON.MGET for CPU
-        let _ = p.json_get(&keys, &mem_path); // JSON.MGET for Memory 
+        // Runs JSON.GET if key is singular, JSON.MGET if there are multiple keys
+        let _ = p.json_get(&keys, &path);
 
         // We expect two results from the pipeline: one Vec for CPU, one Vec for Memory
-        let (cpu_results, memory_results): (Vec<Option<String>>, Vec<Option<String>>) = p
+        let results: Vec<Option<String>> = p
             .query_async(connection)
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
-        // Helper to parse JSON
-        let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
-            json_opt
-                .map(|json| {
-                    serde_json::from_str::<Vec<MetricPoint>>(json).unwrap_or_else(|e| {
+        // Enforce that we always output exactly deployment_ids.len() results
+        let mut deployment_metrics = Vec::with_capacity(deployment_ids.len());
+
+        for i in 0..deployment_ids.len() {
+            let json_opt = results.get(i).and_then(|v| v.as_ref());
+
+            let history = match json_opt {
+                Some(json) => {
+                    serde_json::from_str::<Vec<MetricSnapshot>>(json).unwrap_or_else(|e| {
                         warn!("Failed to parse metrics JSON: {} | Content: {}", e, json);
                         vec![]
                     })
-                })
-                .unwrap_or_default()
-        };
-
-        // let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
-        //     json_opt
-        //         .and_then(|json| serde_json::from_str::<Vec<MetricPoint>>(json).ok())
-        //         .unwrap_or_default()
-        // };
-
-        let deployment_metrics = (0..deployment_ids.len())
-            .map(|i| {
-                let cpu_val = cpu_results.get(i).and_then(|v| v.as_ref());
-                let mem_val = memory_results.get(i).and_then(|v| v.as_ref());
-
-                DeploymentMetrics {
-                    cpu_history: parse_metrics(cpu_val),
-                    memory_history: parse_metrics(mem_val),
                 }
-            })
-            .collect();
+                None => vec![],
+            };
+
+            deployment_metrics.push(DeploymentMetrics { history });
+        }
 
         Ok(deployment_metrics)
     }

@@ -151,8 +151,7 @@ pub struct DeploymentResponse {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
-    pub cpu_history: Vec<MetricPoint>,
-    pub memory_history: Vec<MetricPoint>,
+    pub history: Vec<MetricSnapshot>,
 }
 
 #[derive(Serialize, Debug)]
@@ -234,10 +233,11 @@ pub enum PodPhase {
     Unknown,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct MetricPoint {
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+pub struct MetricSnapshot {
     pub ts: i64,
-    pub v: f64,
+    pub cpu: f64,
+    pub memory: f64,
 }
 
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
@@ -246,10 +246,7 @@ pub struct PodMetrics {
     pub name: String,
     pub phase: PodPhase,
     pub restarts: u32,
-
-    pub cpu_history: Vec<MetricPoint>,
-    pub memory_history: Vec<MetricPoint>,
-
+    pub history: Vec<MetricSnapshot>,
     pub started_at: Option<i64>,
 }
 
@@ -261,7 +258,5 @@ pub struct PodMetrics {
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentMetrics {
     #[serde(default)]
-    pub cpu_history: Vec<MetricPoint>,
-    #[serde(default)]
-    pub memory_history: Vec<MetricPoint>,
+    pub history: Vec<MetricSnapshot>,
 }
