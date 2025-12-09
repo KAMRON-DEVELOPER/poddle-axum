@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{error, info};
 
-// Helper struct for aggregation
 #[derive(Default)]
 struct AggregatedValue {
+    deployment_id: String,
     cpu: f64,
     memory: f64,
 }
@@ -89,26 +89,33 @@ async fn scrape(
     // info!("cpu_result: {:?}", cpu_result);
     // info!("memory_result: {:?}", memory_result);
 
-    // Aggregate in Memory
-    let mut aggregates: HashMap<String, AggregatedValue> = HashMap::new();
+    // Aggregation
+    let mut project_aggregates: HashMap<String, Vec<AggregatedValue>> = HashMap::new();
     let now = Utc::now().timestamp();
 
     // Parse CPU
-    if let prometheus_http_query::response::Data::Vector(cpu_vec) = cpu_result.data() {
-        for sample in cpu_vec {
-            if let Some(dep_id) = sample.metric().get("label_deployment_id") {
+    if let prometheus_http_query::response::Data::Vector(cpu_vector) = cpu_result.data() {
+        for sample in cpu_vector {
+            if let Some(project_id) = sample.metric().get("label_project_id") {
                 let val = sample.sample().value() * 1000.0;
-                aggregates.entry(dep_id.clone()).or_default().cpu += val;
+                project_aggregates
+                    .entry(project_id)
+                    .or_default()
+                    .push(AggregatedValue {
+                        deployment_id,
+                        cpu,
+                        memory,
+                    });
             }
         }
     }
 
     // Parse Memory
-    if let prometheus_http_query::response::Data::Vector(mem_vec) = memory_result.data() {
-        for sample in mem_vec {
-            if let Some(dep_id) = sample.metric().get("label_deployment_id") {
-                let val = sample.sample().value(); // Bytes
-                aggregates.entry(dep_id.clone()).or_default().memory += val;
+    if let prometheus_http_query::response::Data::Vector(memory_vector) = memory_result.data() {
+        for sample in memory_vector {
+            if let Some(project_id) = sample.metric().get("label_project_id") {
+                let val = sample.sample().value();
+                aggregates.entry(project_id.clone()).or_default().memory += val;
             }
         }
     }
@@ -116,6 +123,24 @@ async fn scrape(
     // Pipeline to Redis
     let mut pipe = redis::pipe();
     let history_limit = config.history_points_to_keep as i64;
+
+    for (project_id, deployments) in project_aggregates {
+        let channel = ChannelNames::project_metrics(&project_id);
+
+        let payload = serde_json::json!({
+            "type": "metrics_update",
+            "timestamp": now,
+            "deployments": deployments.iter().map(|d| {
+                json!({
+                    "id": d.deployment_id,
+                    "cpu": d.cpu,
+                    "memory": d.memory
+                })
+            }).collect::<Vec<_>>()
+        });
+
+        pipe.publish(channel, payload.to_string());
+    }
 
     for (deployment_id, values) in &aggregates {
         let key = CacheKeys::deployment_metrics(deployment_id);
