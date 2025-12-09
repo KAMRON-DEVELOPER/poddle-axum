@@ -9,7 +9,6 @@ use shared::{
     utilities::{cache_keys::CacheKeys, errors::AppError},
 };
 use sqlx::{PgPool, Postgres, Transaction};
-use tracing::warn;
 use uuid::Uuid;
 
 use shared::{
