@@ -407,24 +407,36 @@ impl CacheRepository {
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
+        let deployment_metrics = (0..deployment_ids.len())
+            .map(|i| {
+                let json_opt = results.get(i).and_then(|v| v.as_ref());
+
+                let history = json_opt
+                    .and_then(|json| serde_json::from_str::<Vec<MetricSnapshot>>(json).ok())
+                    .unwrap_or_default();
+
+                DeploymentMetrics { history }
+            })
+            .collect();
+
         // Enforce that we always output exactly deployment_ids.len() results
-        let mut deployment_metrics = Vec::with_capacity(deployment_ids.len());
+        // let mut deployment_metrics = Vec::with_capacity(deployment_ids.len());
 
-        for i in 0..deployment_ids.len() {
-            let json_opt = results.get(i).and_then(|v| v.as_ref());
+        // for i in 0..deployment_ids.len() {
+        //     let json_opt = results.get(i).and_then(|v| v.as_ref());
 
-            let history = match json_opt {
-                Some(json) => {
-                    serde_json::from_str::<Vec<MetricSnapshot>>(json).unwrap_or_else(|e| {
-                        warn!("Failed to parse metrics JSON: {} | Content: {}", e, json);
-                        vec![]
-                    })
-                }
-                None => vec![],
-            };
+        //     let history = match json_opt {
+        //         Some(json) => {
+        //             serde_json::from_str::<Vec<MetricSnapshot>>(json).unwrap_or_else(|e| {
+        //                 warn!("Failed to parse metrics JSON: {} | Content: {}", e, json);
+        //                 vec![]
+        //             })
+        //         }
+        //         None => vec![],
+        //     };
 
-            deployment_metrics.push(DeploymentMetrics { history });
-        }
+        //     deployment_metrics.push(DeploymentMetrics { history });
+        // }
 
         Ok(deployment_metrics)
     }
