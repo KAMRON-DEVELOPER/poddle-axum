@@ -407,9 +407,6 @@ impl CacheRepository {
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
-        warn!("cpu_results: {:?}", cpu_results);
-        warn!("memory_results: {:?}", memory_results);
-
         // Helper to parse JSON
         let parse_metrics = |json_opt: Option<&String>| -> Vec<MetricPoint> {
             json_opt
@@ -439,8 +436,6 @@ impl CacheRepository {
                 }
             })
             .collect();
-
-        warn!("deployment_metrics: {:?}", deployment_metrics);
 
         Ok(deployment_metrics)
     }

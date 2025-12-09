@@ -144,9 +144,7 @@ pub async fn get_deployments(
     // }
 
     let deployment_ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
-    info!("deployment_ids: Vec<String> is {:?}", deployment_ids);
     let deployment_ids: Vec<&str> = deployment_ids.iter().map(|s| s.as_str()).collect();
-    info!("deployment_ids: Vec<&str> is {:?}", deployment_ids);
     let deployment_metrics = CacheRepository::get_deployment_metrics(
         points_count,
         deployment_ids,
@@ -154,15 +152,11 @@ pub async fn get_deployments(
     )
     .await?;
 
-    info!("deployment_metrics: {:?}", deployment_metrics);
-
     let data: Vec<DeploymentResponse> = deployments
         .into_iter()
         .zip(deployment_metrics.into_iter())
         .map(|pair| pair.into())
         .collect();
-
-    info!("data: {:?}", data);
 
     Ok(Json(ListResponse { data, total }))
 }
