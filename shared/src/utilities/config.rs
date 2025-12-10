@@ -26,9 +26,8 @@ pub struct Config {
 
     pub label_selector: String,
     pub scrape_interval_seconds: u64,
-    pub history_points_to_keep: u64,
+    pub metric_snapshots_to_keep: u64,
     pub cache_ttl_seconds: u64,
-    pub prometheus_window: String,
 
     pub vault_address: String,
     pub vault_auth_mount: String,
@@ -129,22 +128,15 @@ impl Config {
             Some(15),
         )
         .await?;
-        let history_points_to_keep = get_config_value(
-            "HISTORY_POINTS_TO_KEEP",
-            Some("HISTORY_POINTS_TO_KEEP"),
+        let metric_snapshots_to_keep = get_config_value(
+            "METRIC_SNAPSHOTS_TO_KEEP",
+            Some("METRIC_SNAPSHOTS_TO_KEEP"),
             None,
-            Some(60),
+            Some(240),
         )
         .await?;
         let cache_ttl_seconds =
             get_config_value("CACHE_TTL_SECS", Some("CACHE_TTL_SECONDS"), None, Some(90)).await?;
-        let prometheus_window = get_config_value(
-            "PROMETHEUS_WINDOW",
-            Some("PROMETHEUS_WINDOW"),
-            None,
-            Some("5m".to_string()),
-        )
-        .await?;
 
         let vault_address = get_config_value(
             "VAULT_ADDR",
@@ -395,9 +387,8 @@ impl Config {
             k8s_sa_token,
             label_selector,
             scrape_interval_seconds,
-            history_points_to_keep,
+            metric_snapshots_to_keep,
             cache_ttl_seconds,
-            prometheus_window,
             vault_address,
             vault_auth_mount,
             vault_auth_role,

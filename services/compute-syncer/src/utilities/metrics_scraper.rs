@@ -18,8 +18,8 @@ pub async fn metrics_scraper(
 ) -> Result<(), AppError> {
     info!("📈 Starting Prometheus metrics scraper");
     info!(
-        "⚙️  Scrape interval: {}s, History points: {}",
-        config.scrape_interval_seconds, config.history_points_to_keep
+        "⚙️  Scrape interval: {}s, Snapshot to keep: {}",
+        config.scrape_interval_seconds, config.metric_snapshots_to_keep
     );
 
     let mut interval = tokio::time::interval(Duration::from_secs(config.scrape_interval_seconds));
@@ -112,7 +112,7 @@ async fn scrape(
 
     // Pipeline to Redis
     let mut pipe = redis::pipe();
-    let history_limit = config.history_points_to_keep as i64;
+    let metric_snapshots_to_keep = config.metric_snapshots_to_keep as i64;
     let mut total_deployments = 0;
 
     for (project_id, deployment_map) in project_map {
@@ -144,8 +144,8 @@ async fn scrape(
                 ..aggregated_value
             };
             let _ = pipe.json_arr_append(&key, "$.history", &metric_snapshot);
-            let _ = pipe.json_arr_trim(&key, "$.history", -history_limit, -1);
-            let ttl = config.scrape_interval_seconds * config.history_points_to_keep;
+            let _ = pipe.json_arr_trim(&key, "$.history", -metric_snapshots_to_keep, -1);
+            let ttl = config.scrape_interval_seconds * config.metric_snapshots_to_keep;
             pipe.expire(&key, ttl.try_into().unwrap()).ignore();
         }
 
