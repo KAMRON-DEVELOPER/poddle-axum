@@ -404,55 +404,33 @@ impl CacheRepository {
         // p.cmd("JSON.MGET").arg(&keys).arg(&path);
         // This makes result shape predictable.
 
-        // We expect two results from the pipeline: one Vec for CPU, one Vec for Memory
+        // We expect `results` to have length 1 (because we sent 1 command: JSON.MGET)
         let results: Vec<Option<Vec<String>>> = p
             .query_async(connection)
             .await
             .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
 
+        // Extract MGET Results safely
+        // Take the first result, flatten the Option, and default to empty Vec on failure
+        let mget_results = results.into_iter().next().flatten().unwrap_or_default();
+
+        // Map to Domain Objects with Length Guarantee
+        // We iterate over the INPUT length (deployment_ids), not the Redis result length.
+        // This ensures that if Redis returns fewer items or fails, we pad with empty metrics
+        // rather than dropping the deployment from the UI.
         let deployment_metrics = (0..deployment_ids.len())
             .map(|i| {
-                let history = results
+                // Try to get the JSON string at index `i`
+                let history = mget_results
                     .get(i)
-                    .and_then(|opt| opt.as_ref())
-                    .and_then(|arr| arr.get(0))
-                    .and_then(|json| serde_json::from_str::<Vec<MetricSnapshot>>(json).ok())
+                    // If found, try to parse it
+                    .and_then(|json_str| serde_json::from_str::<Vec<MetricSnapshot>>(json_str).ok())
+                    // If index missing OR parsing failed, return empty history
                     .unwrap_or_default();
 
                 DeploymentMetrics { history }
             })
             .collect();
-
-        // let deployment_metrics = (0..deployment_ids.len())
-        //     .map(|i| {
-        //         let json_opt = results.get(i).and_then(|v| v.as_ref());
-
-        //         let history = json_opt
-        //             .and_then(|json| serde_json::from_str::<Vec<MetricSnapshot>>(json).ok())
-        //             .unwrap_or_default();
-
-        //         DeploymentMetrics { history }
-        //     })
-        //     .collect();
-
-        // Enforce that we always output exactly deployment_ids.len() results
-        // let mut deployment_metrics = Vec::with_capacity(deployment_ids.len());
-
-        // for i in 0..deployment_ids.len() {
-        //     let json_opt = results.get(i).and_then(|v| v.as_ref());
-
-        //     let history = match json_opt {
-        //         Some(json) => {
-        //             serde_json::from_str::<Vec<MetricSnapshot>>(json).unwrap_or_else(|e| {
-        //                 warn!("Failed to parse metrics JSON: {} | Content: {}", e, json);
-        //                 vec![]
-        //             })
-        //         }
-        //         None => vec![],
-        //     };
-
-        //     deployment_metrics.push(DeploymentMetrics { history });
-        // }
 
         Ok(deployment_metrics)
     }
