@@ -3,7 +3,7 @@ pub mod utilities;
 
 use std::net::SocketAddr;
 
-use crate::services::{consumer_service::start_rabbitmq_consumer, vault_service::VaultService};
+use crate::services::{consumer::start_consumer, vault_service::VaultService};
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
     services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
@@ -75,9 +75,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut set = JoinSet::new();
 
     // Spawn background tasks
-    set.spawn(start_rabbitmq_consumer(
-        amqp, config, database, kubernetes, vault,
-    ));
+    set.spawn(start_consumer(amqp, config, database, kubernetes, vault));
     set.spawn(start_health_server());
 
     info!("✅ All background tasks started");

@@ -29,6 +29,7 @@ use tracing::error;
 use tracing::info;
 use uuid::Uuid;
 
+#[derive(Clone)]
 pub struct KubernetesService {
     pub client: Client,
     pub pool: PgPool,

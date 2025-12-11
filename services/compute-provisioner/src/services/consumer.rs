@@ -17,7 +17,7 @@ use tracing::{error, info, warn};
 
 use crate::services::{kubernetes_service::KubernetesService, vault_service::VaultService};
 
-pub async fn start_rabbitmq_consumer(
+pub async fn start_consumer(
     amqp: Amqp,
     config: Config,
     database: Database,
@@ -25,6 +25,14 @@ pub async fn start_rabbitmq_consumer(
     _vault_service: VaultService,
 ) -> Result<(), AppError> {
     let channel = amqp.channel().await?;
+
+    let kubernetes_service = KubernetesService {
+        client: kubernetes.client.clone(),
+        pool: database.pool.clone(),
+        base_domain: config.base_domain.clone(),
+        enable_tls: config.enable_tls,
+        cluster_issuer: config.cluster_issuer.clone(),
+    };
 
     // Declare exchange
     channel
@@ -104,23 +112,17 @@ pub async fn start_rabbitmq_consumer(
     let mut set = JoinSet::new();
 
     set.spawn(handle_create_messages(
-        config.clone(),
-        database.clone(),
-        kubernetes.clone(),
+        kubernetes_service.clone(),
         create_consumer,
     ));
 
     set.spawn(handle_update_messages(
-        config.clone(),
-        database.clone(),
-        kubernetes.clone(),
+        kubernetes_service.clone(),
         update_consumer,
     ));
 
     set.spawn(handle_delete_messages(
-        config.clone(),
-        database.clone(),
-        kubernetes.clone(),
+        kubernetes_service.clone(),
         delete_consumer,
     ));
 
@@ -141,52 +143,10 @@ pub async fn start_rabbitmq_consumer(
     // Clean up the rest
     set.shutdown().await;
 
-    // Spawn task for provision consumer
-    // let create_handle = tokio::spawn(handle_create_messages(
-    //     config.clone(),
-    //     database.clone(),
-    //     kubernetes.clone(),
-    //     create_consumer,
-    // ));
-
-    // Spawn task for update consumer
-    // let update_handle = tokio::spawn(handle_update_messages(
-    //     config.clone(),
-    //     database.clone(),
-    //     kubernetes.clone(),
-    //     update_consumer,
-    // ));
-
-    // Spawn task for delete consumer
-    // let delete_handle = tokio::spawn(handle_delete_messages(
-    //     config.clone(),
-    //     database.clone(),
-    //     kubernetes.clone(),
-    //     delete_consumer,
-    // ));
-
-    // Wait for the consumers. If any of them crash or finish, this block will resolve.
-    // tokio::select! {
-    //     _ = create_handle => {
-    //         error!("Create consumer task finished unexpectedly");
-    //     }
-    //     _ = update_handle => {
-    //         error!("Update consumer task finished unexpectedly");
-    //     }
-    //     _ = delete_handle => {
-    //         error!("Delete consumer task finished unexpectedly");
-    //     }
-    // }
-
     Ok(())
 }
 
-async fn handle_create_messages(
-    config: Config,
-    database: Database,
-    kubernetes: Kubernetes,
-    mut consumer: Consumer,
-) {
+async fn handle_create_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("🎯 Create consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -195,18 +155,19 @@ async fn handle_create_messages(
                 // Try to deserialize into structured message
                 match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
+                        info!("🎯 Create deployment");
+                        info!("    name: {:?}", message.name);
+                        info!("    image: {:?}", message.image);
+                        info!("    port: {:?}", message.port);
+                        info!("    resources: {:?}", message.resources);
+                        info!("    subdomain: {:?}", message.subdomain);
+                        info!("    replicas: {:?}", message.replicas);
+                        info!("    labels: {:?}", message.labels);
+                        info!("    secrets: {:?}", message.secrets);
                         info!(
-                            "📦 Received create deployment message: {} (image: {}, replicas: {})",
-                            message.deployment_id, message.image, message.replicas
+                            "    environment_variables: {:?}\n",
+                            message.environment_variables
                         );
-
-                        let kubernetes_service = KubernetesService {
-                            client: kubernetes.client.clone(),
-                            pool: database.pool.clone(),
-                            base_domain: config.base_domain.clone(),
-                            enable_tls: config.enable_tls,
-                            cluster_issuer: config.cluster_issuer.clone(),
-                        };
 
                         // Now we have ALL the data we need without a database query!
                         match kubernetes_service.create(message.clone()).await {
@@ -258,12 +219,7 @@ async fn handle_create_messages(
     }
 }
 
-async fn handle_update_messages(
-    config: Config,
-    database: Database,
-    kubernetes: Kubernetes,
-    mut consumer: Consumer,
-) {
+async fn handle_update_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("📏 update consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -271,18 +227,19 @@ async fn handle_update_messages(
             Ok(delivery) => {
                 match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
+                        info!("📏 Updating deployment");
+                        info!("    name: {:?}", message.name);
+                        info!("    image: {:?}", message.image);
+                        info!("    port: {:?}", message.port);
+                        info!("    resources: {:?}", message.resources);
+                        info!("    subdomain: {:?}", message.subdomain);
+                        info!("    replicas: {:?}", message.replicas);
+                        info!("    labels: {:?}", message.labels);
+                        info!("    secrets: {:?}", message.secrets);
                         info!(
-                            "📏 Updating deployment {:?} (replicas: {:?})",
-                            message.deployment_id, message.replicas
+                            "    environment_variables: {:?}\n",
+                            message.environment_variables
                         );
-
-                        let kubernetes_service = KubernetesService {
-                            client: kubernetes.client.clone(),
-                            pool: database.pool.clone(),
-                            base_domain: config.base_domain.clone(),
-                            enable_tls: config.enable_tls,
-                            cluster_issuer: config.cluster_issuer.clone(),
-                        };
 
                         match kubernetes_service.update(message.clone()).await {
                             Ok(_) => {
@@ -322,12 +279,7 @@ async fn handle_update_messages(
     }
 }
 
-async fn handle_delete_messages(
-    config: Config,
-    database: Database,
-    kubernetes: Kubernetes,
-    mut consumer: Consumer,
-) {
+async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("🗑️ Delete consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -336,14 +288,6 @@ async fn handle_delete_messages(
                 match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
                         info!("🗑️ Deleting deployment {}", message.deployment_id);
-
-                        let kubernetes_service = KubernetesService {
-                            client: kubernetes.client.clone(),
-                            pool: database.pool.clone(),
-                            base_domain: config.base_domain.clone(),
-                            enable_tls: config.enable_tls,
-                            cluster_issuer: config.cluster_issuer.clone(),
-                        };
 
                         match kubernetes_service.delete(message.clone()).await {
                             Ok(_) => {

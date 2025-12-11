@@ -197,10 +197,10 @@ impl DeploymentRepository {
     }
 
     pub async fn create(
-        tx: &mut Transaction<'_, Postgres>,
         user_id: Uuid,
         project_id: Uuid,
         req: CreateDeploymentRequest,
+        tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
         let namespace = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
         let deployment_name = format!(
@@ -245,9 +245,9 @@ impl DeploymentRepository {
     }
 
     pub async fn update_status(
-        pool: &PgPool,
         deployment_id: Uuid,
         status: DeploymentStatus,
+        pool: &PgPool,
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -265,10 +265,10 @@ impl DeploymentRepository {
     }
 
     pub async fn update(
-        pool: &PgPool,
-        deployment_id: Uuid,
         user_id: Uuid,
+        deployment_id: Uuid,
         req: UpdateDeploymentRequest,
+        tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
         let resources = req
             .resources
@@ -312,14 +312,14 @@ impl DeploymentRepository {
         .bind(env_vars)
         .bind(&req.subdomain)
         .bind(&req.custom_domain)
-        .fetch_one(pool)
+        .fetch_one(&mut **tx)
         .await
     }
 
     pub async fn delete(
-        pool: &PgPool,
-        deployment_id: Uuid,
         user_id: Uuid,
+        deployment_id: Uuid,
+        tx: &mut Transaction<'_, Postgres>,
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
@@ -330,7 +330,7 @@ impl DeploymentRepository {
         )
         .bind(deployment_id)
         .bind(user_id)
-        .execute(pool)
+        .execute(&mut **tx)
         .await?;
 
         Ok(())

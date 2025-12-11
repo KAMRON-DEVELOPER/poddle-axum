@@ -194,7 +194,7 @@ pub async fn create_deployment(
 
     // Create deployment record
     let deployment =
-        DeploymentRepository::create(&mut tx, user_id, project_id, req.clone()).await?;
+        DeploymentRepository::create(user_id, project_id, req.clone(), &mut tx).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
@@ -277,17 +277,20 @@ pub async fn create_deployment(
 pub async fn update_deployment(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
-    State(database): State<Database>,
     State(amqp): State<Amqp>,
+    State(database): State<Database>,
     Json(req): Json<UpdateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
     req.validate()?;
 
     let user_id: Uuid = claims.sub;
 
+    // Start database transaction
+    let mut tx = database.pool.begin().await?;
+
     // Update deployment in database
     let deployment =
-        DeploymentRepository::update(&database.pool, deployment_id, user_id, req.clone()).await?;
+        DeploymentRepository::update(user_id, deployment_id, req.clone(), &mut tx).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
@@ -311,7 +314,10 @@ pub async fn update_deployment(
         .await?
         .await?;
 
-    info!("Published scaling message for deployment {}", deployment_id);
+    info!("Published deployment update message for {}", deployment_id);
+
+    // Commit transaction
+    tx.commit().await?;
 
     Ok(Json(deployment))
 }
@@ -324,8 +330,11 @@ pub async fn delete_deployment(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
 
+    // Start database transaction
+    let mut tx = database.pool.begin().await?;
+
     // Deleting from database
-    DeploymentRepository::delete(&database.pool, deployment_id, user_id).await?;
+    DeploymentRepository::delete(user_id, deployment_id, &mut tx).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await?;
@@ -355,9 +364,12 @@ pub async fn delete_deployment(
         .await?;
 
     info!(
-        "Published deletion message for deployment {}",
+        "Published deployment deletion message for {}",
         deployment_id
     );
+
+    // Commit transaction
+    tx.commit().await?;
 
     Ok((
         StatusCode::ACCEPTED,
