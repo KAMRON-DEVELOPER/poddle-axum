@@ -806,6 +806,8 @@ dependencies = [
  "dotenvy",
  "futures",
  "k8s-openapi",
+ "kcr_cert_manager_io",
+ "kcr_traefik_io",
  "kube",
  "kube-client",
  "lapin",
@@ -2191,6 +2193,32 @@ checksum = "d13f06d5326a915becaffabdfab75051b8cdc260c2a5c06c0e90226ede89a692"
 dependencies = [
  "base64",
  "chrono",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kcr_cert_manager_io"
+version = "2.20250927.142100"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2935d87945a134b4802f99440712f345c0a64a297b1421a8354b2bdca8db8510"
+dependencies = [
+ "k8s-openapi",
+ "kube",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kcr_traefik_io"
+version = "2.20251105.44842"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d482f8263a70a109cc2a42fbd396e2577fe474faeaa01988da5253f5a9b5dc22"
+dependencies = [
+ "k8s-openapi",
+ "kube",
+ "schemars",
  "serde",
  "serde_json",
 ]

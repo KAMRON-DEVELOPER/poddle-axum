@@ -1,11 +1,9 @@
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
+use chrono::Utc;
 use k8s_openapi::api::apps::v1::{Deployment as K8sDeployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Namespace;
-// use k8s_openapi::api::core::v1::NamespaceCondition;
-// use k8s_openapi::api::core::v1::NamespaceSpec;
-// use k8s_openapi::api::core::v1::NamespaceStatus;
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, EnvVar, PodSpec, PodTemplateSpec, ResourceRequirements,
     Secret as K8sSecret, Service, ServicePort, ServiceSpec,
@@ -17,17 +15,21 @@ use k8s_openapi::api::networking::v1::{
 use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
+use kcr_cert_manager_io::v1::certificates::Certificate;
+use kcr_traefik_io::v1alpha1::ingressroutes::{IngressRoute, IngressRouteSpec};
 use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
 use kube::{Api, Client};
+use serde_json::json;
 use shared::models::ResourceSpec;
 use shared::schemas::CreateDeploymentMessage;
 use shared::schemas::DeleteDeploymentMessage;
 use shared::schemas::UpdateDeploymentMessage;
 use shared::services::redis::Redis;
+use shared::utilities::channel_names::ChannelNames;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
-use tracing::error;
 use tracing::info;
+use tracing::warn;
 use uuid::Uuid;
 
 use crate::services::vault_service::VaultService;
@@ -41,59 +43,10 @@ pub struct KubernetesService {
     pub base_domain: String,
     pub enable_tls: bool,
     pub cluster_issuer: String,
+    pub wildcard_certificate_name: String,
 }
 
 impl KubernetesService {
-    async fn get_namespace_or_create(client: &Client, user_id: Uuid) -> Result<String, AppError> {
-        let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
-        let ns_api: Api<Namespace> = Api::all(client.clone());
-
-        match ns_api.get(&ns_string).await {
-            Ok(ns) => {
-                info!("Namespace {:?} already exists", ns);
-                Ok(ns_string)
-            }
-            Err(e) => {
-                error!("Namespace not exist: {}", e);
-                info!("Creating namespace {}", ns_string);
-                let mut labels = BTreeMap::new();
-                labels.insert("user-id".to_string(), user_id.to_string());
-
-                let new_ns = Namespace {
-                    metadata: ObjectMeta {
-                        name: Some(ns_string.clone()),
-                        labels: Some(labels),
-                        ..Default::default()
-                    },
-                    // spec: Some(NamespaceSpec {
-                    //     finalizers: todo!(),
-                    // }),
-                    // status: Some(NamespaceStatus {
-                    //     conditions: vec![NamespaceCondition {
-                    //         last_transition_time: todo!(),
-                    //         message: todo!(),
-                    //         reason: todo!(),
-                    //         status: todo!(),
-                    //         type_: todo!(),
-                    //     }],
-                    //     phase: todo!(),
-                    // }),
-                    ..Default::default()
-                };
-
-                ns_api
-                    .create(&PostParams::default(), &new_ns)
-                    .await
-                    .map_err(|e| {
-                        AppError::InternalError(format!("Failed to create namespace: {}", e))
-                    })?;
-
-                info!("Namespace {} created successfully", ns_string);
-                Ok(ns_string)
-            }
-        }
-    }
-
     pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
         let project_id = message.project_id;
@@ -102,20 +55,18 @@ impl KubernetesService {
 
         // Update status to 'provisioning'
         sqlx::query!(
-            r#"
-                UPDATE deployments
-                SET status = 'provisioning'
-                WHERE id = $1
-            "#,
+            r#"UPDATE deployments SET status = 'provisioning' WHERE id = $1"#,
             deployment_id
         )
         .execute(&self.pool)
         .await?;
 
-        // Get or create namespace
-        let namespace = Self::get_namespace_or_create(&self.client, user_id).await?;
+        // ! We can send pubsub message to notify users via SEE
 
-        // Generate unique deployment name
+        // TODO we must create in db side before uesr request it | Get or create namespace
+        let deployment_namespace = Self::get_namespace_or_create(&self.client, user_id).await?;
+
+        // TODO we must create in db side before uesr request it | Generate unique deployment name
         let deployment_name = format!(
             "{}-{}",
             message
@@ -126,45 +77,32 @@ impl KubernetesService {
             &deployment_id.to_string()[..8]
         );
 
-        // Determine subdomain
-        let subdomain = message.subdomain.unwrap_or_else(|| {
-            format!("{}-{}", message.name, &user_id.to_string()[..8])
-                .to_lowercase()
-                .replace("_", "-")
-        });
-
-        let external_url = format!("{}.{}", subdomain, self.base_domain);
-
-        info!("📍 External URL: {}", external_url);
-
-        let env_vars = message.environment_variables.unwrap_or_default();
-        let secrets = message.secrets.unwrap_or_default();
-
         self.create_k8s_resources(
-            &namespace,
-            &deployment_name,
             &project_id,
             &deployment_id,
-            &message.image,
+            &deployment_namespace,
+            &deployment_name,
+            message.image,
             message.port,
             message.replicas,
-            &message.resources,
-            &external_url,
-            env_vars,
-            secrets,
+            message.resources,
+            message.secrets,
+            message.environment_variables,
+            message.subdomain.as_deref(),
+            message.custom_domain.as_deref(),
         )
         .await?;
 
         sqlx::query!(
             r#"
-            UPDATE deployments
-            SET status = 'starting',
-                cluster_namespace = $2,
-                cluster_deployment_name = $3
-            WHERE id = $1
+                UPDATE deployments
+                SET status = 'starting',
+                    cluster_namespace = $2,
+                    cluster_deployment_name = $3
+                WHERE id = $1
             "#,
             deployment_id,
-            namespace,
+            deployment_namespace,
             deployment_name
         )
         .execute(&self.pool)
@@ -175,41 +113,59 @@ impl KubernetesService {
         Ok(())
     }
 
+    async fn example_just_for_referance(&mut self) -> Result<(), AppError> {
+        let now = Utc::now().timestamp();
+        let mut pipe = redis::pipe();
+        let message = json!({
+            "type": "metrics_update",
+            "timestamp": now,
+        });
+        let channel = ChannelNames::project_metrics(&"project_id");
+        pipe.publish(channel, message.to_string()).ignore();
+        let _: () = pipe
+            .query_async(&mut self.redis.connection)
+            .await
+            .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
+
+        Ok(())
+    }
+
     async fn create_k8s_resources(
         &self,
-        namespace: &str,
-        name: &str,
         project_id: &Uuid,
         deployment_id: &Uuid,
-        image: &str,
-        container_port: i32,
+        deployment_namespace: &str,
+        deployment_name: &str,
+        image: String,
+        port: i32,
         replicas: i32,
-        resources: &ResourceSpec,
-        external_url: &str,
-        env_vars: HashMap<String, String>,
-        secrets: HashMap<String, String>,
+        resources: ResourceSpec,
+        secrets: Option<HashMap<String, String>>,
+        environment_variables: Option<HashMap<String, String>>,
+        subdomain: Option<&str>,
+        custom_domain: Option<&str>,
     ) -> Result<(), AppError> {
         let mut labels = BTreeMap::new();
-        labels.insert("app".to_string(), name.to_string());
+        labels.insert("app".to_string(), deployment_name.to_string());
         labels.insert("project-id".to_string(), project_id.to_string());
         labels.insert("deployment-id".to_string(), deployment_id.to_string());
         labels.insert("managed-by".to_string(), "poddle".to_string());
 
-        let secret_name = format!("{}-secrets", name);
+        let secret_name = format!("{}-secrets", deployment_name);
         if !secrets.is_empty() {
-            self.create_k8s_secret(namespace, &secret_name, &labels, secrets.clone())
+            self.create_k8s_secret(deployment_namespace, &secret_name, secrets.clone(), &labels)
                 .await?;
         }
 
         self.create_k8s_deployment(
-            namespace,
-            name,
+            deployment_namespace,
+            deployment_name,
             image,
-            container_port,
+            port,
             replicas,
             resources,
             &labels,
-            &env_vars,
+            &environment_variables,
             if secrets.is_empty() {
                 None
             } else {
@@ -218,22 +174,28 @@ impl KubernetesService {
         )
         .await?;
 
-        self.create_k8s_service(namespace, name, container_port, &labels)
+        self.create_k8s_service(deployment_namespace, deployment_name, port, &labels)
             .await?;
 
-        self.create_k8s_ingress(namespace, name, external_url, &labels)
-            .await?;
+        self.create_k8s_ingress(
+            deployment_namespace,
+            deployment_name,
+            subdomain,
+            custom_domain,
+            &labels,
+        )
+        .await?;
 
         Ok(())
     }
 
-    /// Create Kubernetes Secret (secrets stored only in K8s, not in DB)
+    /// Create Kubernetes Secret
     async fn create_k8s_secret(
         &self,
         namespace: &str,
         secret_name: &str,
-        labels: &BTreeMap<String, String>,
         secrets: HashMap<String, String>,
+        labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let secrets_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), namespace);
 
@@ -423,18 +385,47 @@ impl KubernetesService {
     }
 
     /// Create Kubernetes Ingress with Traefik
-    async fn create_k8s_ingress(
+    async fn create_k8s_ingress_route(
         &self,
         namespace: &str,
         name: &str,
-        external_url: &str,
+        subdomain: &str,
+        custom_domain: &str,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
-        let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), namespace);
+        let ingrees_route = IngressRoute {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some(namespace.to_string()),
+                labels: Some(labels.clone()),
+                annotations: Some(annotations),
+                ..Default::default()
+            },
+            spec: IngressRouteSpec {
+                entry_points: todo!(),
+                parent_refs: todo!(),
+                routes: todo!(),
+                tls: todo!(),
+            },
+        };
+    }
+
+    /// Create Kubernetes Ingress with Traefik
+    async fn create_k8s_ingress(
+        &self,
+        deployment_namespace: &str,
+        deployment_name: &str,
+        subdomain: Option<&str>,
+        custom_domain: Option<&str>,
+        labels: &BTreeMap<String, String>,
+    ) -> Result<(), AppError> {
+        let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), deployment_namespace);
+        let certificate_api: Api<Certificate> =
+            Api::namespaced(self.client.clone(), deployment_namespace);
 
         let mut annotations = BTreeMap::new();
 
-        // Traefik configuration
+        // ******************************************************************
         annotations.insert(
             "kubernetes.io/ingress.class".to_string(),
             "traefik".to_string(),
@@ -480,11 +471,12 @@ impl KubernetesService {
             "traefik.ingress.kubernetes.io/redirect-permanent".to_string(),
             "true".to_string(),
         );
+        // ******************************************************************
 
-        let ingress = Ingress {
+        let mut ingress = Ingress {
             metadata: ObjectMeta {
-                name: Some(name.to_string()),
-                namespace: Some(namespace.to_string()),
+                name: Some(deployment_name.to_string()),
+                namespace: Some(deployment_namespace.to_string()),
                 labels: Some(labels.clone()),
                 annotations: Some(annotations),
                 ..Default::default()
@@ -498,7 +490,7 @@ impl KubernetesService {
                             path_type: "Prefix".to_string(),
                             backend: IngressBackend {
                                 service: Some(IngressServiceBackend {
-                                    name: name.to_string(),
+                                    name: deployment_name.to_string(),
                                     port: Some(ServiceBackendPort {
                                         number: Some(80),
                                         ..Default::default()
@@ -509,21 +501,48 @@ impl KubernetesService {
                         }],
                     }),
                 }]),
-                tls: Some(vec![IngressTLS {
-                    hosts: Some(vec![external_url.to_string()]),
-                    secret_name: Some(format!("{}-tls", name)),
-                }]),
+                tls: Some(vec![
+                    // ! we use wildcard for subdomains, cluster issuer not needed
+                    IngressTLS {
+                        hosts: Some(vec![external_url.to_string()]),
+                        secret_name: Some(format!("{}-tls", deployment_name)),
+                    },
+                    // ! we use auto created secret via cluster issuer
+                    IngressTLS {
+                        hosts: Some(vec![external_url.to_string()]),
+                        secret_name: Some(format!("{}-tls", deployment_name)),
+                    },
+                ]),
                 ..Default::default()
             }),
             ..Default::default()
         };
+
+        if let Some(subdomain) = subdomain {
+            // ! first we need to check wildcard issuer is exist or not
+            let subdomain = format!("{}.{}", subdomain, self.base_domain);
+
+            match certificate_api.get(&self.wildcard_certificate_name).await {
+                Ok(certificate) => {
+                    let secret_name = certificate.spec.secret_name;
+                }
+                Err(_) => {
+                    // ! we try to create it
+                }
+            }
+        }
+
+        if let (custom_domain) = custom_domain {}
 
         ingress_api
             .create(&PostParams::default(), &ingress)
             .await
             .map_err(|e| AppError::InternalError(format!("Failed to create ingress: {}", e)))?;
 
-        info!("Ingress {} created in namespace {}", name, namespace);
+        info!(
+            "Ingress {} created in namespace {}",
+            deployment_name, deployment_namespace
+        );
         Ok(())
     }
 
@@ -621,5 +640,55 @@ impl KubernetesService {
 
         info!("✅ K8s resources deleted for deployment {}", deployment_id);
         Ok(())
+    }
+
+    async fn get_namespace_or_create(client: &Client, user_id: Uuid) -> Result<String, AppError> {
+        let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
+        let ns_api: Api<Namespace> = Api::all(client.clone());
+
+        match ns_api.get(&ns_string).await {
+            Ok(ns) => {
+                info!("Namespace {:?} already exists", ns);
+                Ok(ns_string)
+            }
+            Err(e) => {
+                warn!("Namespace not exist: {}", e);
+                info!("Creating namespace {}", ns_string);
+                let mut labels = BTreeMap::new();
+                labels.insert("user-id".to_string(), user_id.to_string());
+
+                let new_ns = Namespace {
+                    metadata: ObjectMeta {
+                        name: Some(ns_string.clone()),
+                        labels: Some(labels),
+                        ..Default::default()
+                    },
+                    // spec: Some(NamespaceSpec {
+                    //     finalizers: todo!(),
+                    // }),
+                    // status: Some(NamespaceStatus {
+                    //     conditions: vec![NamespaceCondition {
+                    //         last_transition_time: todo!(),
+                    //         message: todo!(),
+                    //         reason: todo!(),
+                    //         status: todo!(),
+                    //         type_: todo!(),
+                    //     }],
+                    //     phase: todo!(),
+                    // }),
+                    ..Default::default()
+                };
+
+                ns_api
+                    .create(&PostParams::default(), &new_ns)
+                    .await
+                    .map_err(|e| {
+                        AppError::InternalError(format!("Failed to create namespace: {}", e))
+                    })?;
+
+                info!("Namespace {} created successfully", ns_string);
+                Ok(ns_string)
+            }
+        }
     }
 }
