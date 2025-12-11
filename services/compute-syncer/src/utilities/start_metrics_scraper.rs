@@ -11,7 +11,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 use tracing::{error, info};
 
-pub async fn metrics_scraper(
+pub async fn start_metrics_scraper(
     config: Config,
     prometheus: PrometheusClient,
     redis: Redis,

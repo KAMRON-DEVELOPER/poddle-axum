@@ -1,4 +1,5 @@
 use futures::StreamExt;
+use kube::Client;
 use lapin::{
     Consumer,
     options::{
@@ -9,9 +10,10 @@ use lapin::{
 };
 use shared::{
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
-    services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
-    utilities::{config::Config, errors::AppError},
+    services::{amqp::Amqp, redis::Redis},
+    utilities::errors::AppError,
 };
+use sqlx::{Pool, Postgres};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
@@ -19,19 +21,24 @@ use crate::services::{kubernetes_service::KubernetesService, vault_service::Vaul
 
 pub async fn start_consumer(
     amqp: Amqp,
-    config: Config,
-    database: Database,
-    kubernetes: Kubernetes,
-    _vault_service: VaultService,
+    redis: Redis,
+    pool: Pool<Postgres>,
+    client: Client,
+    base_domain: String,
+    enable_tls: bool,
+    cluster_issuer: String,
+    vault_service: VaultService,
 ) -> Result<(), AppError> {
     let channel = amqp.channel().await?;
 
     let kubernetes_service = KubernetesService {
-        client: kubernetes.client.clone(),
-        pool: database.pool.clone(),
-        base_domain: config.base_domain.clone(),
-        enable_tls: config.enable_tls,
-        cluster_issuer: config.cluster_issuer.clone(),
+        client,
+        pool,
+        redis,
+        vault_service,
+        base_domain,
+        enable_tls,
+        cluster_issuer,
     };
 
     // Declare exchange

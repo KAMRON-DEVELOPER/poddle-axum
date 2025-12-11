@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use crate::services::{consumer::start_consumer, vault_service::VaultService};
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
-    services::{amqp::Amqp, database::Database, kubernetes::Kubernetes},
+    services::{amqp::Amqp, database::Database, kubernetes::Kubernetes, redis::Redis},
     utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;
@@ -63,19 +63,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Initialize services
     // let rustls_config = build_rustls_config(&config)?;
     let database = Database::new(&config).await?;
-    // let redis = Redis::new(&config).await?;
+    let redis = Redis::new(&config).await?;
     let kubernetes = Kubernetes::new(&config).await?;
     let amqp = Amqp::new(&config).await?;
     // let kafka = Kafka::new(&config, "compute-service-group")?;
     // let http_client = reqwest::ClientBuilder::new()
     //     .redirect(reqwest::redirect::Policy::none())
     //     .build()?;
-    let vault = VaultService::init(&config).await?;
+    let vault_service = VaultService::init(&config).await?;
 
     let mut set = JoinSet::new();
 
     // Spawn background tasks
-    set.spawn(start_consumer(amqp, config, database, kubernetes, vault));
+    set.spawn(start_consumer(
+        amqp,
+        redis,
+        database.pool,
+        kubernetes.client,
+        config.base_domain,
+        config.enable_tls,
+        config.cluster_issuer,
+        vault_service,
+    ));
     set.spawn(start_health_server());
 
     info!("✅ All background tasks started");

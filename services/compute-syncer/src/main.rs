@@ -6,8 +6,8 @@ use std::net::SocketAddr;
 use crate::{
     services::prometheus::Prometheus,
     utilities::{
-        deployment_status_syncer::deployment_status_syncer, metrics_scraper::metrics_scraper,
-        reconcilation_loop::reconciliation_loop,
+        deployment_status_syncer::deployment_status_syncer,
+        reconcilation_loop::reconciliation_loop, start_metrics_scraper::start_metrics_scraper,
     },
 };
 use axum::{extract::DefaultBodyLimit, http};
@@ -85,7 +85,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         kubernetes.client.clone(),
         redis.connection.clone(),
     ));
-    set.spawn(metrics_scraper(config, prometheus.client, redis));
+    set.spawn(start_metrics_scraper(config, prometheus.client, redis));
     set.spawn(reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),

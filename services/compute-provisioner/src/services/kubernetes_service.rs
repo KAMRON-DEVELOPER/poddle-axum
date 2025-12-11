@@ -23,16 +23,21 @@ use shared::models::ResourceSpec;
 use shared::schemas::CreateDeploymentMessage;
 use shared::schemas::DeleteDeploymentMessage;
 use shared::schemas::UpdateDeploymentMessage;
+use shared::services::redis::Redis;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::error;
 use tracing::info;
 use uuid::Uuid;
 
+use crate::services::vault_service::VaultService;
+
 #[derive(Clone)]
 pub struct KubernetesService {
     pub client: Client,
     pub pool: PgPool,
+    pub redis: Redis,
+    pub vault_service: VaultService,
     pub base_domain: String,
     pub enable_tls: bool,
     pub cluster_issuer: String,
@@ -528,9 +533,9 @@ impl KubernetesService {
 
         let deployment = sqlx::query!(
             r#"
-            SELECT cluster_namespace, cluster_deployment_name
-            FROM deployments
-            WHERE id = $1 AND user_id = $2
+                SELECT cluster_namespace, cluster_deployment_name
+                FROM deployments
+                WHERE id = $1 AND user_id = $2
             "#,
             deployment_id,
             user_id
@@ -538,6 +543,8 @@ impl KubernetesService {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| AppError::NotFoundError("Deployment not found".to_string()))?;
+
+        // ! We can send pubsub message to notify users via SEE
 
         let namespace = deployment.cluster_namespace;
         let name = deployment.cluster_deployment_name;
@@ -558,32 +565,33 @@ impl KubernetesService {
                     AppError::InternalError(format!("Failed to update deployment: {}", e))
                 })?;
 
+            // ! We can send pubsub message to notify users via SEE
+
             sqlx::query!(
-                r#"UPDATE deployments SET replicas = $2 WHERE id = $1"#,
-                deployment_id,
-                replicas
+                r#"UPDATE deployments SET replicas = $1 WHERE id = $2"#,
+                replicas,
+                deployment_id
             )
             .execute(&self.pool)
             .await?;
 
-            info!(
-                "✅ Deployment {} scaled to {} replicas",
-                deployment_id, replicas
-            );
+            // ! We can send pubsub message to notify users via SEE
+
+            info!("✅ Deployment updated");
         }
 
         Ok(())
     }
 
     pub async fn delete(&self, message: DeleteDeploymentMessage) -> Result<(), AppError> {
-        let deployment_id = message.deployment_id;
         let user_id = message.user_id;
+        let deployment_id = message.deployment_id;
 
         let deployment = sqlx::query!(
             r#"
-            SELECT cluster_namespace, cluster_deployment_name
-            FROM deployments
-            WHERE id = $1 AND user_id = $2
+                SELECT cluster_namespace, cluster_deployment_name
+                FROM deployments
+                WHERE id = $1 AND user_id = $2
             "#,
             deployment_id,
             user_id
@@ -591,6 +599,7 @@ impl KubernetesService {
         .fetch_optional(&self.pool)
         .await?
         .ok_or_else(|| AppError::NotFoundError("Deployment not found".to_string()))?;
+        // ! We can send pubsub message to notify users via SEE
 
         let namespace = deployment.cluster_namespace;
         let name = deployment.cluster_deployment_name;
