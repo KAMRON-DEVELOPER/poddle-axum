@@ -10,7 +10,7 @@ use sqlx::PgPool;
 use tracing::{error, info, warn};
 use uuid::Uuid;
 
-pub async fn deployment_status_syncer(
+pub async fn start_deployment_status_syncer(
     pool: PgPool,
     client: KubeClient,
     mut redis: MultiplexedConnection,

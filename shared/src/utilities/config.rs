@@ -15,9 +15,12 @@ pub struct Config {
     pub server_address: String,
     pub frontend_endpoint: String,
 
-    pub base_domain: String,
-    pub enable_tls: bool,
-    pub cluster_issuer: String,
+    pub domain: String,
+    pub traefik_namespace: String,
+    pub cluster_issuer_name: String,
+    pub ingress_class_name: Option<String>,
+    pub wildcard_certificate_name: String,
+    pub wildcard_certificate_secret_name: String,
 
     // KUBERNETES
     pub k8s_in_cluster: bool,
@@ -167,16 +170,39 @@ impl Config {
         )
         .await?;
 
-        let base_domain = get_config_value(
-            "BASE_DOMAIN",
-            Some("BASE_DOMAIN"),
+        let domain = get_config_value(
+            "DOMAIN",
+            Some("DOMAIN"),
             None,
             Some("poddle.uz".to_string()),
         )
         .await?;
-        let enable_tls = get_config_value("ENABLE_TLS", Some("ENABLE_TLS"), None, None).await?;
-        let cluster_issuer =
-            get_config_value("CLUSTER_ISSUER", Some("CLUSTER_ISSUER"), None, None).await?;
+        let traefik_namespace =
+            get_config_value("TRAEFIK_NAMESPACE", Some("TRAEFIK_NAMESPACE"), None, None).await?;
+        let cluster_issuer_name = get_config_value(
+            "CLUSTER_ISSUER_NAME",
+            Some("CLUSTER_ISSUER_NAME"),
+            None,
+            None,
+        )
+        .await?;
+        let ingress_class_name =
+            get_optional_config_value("INGRESS_CLASS_NAME", Some("INGRESS_CLASS_NAME"), None)
+                .await?;
+        let wildcard_certificate_name = get_config_value(
+            "WILDCARD_CERTIFICATE_NAME",
+            Some("WILDCARD_CERTIFICATE_NAME"),
+            None,
+            None,
+        )
+        .await?;
+        let wildcard_certificate_secret_name = get_config_value(
+            "WILDCARD_CERTIFICATE_SECRET_NAME",
+            Some("WILDCARD_CERTIFICATE_SECRET_NAME"),
+            None,
+            None,
+        )
+        .await?;
 
         let server_addres = get_config_value(
             "SERVER_ADDRES",
@@ -393,9 +419,12 @@ impl Config {
             vault_auth_mount,
             vault_auth_role,
             vault_kv_mount,
-            base_domain,
-            enable_tls,
-            cluster_issuer,
+            domain,
+            traefik_namespace,
+            cluster_issuer_name,
+            ingress_class_name,
+            wildcard_certificate_name,
+            wildcard_certificate_secret_name,
             server_address: server_addres,
             frontend_endpoint,
             base_dir,

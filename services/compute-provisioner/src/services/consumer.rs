@@ -24,9 +24,12 @@ pub async fn start_consumer(
     redis: Redis,
     pool: Pool<Postgres>,
     client: Client,
-    base_domain: String,
-    enable_tls: bool,
-    cluster_issuer: String,
+    domain: String,
+    traefik_namespace: String,
+    cluster_issuer_name: String,
+    ingress_class_name: Option<String>,
+    wildcard_certificate_name: String,
+    wildcard_certificate_secret_name: String,
     vault_service: VaultService,
 ) -> Result<(), AppError> {
     let channel = amqp.channel().await?;
@@ -36,10 +39,15 @@ pub async fn start_consumer(
         pool,
         redis,
         vault_service,
-        base_domain,
-        enable_tls,
-        cluster_issuer,
+        domain,
+        traefik_namespace,
+        cluster_issuer_name,
+        ingress_class_name,
+        wildcard_certificate_name,
+        wildcard_certificate_secret_name,
     };
+
+    kubernetes_service.init().await?;
 
     // Declare exchange
     channel

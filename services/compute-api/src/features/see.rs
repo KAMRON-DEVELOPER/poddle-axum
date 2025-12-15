@@ -18,14 +18,16 @@ pub async fn stream_metrics(
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    let channel_name = ChannelNames::project_metrics(&project_id.to_string());
+    let metrics_channel_name = ChannelNames::project_metrics(&project_id.to_string());
+    let status_channel_name = ChannelNames::project_metrics(&project_id.to_string());
+    let channel_name = [metrics_channel_name, status_channel_name];
 
     let mut pubsub = redis.pubsub().await.map_err(|err| {
         error!("Failed to connect to Redis PubSub: {}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;
 
-    pubsub.subscribe(channel_name).await.map_err(|err| {
+    pubsub.subscribe(&channel_name).await.map_err(|err| {
         error!("Failed to subscribe to channel pattern: {}", err);
         StatusCode::INTERNAL_SERVER_ERROR
     })?;

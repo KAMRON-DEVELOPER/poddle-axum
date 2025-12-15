@@ -6,8 +6,8 @@ use std::net::SocketAddr;
 use crate::{
     services::prometheus::Prometheus,
     utilities::{
-        deployment_status_syncer::deployment_status_syncer,
-        reconcilation_loop::reconciliation_loop, start_metrics_scraper::start_metrics_scraper,
+        deployment_status_syncer::start_deployment_status_syncer,
+        metrics_scraper::start_metrics_scraper, reconcilation_loop::start_reconciliation_loop,
     },
 };
 use axum::{extract::DefaultBodyLimit, http};
@@ -80,13 +80,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut set = JoinSet::new();
 
     // Spawn tasks into the set
-    set.spawn(deployment_status_syncer(
+    set.spawn(start_deployment_status_syncer(
         database.pool.clone(),
         kubernetes.client.clone(),
         redis.connection.clone(),
     ));
     set.spawn(start_metrics_scraper(config, prometheus.client, redis));
-    set.spawn(reconciliation_loop(
+    set.spawn(start_reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),
     ));

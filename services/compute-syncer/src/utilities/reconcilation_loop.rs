@@ -7,7 +7,7 @@ use std::time::Duration;
 use tracing::{error, info, warn};
 
 /// Periodic reconciliation to catch missed events and fix drift
-pub async fn reconciliation_loop(pool: PgPool, client: Client) -> Result<(), AppError> {
+pub async fn start_reconciliation_loop(pool: PgPool, client: Client) -> Result<(), AppError> {
     let mut interval = tokio::time::interval(Duration::from_secs(120)); // Every 2 minutes
 
     info!("🔄 Starting reconciliation loop");

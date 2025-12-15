@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use chrono::Utc;
 use k8s_openapi::api::apps::v1::{Deployment as K8sDeployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Namespace;
+use k8s_openapi::api::core::v1::TypedLocalObjectReference;
 use k8s_openapi::api::core::v1::{
     Container, ContainerPort, EnvVar, PodSpec, PodTemplateSpec, ResourceRequirements,
     Secret as K8sSecret, Service, ServicePort, ServiceSpec,
@@ -16,9 +17,16 @@ use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
 use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
 use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
 use kcr_cert_manager_io::v1::certificates::Certificate;
+use kcr_cert_manager_io::v1::clusterissuers::ClusterIssuer;
 use kcr_traefik_io::v1alpha1::ingressroutes::{IngressRoute, IngressRouteSpec};
-use kube::api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams};
+use kcr_traefik_io::v1alpha1::middlewares::Middleware;
+use kube::api::DeleteParams;
+use kube::api::ObjectMeta;
+use kube::api::Patch;
+use kube::api::PatchParams;
+use kube::api::PostParams;
 use kube::{Api, Client};
+use redis::AsyncTypedCommands;
 use serde_json::json;
 use shared::models::ResourceSpec;
 use shared::schemas::CreateDeploymentMessage;
@@ -34,20 +42,149 @@ use uuid::Uuid;
 
 use crate::services::vault_service::VaultService;
 
+/*
+pub enum Error {
+    Api( /* … */ ),
+    HyperError( /* … */ ),
+    Service( /* … */ ),
+    ProxyProtocolUnsupported { /* … */ },
+    ProxyProtocolDisabled { /* … */ },
+    FromUtf8( /* … */ ),
+    LinesCodecMaxLineLengthExceeded,
+    ReadEvents( /* … */ ),
+    HttpError( /* … */ ),
+    SerdeError( /* … */ ),
+    BuildRequest( /* … */ ),
+    InferConfig( /* … */ ),
+    Discovery( /* … */ ),
+    RustlsTls( /* … */ ),
+    TlsRequired,
+    Auth( /* … */ ),
+    InferKubeconfig( /* … */ ),
+}
+*/
+
+/*
+# Kubernetes auth
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+    name: vault-k8s-ci
+spec:
+    vault:
+        server: http://192.168.31.247:8200
+        path: pki/sign/poddle-uz
+        auth:
+            kubernetes:
+                role: cert-manager
+                mountPath: /v1/auth/kubernetes
+                serviceAccountRef:
+                    name: cert-manager
+---
+# Let's Encrypt Staging
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+    name: letsencrypt-staging-ci
+spec:
+    acme:
+        # Staging server for testing (higher rate limits)
+        email: atajanovkamronbek2003@gmail.com
+        server: https://acme-staging-v02.api.letsencrypt.org/directory
+        privateKeySecretRef:
+            name: letsencrypt-staging-private-key
+        solvers:
+            - http01:
+                ingress:
+                    class: traefik
+---
+# Let's Encrypt Production
+apiVersion: cert-manager.io/v1
+kind: ClusterIssuer
+metadata:
+    name: letsencrypt-production-ci
+spec:
+    acme:
+        # Production server (strict rate limits)
+        email: atajanovkamronbek2003@gmail.com
+        server: https://acme-v02.api.letsencrypt.org/directory
+        privateKeySecretRef:
+            name: letsencrypt-production-private-key
+        solvers:
+            - http01:
+                ingress:
+                    class: traefik
+*/
+
 #[derive(Clone)]
 pub struct KubernetesService {
     pub client: Client,
     pub pool: PgPool,
     pub redis: Redis,
     pub vault_service: VaultService,
-    pub base_domain: String,
-    pub enable_tls: bool,
-    pub cluster_issuer: String,
+    pub domain: String,
+    pub traefik_namespace: String,
+    pub cluster_issuer_name: String,
+    pub ingress_class_name: Option<String>,
     pub wildcard_certificate_name: String,
+    pub wildcard_certificate_secret_name: String,
 }
 
 impl KubernetesService {
-    pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
+    pub async fn init(&self) -> Result<(), AppError> {
+        info!("Performing pre-flight infrastructure checks...");
+
+        // Check for ClusterIssuer
+        let cluster_issuer_api: Api<ClusterIssuer> = Api::all(self.client.clone());
+        match cluster_issuer_api.get(&self.cluster_issuer_name).await {
+            Ok(_) => info!("✅ ClusterIssuer '{}' found.", self.cluster_issuer_name),
+            Err(kube::Error::Api(ae)) if ae.code == 404 => {
+                // FAIL FAST: Do not try to create it.
+                return Err(AppError::InternalError(format!(
+                    "CRITICAL: ClusterIssuer '{}' is missing. Please apply infrastructure configuration.",
+                    self.cluster_issuer_name
+                )));
+            }
+            Err(e) => return Err(e.into()),
+        }
+
+        // Check for Wildcard Certificate
+        let certificate_api: Api<Certificate> =
+            Api::namespaced(self.client.clone(), &self.traefik_namespace);
+        match certificate_api.get(&self.wildcard_certificate_name).await {
+            Ok(_) => info!(
+                "✅ Wildcard Certificate '{}' found.",
+                self.wildcard_certificate_name
+            ),
+            Err(kube::Error::Api(ae)) if ae.code == 404 => {
+                return Err(AppError::InternalError(format!(
+                    "CRITICAL: Wildcard Certificate '{}' is missing in namespace '{}'.",
+                    self.wildcard_certificate_name, self.traefik_namespace
+                )));
+            }
+            Err(e) => return Err(e.into()),
+        }
+
+        // Check for Middleware
+        let middleware_api: Api<Middleware> =
+            Api::namespaced(self.client.clone(), &self.traefik_namespace);
+        let middleware_name = "redirect-to-https";
+        match middleware_api.get(middleware_name).await {
+            Ok(_) => info!("✅ Middleware '{}' found.", middleware_name),
+            Err(kube::Error::Api(ae)) if ae.code == 404 => {
+                return Err(AppError::InternalError(format!(
+                    "CRITICAL: Traefik Middleware '{}' is missing.",
+                    middleware_name
+                )));
+            }
+            Err(e) => return Err(e.into()),
+        }
+
+        info!("🚀 Infrastructure checks passed. Provisioner ready.");
+        Ok(())
+    }
+
+    pub async fn create(&mut self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
         let project_id = message.project_id;
         let deployment_id = message.deployment_id;
@@ -61,7 +198,16 @@ impl KubernetesService {
         .execute(&self.pool)
         .await?;
 
-        // ! We can send pubsub message to notify users via SEE
+        let channel = ChannelNames::project_metrics(&project_id.to_string());
+        let now = Utc::now().timestamp();
+        let json_message = json!({
+            "type": "status_update",
+            "timestamp": now,
+            "status": "provisioning"
+        });
+        self.redis
+            .connection
+            .publish(channel, json_message.to_string());
 
         // TODO we must create in db side before uesr request it | Get or create namespace
         let deployment_namespace = Self::get_namespace_or_create(&self.client, user_id).await?;
@@ -113,23 +259,6 @@ impl KubernetesService {
         Ok(())
     }
 
-    async fn example_just_for_referance(&mut self) -> Result<(), AppError> {
-        let now = Utc::now().timestamp();
-        let mut pipe = redis::pipe();
-        let message = json!({
-            "type": "metrics_update",
-            "timestamp": now,
-        });
-        let channel = ChannelNames::project_metrics(&"project_id");
-        pipe.publish(channel, message.to_string()).ignore();
-        let _: () = pipe
-            .query_async(&mut self.redis.connection)
-            .await
-            .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
-
-        Ok(())
-    }
-
     async fn create_k8s_resources(
         &self,
         project_id: &Uuid,
@@ -151,26 +280,28 @@ impl KubernetesService {
         labels.insert("deployment-id".to_string(), deployment_id.to_string());
         labels.insert("managed-by".to_string(), "poddle".to_string());
 
-        let secret_name = format!("{}-secrets", deployment_name);
-        if !secrets.is_empty() {
-            self.create_k8s_secret(deployment_namespace, &secret_name, secrets.clone(), &labels)
-                .await?;
+        let mut secret_name: Option<String> = None;
+        if let Some(secrets) = secrets.filter(|s| !s.is_empty()) {
+            secret_name = Some(format!("{}-secrets", deployment_name));
+            self.create_k8s_secret(
+                deployment_namespace,
+                &secret_name.clone().unwrap(),
+                secrets,
+                &labels,
+            )
+            .await?;
         }
 
         self.create_k8s_deployment(
             deployment_namespace,
             deployment_name,
-            image,
+            &image,
             port,
             replicas,
-            resources,
+            &resources,
+            secret_name.as_deref(),
+            environment_variables.as_ref(),
             &labels,
-            &environment_variables,
-            if secrets.is_empty() {
-                None
-            } else {
-                Some(&secret_name)
-            },
         )
         .await?;
 
@@ -233,29 +364,26 @@ impl KubernetesService {
         container_port: i32,
         replicas: i32,
         resources: &ResourceSpec,
-        labels: &BTreeMap<String, String>,
-        env_vars: &HashMap<String, String>,
         secret_name: Option<&str>,
+        environment_variables: Option<&HashMap<String, String>>,
+        labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), namespace);
 
         // Build environment variables
         let mut container_env = vec![];
 
-        // Regular env vars
-        for (key, value) in env_vars {
-            container_env.push(EnvVar {
-                name: key.clone(),
-                value: Some(value.clone()),
-                ..Default::default()
-            });
+        if let Some(env_vars) = environment_variables {
+            for (key, value) in env_vars {
+                container_env.push(EnvVar {
+                    name: key.clone(),
+                    value: Some(value.clone()),
+                    ..Default::default()
+                });
+            }
         }
 
-        // Secret env vars
         if let Some(secret_name) = secret_name {
-            // Note: You'll need to know which keys are in the secret
-            // For now, we'll reference the entire secret as env vars
-            // In production, you might want to track secret keys separately
             container_env.push(EnvVar {
                 name: "SECRET_REFERENCE".to_string(),
                 value: Some(secret_name.to_string()),
@@ -384,7 +512,7 @@ impl KubernetesService {
         Ok(())
     }
 
-    /// Create Kubernetes Ingress with Traefik
+    /// Create Traefik IngressRoute
     async fn create_k8s_ingress_route(
         &self,
         namespace: &str,
@@ -398,7 +526,7 @@ impl KubernetesService {
                 name: Some(name.to_string()),
                 namespace: Some(namespace.to_string()),
                 labels: Some(labels.clone()),
-                annotations: Some(annotations),
+                annotations: None,
                 ..Default::default()
             },
             spec: IngressRouteSpec {
@@ -420,58 +548,21 @@ impl KubernetesService {
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), deployment_namespace);
-        let certificate_api: Api<Certificate> =
-            Api::namespaced(self.client.clone(), deployment_namespace);
 
         let mut annotations = BTreeMap::new();
 
-        // ******************************************************************
         annotations.insert(
-            "kubernetes.io/ingress.class".to_string(),
-            "traefik".to_string(),
-        );
-
-        annotations.insert(
-            "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
-            "websecure".to_string(),
-        );
-        annotations.insert(
-            "cert-manager.io/cluster-issuer".to_string(),
-            "letsencrypt-prod".to_string(),
-        );
-
-        // For development with self-signed certs
-        if !self.enable_tls {
-            annotations.insert(
-                "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
-                "web,websecure".to_string(),
-            );
-            annotations.insert(
-                "traefik.ingress.kubernetes.io/router.tls".to_string(),
-                "true".to_string(),
-            );
-        } else {
-            // Production with Let's Encrypt
-            annotations.insert(
-                "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
-                "websecure".to_string(),
-            );
-            annotations.insert(
-                "cert-manager.io/cluster-issuer".to_string(),
-                self.cluster_issuer.clone(),
-            );
-        }
-
-        // Redirect HTTP to HTTPS
-        annotations.insert(
-            "traefik.ingress.kubernetes.io/redirect-entry-point".to_string(),
-            "https".to_string(),
-        );
-        annotations.insert(
-            "traefik.ingress.kubernetes.io/redirect-permanent".to_string(),
+            "traefik.ingress.kubernetes.io/router.tls".to_string(),
             "true".to_string(),
         );
-        // ******************************************************************
+        annotations.insert(
+            "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
+            "web,websecure".to_string(),
+        );
+        annotations.insert(
+            "traefik.ingress.kubernetes.io/router.middlewares".to_string(),
+            "default-permanent-redirect-middleware@kubernetescrd".to_string(),
+        );
 
         let mut ingress = Ingress {
             metadata: ObjectMeta {
@@ -482,57 +573,71 @@ impl KubernetesService {
                 ..Default::default()
             },
             spec: Some(IngressSpec {
-                rules: Some(vec![IngressRule {
-                    host: Some(external_url.to_string()),
-                    http: Some(HTTPIngressRuleValue {
-                        paths: vec![HTTPIngressPath {
-                            path: Some("/".to_string()),
-                            path_type: "Prefix".to_string(),
-                            backend: IngressBackend {
-                                service: Some(IngressServiceBackend {
-                                    name: deployment_name.to_string(),
-                                    port: Some(ServiceBackendPort {
-                                        number: Some(80),
-                                        ..Default::default()
-                                    }),
-                                }),
-                                ..Default::default()
-                            },
-                        }],
+                default_backend: Some(IngressBackend {
+                    resource: Some(TypedLocalObjectReference {
+                        api_group: todo!(),
+                        kind: todo!(),
+                        name: todo!(),
                     }),
-                }]),
-                tls: Some(vec![
-                    // ! we use wildcard for subdomains, cluster issuer not needed
-                    IngressTLS {
-                        hosts: Some(vec![external_url.to_string()]),
-                        secret_name: Some(format!("{}-tls", deployment_name)),
-                    },
-                    // ! we use auto created secret via cluster issuer
-                    IngressTLS {
-                        hosts: Some(vec![external_url.to_string()]),
-                        secret_name: Some(format!("{}-tls", deployment_name)),
-                    },
-                ]),
+                    service: Some(IngressServiceBackend {
+                        name: todo!(),
+                        port: todo!(),
+                    }),
+                }),
+                ingress_class_name: self.ingress_class_name,
                 ..Default::default()
             }),
             ..Default::default()
         };
 
+        // * subdomain
         if let Some(subdomain) = subdomain {
-            // ! first we need to check wildcard issuer is exist or not
-            let subdomain = format!("{}.{}", subdomain, self.base_domain);
+            let host = format!("{}.{}", subdomain, self.domain);
 
-            match certificate_api.get(&self.wildcard_certificate_name).await {
-                Ok(certificate) => {
-                    let secret_name = certificate.spec.secret_name;
-                }
-                Err(_) => {
-                    // ! we try to create it
-                }
-            }
+            let ingress_rule = IngressRule {
+                host: Some(host),
+                http: Some(HTTPIngressRuleValue {
+                    paths: vec![HTTPIngressPath {
+                        path: Some("/".to_string()),
+                        path_type: "Prefix".to_string(),
+                        backend: IngressBackend {
+                            service: Some(IngressServiceBackend {
+                                name: deployment_name.to_string(),
+                                port: Some(ServiceBackendPort {
+                                    number: Some(80),
+                                    ..Default::default()
+                                }),
+                            }),
+                            ..Default::default()
+                        },
+                    }],
+                }),
+            };
+
+            let tls = IngressTLS {
+                hosts: Some(vec![host.to_string()]),
+                secret_name: Some(self.wildcard_certificate_secret_name),
+            };
+
+            let ingress_spec = ingress.spec.get_or_insert_with(Default::default);
+            let ingress_rules = ingress_spec.rules.get_or_insert_with(Vec::new);
+            let ingress_tls = ingress_spec.tls.get_or_insert_with(Vec::new);
+            ingress_rules.push(ingress_rule);
+            ingress_tls.push(tls);
         }
 
-        if let (custom_domain) = custom_domain {}
+        // * custom_domain
+        if let Some(custom_domain) = custom_domain {
+            // ! we add cert-manager.io/cluster-issuer annotation and secretName to autogenerated
+            let ingress_annotations = ingress
+                .metadata
+                .annotations
+                .get_or_insert_with(BTreeMap::new);
+            ingress_annotations.insert(
+                "cert-manager.io/cluster-issuer".to_string(),
+                self.cluster_issuer_name.clone(),
+            );
+        }
 
         ingress_api
             .create(&PostParams::default(), &ingress)
@@ -663,19 +768,6 @@ impl KubernetesService {
                         labels: Some(labels),
                         ..Default::default()
                     },
-                    // spec: Some(NamespaceSpec {
-                    //     finalizers: todo!(),
-                    // }),
-                    // status: Some(NamespaceStatus {
-                    //     conditions: vec![NamespaceCondition {
-                    //         last_transition_time: todo!(),
-                    //         message: todo!(),
-                    //         reason: todo!(),
-                    //         status: todo!(),
-                    //         type_: todo!(),
-                    //     }],
-                    //     phase: todo!(),
-                    // }),
                     ..Default::default()
                 };
 

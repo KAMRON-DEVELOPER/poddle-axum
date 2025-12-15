@@ -80,9 +80,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         redis,
         database.pool,
         kubernetes.client,
-        config.base_domain,
-        config.enable_tls,
-        config.cluster_issuer,
+        config.domain,
+        config.traefik_namespace,
+        config.cluster_issuer_name,
+        config.ingress_class_name,
+        config.wildcard_certificate_name,
+        config.wildcard_certificate_secret_name,
         vault_service,
     ));
     set.spawn(start_health_server());
