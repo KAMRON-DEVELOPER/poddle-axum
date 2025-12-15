@@ -811,6 +811,7 @@ dependencies = [
  "futures",
  "k8s-openapi",
  "kcr_cert_manager_io",
+ "kcr_secrets_hashicorp_com",
  "kcr_traefik_io",
  "kube",
  "kube-client",
@@ -2206,6 +2207,19 @@ name = "kcr_cert_manager_io"
 version = "2.20250927.142100"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2935d87945a134b4802f99440712f345c0a64a297b1421a8354b2bdca8db8510"
+dependencies = [
+ "k8s-openapi",
+ "kube",
+ "schemars",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
+name = "kcr_secrets_hashicorp_com"
+version = "2.20250929.104855"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "059600435e9e034cb1c8197b6757e6e79319cbee991d0ef20e0d078835f06466"
 dependencies = [
  "k8s-openapi",
  "kube",

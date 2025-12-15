@@ -13,11 +13,18 @@ use k8s_openapi::api::networking::v1::{
     HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule,
     IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
 };
-use k8s_openapi::apimachinery::pkg::api::resource::Quantity;
-use k8s_openapi::apimachinery::pkg::apis::meta::v1::LabelSelector;
-use k8s_openapi::apimachinery::pkg::util::intstr::IntOrString;
-use kcr_cert_manager_io::v1::certificates::Certificate;
-use kcr_cert_manager_io::v1::clusterissuers::ClusterIssuer;
+use k8s_openapi::apimachinery::pkg::{
+    api::resource::Quantity, apis::meta::v1::LabelSelector, util::intstr::IntOrString,
+};
+use kcr_cert_manager_io::v1::{certificates::Certificate, clusterissuers::ClusterIssuer};
+use kcr_secrets_hashicorp_com::v1beta1::{
+    vaultauths::{VaultAuth, VaultAuthKubernetes, VaultAuthMethod, VaultAuthSpec},
+    vaultstaticsecrets::{
+        VaultStaticSecret, VaultStaticSecretDestination, VaultStaticSecretRolloutRestartTargets,
+        VaultStaticSecretRolloutRestartTargetsKind, VaultStaticSecretSpec,
+        VaultStaticSecretSyncConfig, VaultStaticSecretType,
+    },
+};
 use kcr_traefik_io::v1alpha1::ingressroutes::{IngressRoute, IngressRouteSpec};
 use kcr_traefik_io::v1alpha1::middlewares::Middleware;
 use kube::api::DeleteParams;
@@ -37,84 +44,9 @@ use shared::utilities::channel_names::ChannelNames;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::info;
-use tracing::warn;
 use uuid::Uuid;
 
 use crate::services::vault_service::VaultService;
-
-/*
-pub enum Error {
-    Api( /* … */ ),
-    HyperError( /* … */ ),
-    Service( /* … */ ),
-    ProxyProtocolUnsupported { /* … */ },
-    ProxyProtocolDisabled { /* … */ },
-    FromUtf8( /* … */ ),
-    LinesCodecMaxLineLengthExceeded,
-    ReadEvents( /* … */ ),
-    HttpError( /* … */ ),
-    SerdeError( /* … */ ),
-    BuildRequest( /* … */ ),
-    InferConfig( /* … */ ),
-    Discovery( /* … */ ),
-    RustlsTls( /* … */ ),
-    TlsRequired,
-    Auth( /* … */ ),
-    InferKubeconfig( /* … */ ),
-}
-*/
-
-/*
-# Kubernetes auth
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-    name: vault-k8s-ci
-spec:
-    vault:
-        server: http://192.168.31.247:8200
-        path: pki/sign/poddle-uz
-        auth:
-            kubernetes:
-                role: cert-manager
-                mountPath: /v1/auth/kubernetes
-                serviceAccountRef:
-                    name: cert-manager
----
-# Let's Encrypt Staging
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-    name: letsencrypt-staging-ci
-spec:
-    acme:
-        # Staging server for testing (higher rate limits)
-        email: atajanovkamronbek2003@gmail.com
-        server: https://acme-staging-v02.api.letsencrypt.org/directory
-        privateKeySecretRef:
-            name: letsencrypt-staging-private-key
-        solvers:
-            - http01:
-                ingress:
-                    class: traefik
----
-# Let's Encrypt Production
-apiVersion: cert-manager.io/v1
-kind: ClusterIssuer
-metadata:
-    name: letsencrypt-production-ci
-spec:
-    acme:
-        # Production server (strict rate limits)
-        email: atajanovkamronbek2003@gmail.com
-        server: https://acme-v02.api.letsencrypt.org/directory
-        privateKeySecretRef:
-            name: letsencrypt-production-private-key
-        solvers:
-            - http01:
-                ingress:
-                    class: traefik
-*/
 
 #[derive(Clone)]
 pub struct KubernetesService {
@@ -282,14 +214,94 @@ impl KubernetesService {
 
         let mut secret_name: Option<String> = None;
         if let Some(secrets) = secrets.filter(|s| !s.is_empty()) {
-            secret_name = Some(format!("{}-secrets", deployment_name));
-            self.create_k8s_secret(
-                deployment_namespace,
-                &secret_name.clone().unwrap(),
-                secrets,
-                &labels,
-            )
-            .await?;
+            // Write to Vault
+            self.vault_service
+                .store_secrets(*deployment_id, secrets)
+                .await?;
+
+            // Define the VSO Resource
+            let vso_resource_name = format!("{}-vso", deployment_name);
+            let destination_k8s_secret_name = format!("{}-secrets", deployment_name); // This is what Deployment will use
+            secret_name = Some(destination_k8s_secret_name.clone());
+
+            let vault_static_secret_api: Api<VaultStaticSecret> =
+                Api::namespaced(self.client.clone(), deployment_namespace);
+
+            let vault_static_secret = VaultStaticSecret {
+                metadata: ObjectMeta {
+                    name: Some(vso_resource_name),
+                    namespace: Some(deployment_namespace.to_string()),
+                    ..Default::default()
+                },
+                spec: VaultStaticSecretSpec {
+                    // Reference the VaultAuth we created in Step B
+                    vault_auth_ref: Some("vault-auth".to_string()),
+                    mount: "kvv2".to_string(),
+                    r#type: VaultStaticSecretType::KvV2,
+                    path: format!("deployments/{}", deployment_id),
+                    destination: VaultStaticSecretDestination {
+                        create: Some(true),
+                        name: destination_k8s_secret_name, // VSO will create this K8s Secret
+                        ..Default::default()
+                    },
+                    refresh_after: Some("60s".to_string()), // Sync every minute
+
+                    // OPTIONAL: Restart the deployment if secrets change
+                    rollout_restart_targets: Some(vec![VaultStaticSecretRolloutRestartTargets {
+                        kind: VaultStaticSecretRolloutRestartTargetsKind::Deployment,
+                        name: deployment_name.to_string(),
+                    }]),
+                    hmac_secret_data: todo!(),
+                    namespace: todo!(),
+                    sync_config: todo!(),
+                    version: Some(2),
+                },
+                status: None,
+            };
+
+            // 3. APPLY the VSO CRD
+            vault_static_secret_api
+                .create(&PostParams::default(), &vault_static_secret)
+                .await
+                .map_err(|e| {
+                    AppError::InternalError(format!("Failed to create VSO Secret: {}", e))
+                })?;
+
+            let vault_static_secret = VaultStaticSecret {
+                metadata: ObjectMeta {
+                    name: Some(vso_resource_name),
+                    namespace: Some(deployment_namespace.clone().to_owned()),
+                    ..Default::default()
+                },
+                spec: VaultStaticSecretSpec {
+                    vault_auth_ref: Some("vault-auth".to_string()),
+                    mount: "kvv2".to_string(),
+                    r#type: VaultStaticSecretType::KvV2,
+                    path: format!("deployments/{}", deployment_id),
+                    destination: VaultStaticSecretDestination {
+                        create: Some(true),
+                        name: destination_k8s_secret_name,
+                        ..Default::default()
+                    },
+                    refresh_after: Some("kvv2".to_string()),
+                    /*HMACSecretData determines whether the Operator computes the HMAC of the Secret's data.
+                    The MAC value will be stored in the resource's Status.SecretMac field,
+                    and will be used for drift detection and during incoming Vault secret comparison.
+                    Enabling this feature is recommended to ensure that Secret's data stays consistent with Vault.*/
+                    hmac_secret_data: None,
+                    // Namespace of the secrets engine mount in Vault. If not set, the namespace that's part of VaultAuth resource will be inferred.
+                    namespace: Some("kvv2".to_string()),
+                    // pub rollout_restart_targets: Option<Vec<VaultStaticSecretRolloutRestartTargets, Global>>
+                    rollout_restart_targets: todo!(),
+                    sync_config: Some(VaultStaticSecretSyncConfig {
+                        instant_updates: Some(true),
+                    }),
+                    version: Some(2),
+                },
+                status: None,
+            };
+
+            // ! *******************************
         }
 
         self.create_k8s_deployment(
@@ -342,7 +354,7 @@ impl KubernetesService {
                 labels: Some(labels.clone()),
                 ..Default::default()
             },
-            string_data: Some(string_data), // K8s handles base64 encoding
+            string_data: Some(string_data),
             ..Default::default()
         };
 
@@ -373,8 +385,8 @@ impl KubernetesService {
         // Build environment variables
         let mut container_env = vec![];
 
-        if let Some(env_vars) = environment_variables {
-            for (key, value) in env_vars {
+        if let Some(environment_variables) = environment_variables {
+            for (key, value) in environment_variables {
                 container_env.push(EnvVar {
                     name: key.clone(),
                     value: Some(value.clone()),
@@ -751,36 +763,60 @@ impl KubernetesService {
         let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
         let ns_api: Api<Namespace> = Api::all(client.clone());
 
-        match ns_api.get(&ns_string).await {
-            Ok(ns) => {
-                info!("Namespace {:?} already exists", ns);
-                Ok(ns_string)
-            }
-            Err(e) => {
-                warn!("Namespace not exist: {}", e);
-                info!("Creating namespace {}", ns_string);
-                let mut labels = BTreeMap::new();
-                labels.insert("user-id".to_string(), user_id.to_string());
-
-                let new_ns = Namespace {
-                    metadata: ObjectMeta {
-                        name: Some(ns_string.clone()),
-                        labels: Some(labels),
-                        ..Default::default()
-                    },
-                    ..Default::default()
-                };
-
-                ns_api
-                    .create(&PostParams::default(), &new_ns)
-                    .await
-                    .map_err(|e| {
-                        AppError::InternalError(format!("Failed to create namespace: {}", e))
-                    })?;
-
-                info!("Namespace {} created successfully", ns_string);
-                Ok(ns_string)
-            }
+        if ns_api.get(&ns_string).await.is_ok() {
+            return Ok(ns_string);
         }
+
+        info!("Creating namespace {}", ns_string);
+        let mut labels = BTreeMap::new();
+        labels.insert("user-id".to_string(), user_id.to_string());
+
+        let new_ns = Namespace {
+            metadata: ObjectMeta {
+                name: Some(ns_string.clone()),
+
+                labels: Some(labels),
+
+                ..Default::default()
+            },
+
+            ..Default::default()
+        };
+
+        ns_api.create(&PostParams::default(), &new_ns).await?;
+
+        info!("Namespace {} created successfully", ns_string);
+
+        // 2. NEW: Create VaultAuth in this new namespace
+        let auth_api: Api<VaultAuth> = Api::namespaced(client.clone(), &ns_string);
+
+        let vault_auth = VaultAuth {
+            metadata: ObjectMeta {
+                name: Some("vault-auth".to_string()),
+                namespace: Some(ns_string.clone()),
+                ..Default::default()
+            },
+            spec: VaultAuthSpec {
+                method: Some(VaultAuthMethod::Kubernetes),
+                mount: Some("kubernetes".to_string()),
+                kubernetes: Some(VaultAuthKubernetes {
+                    role: Some("poddle-user-app".to_string()),
+                    service_account: Some("default".to_string()),
+                    ..Default::default()
+                }),
+                // Points to the Global Cluster Connection
+                vault_connection_ref: Some("vault-connection".to_string()),
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        auth_api
+            .create(&PostParams::default(), &vault_auth)
+            .await
+            .map_err(|e| AppError::InternalError(format!("Failed to create VaultAuth: {}", e)))?;
+
+        info!("VaultAuth created in {}", ns_string);
+        Ok(ns_string)
     }
 }

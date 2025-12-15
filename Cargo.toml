@@ -6,7 +6,8 @@ members = [
     "services/billing-worker",
     "services/compute-api",
     "services/compute-provisioner",
-    "services/compute-syncer", "services/ai-orchestrator",
+    "services/compute-syncer",
+    "services/ai-orchestrator",
 ]
 
 resolver = "2"
@@ -108,5 +109,6 @@ futures-util = "0.3.31"
 tokio-stream = "0.1.17"
 kcr_cert_manager_io = "2.20250927.142100"
 kcr_traefik_io = "2.20251105.44842"
+kcr_secrets_hashicorp_com = "2.20250929.104855"
 k8s-crds-cert-manager = "1.19.1"
 k8s-crds-traefik = "3.6.0"

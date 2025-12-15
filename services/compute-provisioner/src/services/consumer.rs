@@ -161,7 +161,7 @@ pub async fn start_consumer(
     Ok(())
 }
 
-async fn handle_create_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
+async fn handle_create_messages(mut kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("🎯 Create consumer started");
 
     while let Some(delivery) = consumer.next().await {

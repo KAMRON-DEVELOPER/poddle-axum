@@ -28,6 +28,7 @@ k8s-openapi.workspace = true
 schemars.workspace = true
 kcr_cert_manager_io.workspace = true
 kcr_traefik_io.workspace = true
+kcr_secrets_hashicorp_com.workspace = true
 vaultrs.workspace = true
 vaultrs-login.workspace = true
 prometheus-client.workspace = true
