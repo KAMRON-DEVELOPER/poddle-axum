@@ -17,6 +17,8 @@ use k8s_openapi::apimachinery::pkg::{
     api::resource::Quantity, apis::meta::v1::LabelSelector, util::intstr::IntOrString,
 };
 use kcr_cert_manager_io::v1::{certificates::Certificate, clusterissuers::ClusterIssuer};
+use kcr_secrets_hashicorp_com::v1beta1::vaultconnections::VaultConnection;
+use kcr_secrets_hashicorp_com::v1beta1::vaultconnections::VaultConnectionSpec;
 use kcr_secrets_hashicorp_com::v1beta1::{
     vaultauths::{VaultAuth, VaultAuthKubernetes, VaultAuthMethod, VaultAuthSpec},
     vaultstaticsecrets::{
@@ -141,10 +143,8 @@ impl KubernetesService {
             .connection
             .publish(channel, json_message.to_string());
 
-        // TODO we must create in db side before uesr request it | Get or create namespace
-        let deployment_namespace = Self::get_namespace_or_create(&self.client, user_id).await?;
+        let deployment_namespace = self.get_namespace_or_create(&self.client, user_id).await?;
 
-        // TODO we must create in db side before uesr request it | Generate unique deployment name
         let deployment_name = format!(
             "{}-{}",
             message
@@ -216,7 +216,7 @@ impl KubernetesService {
         if let Some(secrets) = secrets.filter(|s| !s.is_empty()) {
             // Write to Vault
             self.vault_service
-                .store_secrets(*deployment_id, secrets)
+                .store_secrets(deployment_namespace.to_string(), *deployment_id, secrets)
                 .await?;
 
             // Define the VSO Resource
@@ -759,7 +759,11 @@ impl KubernetesService {
         Ok(())
     }
 
-    async fn get_namespace_or_create(client: &Client, user_id: Uuid) -> Result<String, AppError> {
+    async fn get_namespace_or_create(
+        &self,
+        client: &Client,
+        user_id: Uuid,
+    ) -> Result<String, AppError> {
         let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
         let ns_api: Api<Namespace> = Api::all(client.clone());
 
@@ -784,11 +788,26 @@ impl KubernetesService {
         };
 
         ns_api.create(&PostParams::default(), &new_ns).await?;
-
         info!("Namespace {} created successfully", ns_string);
 
-        // 2. NEW: Create VaultAuth in this new namespace
-        let auth_api: Api<VaultAuth> = Api::namespaced(client.clone(), &ns_string);
+        // Create VaultAuth and VaultConnection for the tenant
+        let vault_connection_api: Api<VaultConnection> =
+            Api::namespaced(client.clone(), &ns_string);
+        let vault_auth_api: Api<VaultAuth> = Api::namespaced(client.clone(), &ns_string);
+
+        let vault_connection = VaultConnection {
+            metadata: ObjectMeta {
+                name: Some("vault-connection".to_string()),
+                namespace: Some(ns_string.clone()),
+                ..Default::default()
+            },
+            spec: VaultConnectionSpec {
+                address: self.vault_service.address.clone(),
+                skip_tls_verify: self.vault_service.skip_tls_verify,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
 
         let vault_auth = VaultAuth {
             metadata: ObjectMeta {
@@ -804,19 +823,24 @@ impl KubernetesService {
                     service_account: Some("default".to_string()),
                     ..Default::default()
                 }),
-                // Points to the Global Cluster Connection
                 vault_connection_ref: Some("vault-connection".to_string()),
                 ..Default::default()
             },
             ..Default::default()
         };
 
-        auth_api
+        vault_auth_api
             .create(&PostParams::default(), &vault_auth)
             .await
             .map_err(|e| AppError::InternalError(format!("Failed to create VaultAuth: {}", e)))?;
+        vault_connection_api
+            .create(&PostParams::default(), &vault_connection)
+            .await
+            .map_err(|e| {
+                AppError::InternalError(format!("Failed to create VaultConnection: {}", e))
+            })?;
 
-        info!("VaultAuth created in {}", ns_string);
+        info!("VaultAuth and VaultConnection created in {}", ns_string);
         Ok(ns_string)
     }
 }

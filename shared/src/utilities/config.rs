@@ -36,6 +36,7 @@ pub struct Config {
     pub vault_auth_mount: String,
     pub vault_auth_role: String,
     pub vault_kv_mount: String,
+    pub vault_skip_tls_verify: bool,
 
     pub prometheus_url: String,
 
@@ -167,6 +168,13 @@ impl Config {
             Some("VAULT_KV_MOUNT"),
             None,
             Some("kvv2".to_string()),
+        )
+        .await?;
+        let vault_skip_tls_verify = get_config_value(
+            "VAULT_SKIP_TLS_VERIFY",
+            Some("VAULT_SKIP_TLS_VERIFY"),
+            None,
+            Some(true),
         )
         .await?;
 
@@ -419,6 +427,7 @@ impl Config {
             vault_auth_mount,
             vault_auth_role,
             vault_kv_mount,
+            vault_skip_tls_verify,
             domain,
             traefik_namespace,
             cluster_issuer_name,
