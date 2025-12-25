@@ -118,6 +118,12 @@ impl KubernetesService {
         Ok(())
     }
 
+    #[tracing::instrument(
+        name = "deployment.create",
+        skip(self, message),
+        fields(deployment_id = %message.deployment_id, project_id = %message.project_id, user_id = %message.user_id),
+        err
+    )]
     pub async fn create(&mut self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
         let project_id = message.project_id;

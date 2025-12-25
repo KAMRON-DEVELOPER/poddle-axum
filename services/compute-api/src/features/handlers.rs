@@ -24,7 +24,7 @@ use shared::{
     services::database::Database,
     utilities::{errors::AppError, jwt::Claims},
 };
-use tracing::{debug, info};
+use tracing::{debug, info, instrument};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -174,6 +174,7 @@ pub async fn get_deployment(
     Ok(Json(deployment))
 }
 
+#[instrument(skip(claims, project_id, database, amqp), fields(req = %req))]
 pub async fn create_deployment(
     claims: Claims,
     Path(project_id): Path<Uuid>,

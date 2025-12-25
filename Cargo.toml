@@ -60,13 +60,6 @@ sqlx = { version = "0.8.6", features = [
 sqlx-core = "0.8.6"
 tower = "0.5.2"
 tower-http = { version = "0.6.6", features = ["cors", "trace"] }
-tracing = "0.1.41"
-tracing-subscriber = { version = "0.3.20", features = [
-    "env-filter",
-    "local-time",
-    "std",
-    "time",
-] }
 uuid = { version = "1.18.1", features = ["serde", "v4"] }
 validator = { version = "0.20.0", features = ["derive"] }
 rustls-pemfile = "2.2.0"
@@ -112,3 +105,17 @@ kcr_traefik_io = "2.20251105.44842"
 kcr_secrets_hashicorp_com = "2.20250929.104855"
 k8s-crds-cert-manager = "1.19.1"
 k8s-crds-traefik = "3.6.0"
+# observability
+opentelemetry = "0.31.0"
+opentelemetry_sdk = "0.31.0"
+opentelemetry-otlp = "0.31.0"
+opentelemetry-semantic-conventions = "0.31.0"
+axum-tracing-opentelemetry = "0.32.2"
+tracing-opentelemetry = "0.32.0"
+tracing = "0.1.41"
+tracing-subscriber = { version = "0.3.20", features = [
+    "env-filter",
+    "local-time",
+    "std",
+    "time",
+] }

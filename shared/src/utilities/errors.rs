@@ -1,6 +1,15 @@
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
 use serde_json::json;
 
+pub enum ErrorKind {
+    Internal,
+    Database,
+    Kubernetes,
+    Vault,
+    Auth,
+    Validation,
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum AppError {
     #[error("{0}")]
@@ -196,6 +205,8 @@ pub enum AppError {
 }
 
 impl IntoResponse for AppError {
+    pub fn kind(&self) -> ErrorKind {}
+
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
             Self::FileReadError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),

@@ -19,6 +19,23 @@ use tracing::{error, info, warn};
 
 use crate::services::{kubernetes_service::KubernetesService, vault_service::VaultService};
 
+/*
+// In Provisioner consumer loop
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+
+// Extract the trace context from AMQP headers
+let parent_cx = global::get_text_map_propagator(|propagator| {
+    propagator.extract(&HeaderExtractor(&delivery.properties.headers))
+});
+
+let span = tracing::info_span!("process_deployment", deployment_id = %msg.deployment_id);
+span.set_parent(parent_cx); // <--- Links the traces!
+
+async move {
+    // Your processing logic here
+}.instrument(span).await;
+*/
+
 pub async fn start_consumer(
     amqp: Amqp,
     redis: Redis,
@@ -161,6 +178,10 @@ pub async fn start_consumer(
     Ok(())
 }
 
+#[tracing::instrument(
+    name = "consumer.handle_create_messages",
+    skip(kubernetes_service, consumer)
+)]
 async fn handle_create_messages(mut kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("🎯 Create consumer started");
 
