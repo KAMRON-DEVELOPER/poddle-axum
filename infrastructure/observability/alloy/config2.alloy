@@ -3,26 +3,26 @@ logging {
 	format = "logfmt"
 }
 
-// ---------------------------------------------------------
-// 1. LOGS (K8s Pods -> Loki)
-// ---------------------------------------------------------
+// ==============================================================================
+// 1. LOGS (Collect from Pods -> Send to Host Loki)
+// ==============================================================================
 
 discovery.kubernetes "pods" {
 	role = "pod"
 }
 
-discovery.relabel "pods" {
+discovery.relabel "pod_logs" {
 	targets = discovery.kubernetes.pods.targets
 
-	// Add namespace, app name, container name to labels
+	// Standard K8s Labeling
 	rule {
 		source_labels = ["__meta_kubernetes_namespace"]
 		target_label  = "namespace"
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
-		target_label  = "app"
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
 	}
 
 	rule {
@@ -31,26 +31,28 @@ discovery.relabel "pods" {
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_pod_name"]
-		target_label  = "pod"
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
 	}
 }
 
-loki.source.kubernetes "pods" {
-	targets    = discovery.relabel.pods.output
-	forward_to = [loki.process.process.receiver]
+loki.source.kubernetes "pod_logs" {
+	targets    = discovery.relabel.pod_logs.output
+	forward_to = [loki.process.process_logs.receiver]
 }
 
-loki.process "process" {
-	forward_to = [loki.write.loki_host.receiver]
+loki.process "process_logs" {
+	forward_to = [loki.write.host_loki.receiver]
 
-	// If your Rust logs are JSON, this parses them
+	// If your Rust apps log in JSON, parse it
 	stage.json {
 		expressions = {
-			level = "level",
+			level    = "level",
+			trace_id = "trace_id", // Extract trace ID for correlation
 		}
 	}
-	// Set the log level label from the parsed JSON
+
+	// Set Log Level as a Label (makes querying easier)
 	stage.labels {
 		values = {
 			level = "level",
@@ -58,18 +60,61 @@ loki.process "process" {
 	}
 }
 
-loki.write "loki_host" {
-	// HOST IP for Loki
+loki.write "host_loki" {
 	endpoint {
-		url = "http://192.168.31.53:3100/loki/api/v1/push"
+		// Points to Host IP via DNS/hostAlias
+		url = "http://loki.poddle.uz:3100/loki/api/v1/push"
 	}
 }
 
-// ---------------------------------------------------------
-// 2. TRACES & METRICS (OTLP Receiver -> Tempo & Mimir)
-// ---------------------------------------------------------
+// ==============================================================================
+// 2. METRICS (Scrape K8s Pods -> Send to Host Mimir)
+// ==============================================================================
 
-// Receive OTLP data from your Rust Microservices
+// Discovery for specific services (e.g., your Rust apps with prometheus.io/scrape=true)
+discovery.relabel "pod_metrics" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+		action        = "keep"
+		regex         = "true"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+		action        = "replace"
+		target_label  = "__metrics_path__"
+		regex         = "(.+)"
+		replacement   = "$1"
+	}
+	// Ensure we address the pod IP and annotated port
+	rule {
+		source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+		action        = "replace"
+		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+		replacement   = "$1:$2"
+		target_label  = "__address__"
+	}
+	// Add Metadata
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app"]
+		target_label  = "app"
+	}
+}
+
+prometheus.scrape "app_metrics" {
+	targets         = discovery.relabel.pod_metrics.output
+	forward_to      = [prometheus.remote_write.host_mimir.receiver]
+	scrape_interval = "15s"
+}
+
+// Receive OTLP Metrics (from Rust Apps pushing to Alloy)
 otelcol.receiver.otlp "default" {
 	grpc {
 		endpoint = "0.0.0.0:4317"
@@ -82,36 +127,40 @@ otelcol.receiver.otlp "default" {
 	output {
 		metrics = [otelcol.processor.batch.default.input]
 		traces  = [otelcol.processor.batch.default.input]
-		// logs = [] // We usually handle logs via loki.source.kubernetes, not OTLP logs, unless your app sends OTLP logs specifically.
 	}
 }
 
 otelcol.processor.batch "default" {
 	output {
-		metrics = [otelcol.exporter.prometheus.mimir.input] // Convert OTLP metrics to Prometheus
-		traces  = [otelcol.exporter.otlp.tempo.input]       // Keep Traces as OTLP
+		// Send Traces to Tempo
+		traces = [otelcol.exporter.otlp.host_tempo.input]
+		// Convert OTLP Metrics to Prometheus -> Send to Mimir
+		metrics = [otelcol.exporter.prometheus.to_mimir.input]
 	}
 }
 
-// --- Traces Output (Tempo) ---
-otelcol.exporter.otlp "tempo" {
+// Convert OTLP Metrics to Prometheus format
+otelcol.exporter.prometheus "to_mimir" {
+	forward_to = [prometheus.remote_write.host_mimir.receiver]
+}
+
+// Write Metrics to Host Mimir
+prometheus.remote_write "host_mimir" {
+	endpoint {
+		url = "http://mimir.poddle.uz:9009/api/v1/push"
+	}
+}
+
+// ==============================================================================
+// 3. TRACES (Send to Host Tempo)
+// ==============================================================================
+
+otelcol.exporter.otlp "host_tempo" {
 	client {
-		endpoint = "192.168.31.53:4317" // Host Tempo gRPC port
+		endpoint = "tempo.poddle.uz:4317"
+
 		tls {
 			insecure = true
 		}
-	}
-}
-
-// --- Metrics Output (Mimir) ---
-// First, convert OTLP metrics to Prometheus format
-otelcol.exporter.prometheus "mimir" {
-	forward_to = [prometheus.remote_write.mimir.receiver]
-}
-
-// Then, write to Mimir via Remote Write
-prometheus.remote_write "mimir" {
-	endpoint {
-		url = "http://192.168.31.53:9009/api/v1/push"
 	}
 }
