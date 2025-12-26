@@ -63,6 +63,16 @@ helm upgrade --install alloy grafana/alloy \
   --create-namespace
 ```
 
+or run this command
+
+```bash
+helm upgrade --install alloy grafana/alloy \
+  --namespace observability \
+  --create-namespace \
+  --values infrastructure/observability/alloy/alloy-values.yaml \
+  --set-file alloy.configMap.content=infrastructure/observability/alloy/config.alloy
+```
+
 Verify deployment:
 
 ```bash
