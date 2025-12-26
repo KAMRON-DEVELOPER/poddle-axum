@@ -1,0 +1,72 @@
+alloy:
+  clustering:
+    enabled: true
+
+  # Use external ConfigMap
+  configMap:
+    create: false
+    name: alloy-config
+    key: config.alloy
+
+  # Resources for development
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  # Run as DaemonSet to collect logs from all nodes
+  controller:
+    type: daemonset
+
+  # Security context
+  securityContext:
+    privileged: false
+    runAsUser: 0
+    runAsGroup: 0
+
+  # Enable service monitors if you have Prometheus operator
+  serviceMonitor:
+    enabled: false
+
+# Service configuration
+service:
+  type: ClusterIP
+  clusterIP: ""
+
+# OTLP receiver ports
+extraPorts:
+  - name: "otlp-grpc"
+    port: 4317
+    targetPort: 4317
+    protocol: "TCP"
+  - name: "otlp-http"
+    port: 4318
+    targetPort: 4318
+    protocol: "TCP"
+
+# RBAC permissions for Kubernetes discovery
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: alloy
+
+# Additional volumes for log access
+extraVolumes:
+  - name: varlog
+    hostPath:
+      path: /var/log
+  - name: varlibdockercontainers
+    hostPath:
+      path: /var/lib/docker/containers
+
+extraVolumeMounts:
+  - name: varlog
+    mountPath: /var/log
+    readOnly: true
+  - name: varlibdockercontainers
+    mountPath: /var/lib/docker/containers
+    readOnly: true

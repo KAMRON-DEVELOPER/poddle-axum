@@ -1,0 +1,259 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+// ====================
+// Kubernetes Discovery
+// ====================
+
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+discovery.relabel "pods" {
+	targets = discovery.kubernetes.pods.targets
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_node_name"]
+		target_label  = "node"
+	}
+}
+
+// ====================
+// Logs Collection
+// ====================
+
+loki.source.kubernetes "pods" {
+	targets    = discovery.relabel.pods.output
+	forward_to = [loki.process.add_trace_context.receiver]
+}
+
+loki.process "add_trace_context" {
+	forward_to = [loki.process.parse_json.receiver]
+
+	// Extract trace_id from logs if present
+	stage.regex {
+		expression = "trace_id=(?P<trace_id>\\w+)"
+	}
+
+	stage.labels {
+		values = {
+			trace_id = "",
+		}
+	}
+}
+
+loki.process "parse_json" {
+	forward_to = [loki.write.loki.receiver]
+
+	stage.json {
+		expressions = {
+			level     = "level",
+			message   = "message",
+			timestamp = "timestamp",
+			trace_id  = "trace_id",
+			span_id   = "span_id",
+		}
+	}
+
+	stage.labels {
+		values = {
+			level = "",
+		}
+	}
+
+	stage.label_drop {
+		values = ["filename", "stream"]
+	}
+}
+
+loki.write "loki" {
+	endpoint {
+		url = "http://loki.poddle.uz:3100/loki/api/v1/push"
+
+		// For production with authentication, uncomment:
+		// basic_auth {
+		//   username = env("LOKI_USERNAME")
+		//   password = env("LOKI_PASSWORD")
+		// }
+	}
+}
+
+// ====================
+// OTLP Receivers
+// ====================
+
+otelcol.receiver.otlp "default" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		metrics = [otelcol.processor.memory_limiter.default.input]
+		logs    = [otelcol.processor.memory_limiter.default.input]
+		traces  = [otelcol.processor.memory_limiter.default.input]
+	}
+}
+
+// ====================
+// OTLP Processors
+// ====================
+
+otelcol.processor.memory_limiter "default" {
+	check_interval = "1s"
+	limit          = "512MiB"
+	spike_limit    = "128MiB"
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = [otelcol.processor.batch.default.input]
+		traces  = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	timeout             = "5s"
+	send_batch_size     = 1024
+	send_batch_max_size = 2048
+
+	output {
+		metrics = [otelcol.processor.attributes.default.input]
+		logs    = [otelcol.processor.attributes.default.input]
+		traces  = [otelcol.processor.attributes.default.input]
+	}
+}
+
+otelcol.processor.attributes "default" {
+	action {
+		key    = "cluster"
+		value  = "k3s-dev"
+		action = "upsert"
+	}
+
+	output {
+		metrics = [otelcol.exporter.otlp.mimir.input]
+		logs    = [otelcol.exporter.otlp.loki.input]
+		traces  = [otelcol.exporter.otlp.tempo.input]
+	}
+}
+
+// ====================
+// OTLP Exporters
+// ====================
+
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo.poddle.uz:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+otelcol.exporter.otlp "loki" {
+	client {
+		endpoint = "loki.poddle.uz:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+otelcol.exporter.otlp "mimir" {
+	client {
+		endpoint = "mimir.poddle.uz:4317"
+
+		tls {
+			insecure = true
+		}
+	}
+}
+
+// ====================
+// Prometheus Scraping (Optional)
+// ====================
+
+discovery.kubernetes "services" {
+	role = "service"
+}
+
+discovery.relabel "prometheus_services" {
+	targets = discovery.kubernetes.services.targets
+
+	// Only scrape services with prometheus.io/scrape annotation
+	rule {
+		source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape"]
+		action        = "keep"
+		regex         = "true"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_path"]
+		target_label  = "__metrics_path__"
+		regex         = "(.+)"
+	}
+
+	rule {
+		source_labels = ["__address__", "__meta_kubernetes_service_annotation_prometheus_io_port"]
+		target_label  = "__address__"
+		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+		replacement   = "$1:$2"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_service_name"]
+		target_label  = "service"
+	}
+}
+
+prometheus.scrape "services" {
+	targets    = discovery.relabel.prometheus_services.output
+	forward_to = [prometheus.remote_write.mimir.receiver]
+
+	scrape_interval = "30s"
+	scrape_timeout  = "10s"
+}
+
+prometheus.remote_write "mimir" {
+	endpoint {
+		url = "http://mimir.poddle.uz:9009/api/v1/push"
+
+		// For production with authentication:
+		// basic_auth {
+		//   username = env("MIMIR_USERNAME")
+		//   password = env("MIMIR_PASSWORD")
+		// }
+	}
+}

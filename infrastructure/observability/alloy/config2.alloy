@@ -1,0 +1,117 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+// ---------------------------------------------------------
+// 1. LOGS (K8s Pods -> Loki)
+// ---------------------------------------------------------
+
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+discovery.relabel "pods" {
+	targets = discovery.kubernetes.pods.targets
+
+	// Add namespace, app name, container name to labels
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+}
+
+loki.source.kubernetes "pods" {
+	targets    = discovery.relabel.pods.output
+	forward_to = [loki.process.process.receiver]
+}
+
+loki.process "process" {
+	forward_to = [loki.write.loki_host.receiver]
+
+	// If your Rust logs are JSON, this parses them
+	stage.json {
+		expressions = {
+			level = "level",
+		}
+	}
+	// Set the log level label from the parsed JSON
+	stage.labels {
+		values = {
+			level = "level",
+		}
+	}
+}
+
+loki.write "loki_host" {
+	// HOST IP for Loki
+	endpoint {
+		url = "http://192.168.31.53:3100/loki/api/v1/push"
+	}
+}
+
+// ---------------------------------------------------------
+// 2. TRACES & METRICS (OTLP Receiver -> Tempo & Mimir)
+// ---------------------------------------------------------
+
+// Receive OTLP data from your Rust Microservices
+otelcol.receiver.otlp "default" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		traces  = [otelcol.processor.batch.default.input]
+		// logs = [] // We usually handle logs via loki.source.kubernetes, not OTLP logs, unless your app sends OTLP logs specifically.
+	}
+}
+
+otelcol.processor.batch "default" {
+	output {
+		metrics = [otelcol.exporter.prometheus.mimir.input] // Convert OTLP metrics to Prometheus
+		traces  = [otelcol.exporter.otlp.tempo.input]       // Keep Traces as OTLP
+	}
+}
+
+// --- Traces Output (Tempo) ---
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "192.168.31.53:4317" // Host Tempo gRPC port
+		tls {
+			insecure = true
+		}
+	}
+}
+
+// --- Metrics Output (Mimir) ---
+// First, convert OTLP metrics to Prometheus format
+otelcol.exporter.prometheus "mimir" {
+	forward_to = [prometheus.remote_write.mimir.receiver]
+}
+
+// Then, write to Mimir via Remote Write
+prometheus.remote_write "mimir" {
+	endpoint {
+		url = "http://192.168.31.53:9009/api/v1/push"
+	}
+}
