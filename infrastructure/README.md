@@ -448,15 +448,21 @@ Keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.js
 ```bash
 cat > ~/.zsh_secrets <<EOF
 # Vault unseal keys
-export UNSEAL_KEY1="$(jq -r '.unseal_keys_b64[0]' vault-keys.json)"
-export UNSEAL_KEY2="$(jq -r '.unseal_keys_b64[1]' vault-keys.json)"
-export UNSEAL_KEY3="$(jq -r '.unseal_keys_b64[2]' vault-keys.json)"
-export UNSEAL_KEY4="$(jq -r '.unseal_keys_b64[3]' vault-keys.json)"
-export UNSEAL_KEY5="$(jq -r '.unseal_keys_b64[4]' vault-keys.json)"
+export UNSEAL_KEY1="$(jq -r '.unseal_keys_b64[0]' ~/certs/vault-keys.json)"
+export UNSEAL_KEY2="$(jq -r '.unseal_keys_b64[1]' ~/certs/vault-keys.json)"
+export UNSEAL_KEY3="$(jq -r '.unseal_keys_b64[2]' ~/certs/vault-keys.json)"
+export UNSEAL_KEY4="$(jq -r '.unseal_keys_b64[3]' ~/certs/vault-keys.json)"
+export UNSEAL_KEY5="$(jq -r '.unseal_keys_b64[4]' ~/certs/vault-keys.json)"
 
 # Vault root token
-export VAULT_TOKEN="$(jq -r '.root_token' vault-keys.json)"
-EOF && [ -f ~/.zsh_secrets ] && source ~/.zsh_secrets
+export VAULT_TOKEN="$(jq -r '.root_token' ~/certs/vault-keys.json)"
+EOF
+```
+
+Reload
+
+```bash
+[ -f ~/.zsh_secrets ] && source ~/.zsh_secrets
 ```
 
 #### Unseal vault-0
