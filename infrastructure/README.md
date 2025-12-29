@@ -218,18 +218,32 @@ Verify:
 
 ```bash
 kubectl get pods -n cert-manager
-# All pods should be Running
+# Expected output:
+# NAME                                       READY   STATUS    RESTARTS   AGE
+# cert-manager-7ff7f97d55-m2hmn              1/1     Running   0          6m29s
+# cert-manager-cainjector-59bb669f8d-76btl   1/1     Running   0          6m29s
+# cert-manager-webhook-59bbd786df-bvqxj      1/1     Running   0          6m29s
 ```
 
+---
+
+## 5. Install Vault with HA mode with TLS
+
 > [!NOTE]
-> We ues cert manager for TLS to Vault
+> You may want to use vault CLI, so install `sudo pacman -S vault` and enable aaa with `vault -autocomplete-install`
+
+### Create CA secrets
 
 ```bash
 # Create namespace first
 kubectl create namespace vault
 
 # Apply CA configuration
-kubectl apply -f infrastructure/charts/cert-manager/vault/
+kubectl apply -f cert-manager/vault/ca/selfsigned-issuer.yaml
+kubectl apply -f cert-manager/vault/ca/root-ca-certificate.yaml
+kubectl apply -f cert-manager/vault/ca/root-ca-issuer.yaml
+kubectl apply -f cert-manager/vault/certs/vault-server-tls.yaml
+
 
 # Verify CA is ready
 kubectl get issuers -n vault
@@ -241,24 +255,10 @@ kubectl get secret -n vault vault-server-tls
 # Should show 3 data items: tls.crt, tls.key, ca.crt
 ```
 
-Get the CA `vault-ca-secret` for Axum microservices and for CLI and cert-maanger ClusterIssuer.
-> vault-k8s-ci ClusterIssuer caBundle should be replaced
-
-```bash
-# For Axum microservices
-kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-ca.crt
-# For vault-k8s-ci ClusterIssuer
-kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d
-```
-
-> [!NOTE]
-> Don't forget to add this to `~/.zsh_secrets`
-
-```bash
-cat > ~/.zsh_secrets <<EOF
-VAULT_CACERT=~/certs/vault-ca.crt
-EOF
-```
+* Secret `vault-root-ca-secret` contains
+  * tls.crt (self-signed root)
+  * tls.key (CA private key)
+This is the most sensitive object.
 
 > [!NOTE]
 > `infrastructure/charts/cert-manager/vault` folder is implementing a Self-Contained PKI just for Vault's internal health.
@@ -282,11 +282,24 @@ Here is the flow of your files:
     * Result: A Secret named `vault-server-tls` is created.
     * Usage: Your `vault-values.yaml` mounts this secret so Vault can serve HTTPS.
 
----
+Get the CA `vault-ca-secret` for Axum microservices and for CLI and cert-maanger ClusterIssuer.
+> vault-k8s-ci ClusterIssuer caBundle should be replaced
 
-## 5. Install Vault with HA mode with TLS
+```bash
+# For Axum microservices
+kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-ca.crt
+# For vault-k8s-ci ClusterIssuer
+kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d
+```
 
-### You may want to use vault CLI, so install `sudo pacman -S vault` and enable aaa with `vault -autocomplete-install`
+> [!NOTE]
+> Don't forget to add this to `~/.zsh_secrets`
+
+```bash
+cat > ~/.zsh_secrets <<EOF
+VAULT_CACERT=~/certs/vault-ca.crt
+EOF
+```
 
 ### How Vault HA Works with Raft on Kubernetes
 

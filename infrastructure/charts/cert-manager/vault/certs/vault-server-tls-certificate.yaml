@@ -1,37 +1,40 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: vault-server-tls
+  name: vault-server-tls-certificate
   namespace: vault
 spec:
-  secretName: vault-server-tls
+  secretName: vault-server-tls-secret
   duration: 8760h # 1 year
   renewBefore: 720h # 30 days before expiry
   issuerRef:
-    name: vault-ca-issuer
+    name: vault-root-ca-issuer
     kind: Issuer
   commonName: vault
   dnsNames:
-    # Internal service names
+    # Core service names
     - vault
     - vault.vault
     - vault.vault.svc
     - vault.vault.svc.cluster.local
-    # Individual pod DNS names
+
+    # StatefulSet pod DNS
     - vault-0.vault-internal
     - vault-1.vault-internal
     - vault-2.vault-internal
     - vault-0.vault-internal.vault.svc.cluster.local
     - vault-1.vault-internal.vault.svc.cluster.local
     - vault-2.vault-internal.vault.svc.cluster.local
-    # Active/Standby service names
+
+    # Active / standby services
     - vault-active
     - vault-active.vault.svc
     - vault-active.vault.svc.cluster.local
     - vault-standby
     - vault-standby.vault.svc
     - vault-standby.vault.svc.cluster.local
-    # Internal cluster communication
+
+    # Internal wildcard
     - "*.vault-internal"
     - "*.vault-internal.vault.svc.cluster.local"
   ipAddresses:

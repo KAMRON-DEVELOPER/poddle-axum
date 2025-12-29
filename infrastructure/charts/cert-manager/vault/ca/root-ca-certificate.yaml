@@ -1,0 +1,18 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: vault-root-ca-certificate
+  namespace: vault
+spec:
+  isCA: true
+  commonName: vault-root-ca
+  secretName: vault-root-ca-secret
+  duration: 87600h # 10 years
+  renewBefore: 720h # 30 days
+  privateKey:
+    algorithm: RSA
+    size: 4096
+  issuerRef:
+    name: selfsigned-issuer
+    kind: Issuer
+    group: cert-manager.io
