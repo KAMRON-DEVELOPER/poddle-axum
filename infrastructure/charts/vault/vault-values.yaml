@@ -56,9 +56,11 @@ server:
   # we need to define custom readiness/liveness Probe settings
   readinessProbe:
     enabled: true
+    scheme: HTTPS
     path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
   livenessProbe:
     enabled: true
+    scheme: HTTPS
     path: "/v1/sys/health?standbyok=true"
     initialDelaySeconds: 60
 
@@ -108,24 +110,24 @@ server:
           path = "/vault/data"
           
           retry_join {
-            leader_api_addr = "https://vault-0.${SERVICE}:8200"
-            leader_tls_servername = "${CN}"
+            leader_api_addr = "https://vault-0.vault-internal:8200"
+            leader_tls_servername = "vault" # Matches the CommonName in your cert
             leader_ca_cert_file = "/vault/tls/ca.crt"
             leader_client_cert_file = "/vault/tls/tls.crt"
             leader_client_key_file = "/vault/tls/tls.key"
           }
           
           retry_join {
-            leader_api_addr = "https://vault-1.${SERVICE}:8200"
-            leader_tls_servername = "${CN}"
+            leader_api_addr = "https://vault-1.vault-internal:8200"
+            leader_tls_servername = "vault" # Matches the CommonName in your cert
             leader_ca_cert_file = "/vault/tls/ca.crt"
             leader_client_cert_file = "/vault/tls/tls.crt"
             leader_client_key_file = "/vault/tls/tls.key"
           }
           
           retry_join {
-            leader_api_addr = "https://vault-2.${SERVICE}:8200"
-            leader_tls_servername = "${CN}"
+            leader_api_addr = "https://vault-2.vault-internal:8200"
+            leader_tls_servername = "vault" # Matches the CommonName in your cert
             leader_ca_cert_file = "/vault/tls/ca.crt"
             leader_client_cert_file = "/vault/tls/tls.crt"
             leader_client_key_file = "/vault/tls/tls.key"

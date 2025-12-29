@@ -388,13 +388,9 @@ kubectl create secret generic poddle-kms-service-account-secret \
 #### How It Works
 
 1. **Raft Consensus**: Vault uses the Raft algorithm for distributed consensus. One node is the leader (active), others are followers (standby).
-
 2. **Storage**: Each pod has its own persistent volume (`/vault/data`), but they replicate data through Raft protocol.
-
 3. **Leader Election**: If the leader fails, followers automatically elect a new leader (typically within seconds).
-
 4. **Data Replication**: All write operations go through the leader, which replicates them to followers.
-
 5. **High Availability**:
    * With 3 replicas, the cluster can tolerate 1 node failure
    * Minimum 2 nodes needed for quorum (majority)
