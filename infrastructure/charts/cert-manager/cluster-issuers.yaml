@@ -29,7 +29,37 @@ spec:
     server: https://vault-active.vault.svc:8200
     path: pki/sign/poddle-uz
     # You must inject the Base64 of vault-root-ca-secret -> ca.crt here
-    caBundle: <base64 encoded CA Bundle PEM file>
+    # caBundle: <base64 encoded CA Bundle PEM file>
+    caBundle: |
+      -----BEGIN CERTIFICATE-----
+      MIIFADCCAuigAwIBAgIUHVMlCg4IIZEACHJmsE6HqNyOVoIwDQYJKoZIhvcNAQEN
+      BQAwGDEWMBQGA1UEAxMNdmF1bHQtcm9vdC1jYTAeFw0yNTEyMjkxMzM3MDdaFw0z
+      NTEyMjcxMzM3MDdaMBgxFjAUBgNVBAMTDXZhdWx0LXJvb3QtY2EwggIiMA0GCSqG
+      SIb3DQEBAQUAA4ICDwAwggIKAoICAQDU7nIohZ+1WFV4Vn91Ue2AbeXhxmfAR9p1
+      bPwAiEsZPnDQpDNKfGz4Lx34Tj1xrPA6FiI7mMG2+6AS6rdTKYzjwuVp2eeWb+M6
+      nvIalgwbeCCv3zPTjaHXyiZBvd0wRaEGUTBNlE4PFm/VjQMiNn1vXci2svppjB5D
+      /fiNPT4CGDdRJLlijGGfcQxadlXRenmgIa1MvMN430sYTk68QWXAUvrOdiLHMGmI
+      qz2B8CeqmjuqDDHs/x/5VRfo1zsmhJTM67gIwTat/z9WnhtritY+grLedLPgxADF
+      Wrn8ysQFraBuhKpryL/6alcOnVmltw2uduQ/Ncew/St5z4Jj1RGvArGIaeOT7jfz
+      H4zd0s1onJ464fgGbG+b24RmAsnDl+Dl5Av/KyA8d4OijCOx4tRupj9Bu8afAn5J
+      ylD+rLWZokBuB2WrfykW+BLIqVzWGmxl1ErillglAfTO8pPPbU8b+OYkhkDwJVP8
+      2XI9VZ+N6LOmN62P5Uw9FIYaj3UyCWSQJLvVhwCr5gJB2CeRD63YBXrR56oeXOkI
+      Pnq6vN7mdSWPB6JTPaqf8vNtzzP3/g7O3NOOfk5PbU8WS4yzvFYC2VPYngDdM4ou
+      hnLP3c+e3cIiuoZLH2ARVp5Bsrl/aGg4csChXV5vYOHSJzcekgNJKKJ0/GwflHDa
+      dJrpAjgnswIDAQABo0IwQDAOBgNVHQ8BAf8EBAMCAqQwDwYDVR0TAQH/BAUwAwEB
+      /zAdBgNVHQ4EFgQUjcQb6FmLnhIct41k+kDlbOe7PdUwDQYJKoZIhvcNAQENBQAD
+      ggIBAEgJGCi/drQTVbgrLkZAnTMJ9GeR2k01sUVYf5ppMaESTv4kww/lWiDHn3VA
+      dhPfFRjcbLjO5Xu8Sus5W9ptS9LEHL1yUR2CQig5iusFEdci0+SmCx+qEP3K0/WM
+      ih2WwxRx2LO+Jh8aOag5PP2Nr40WziwzHqCQyk0/m3rRpO+Xw6ie3PeJyv2Uzt7u
+      ZQd7PNu59wErPKrty77YRt30OPzwxWZT8TTM3ufhmpmSpZRKyMJyQrc/qIY/iTyZ
+      9gE2pLkkwNu9ReMUpQ34mvwfmBaMGhTreaSN3yM8TCH13oePRMzPIQOajrOZYNgN
+      bd2ypHoblken2F7dpQOw62E5UzzxqBaUPEt6HdNP2WxREFVERwZPhwmYdGrurfMp
+      9SxxUb1779nLso/mtyGSeArX6bwLYuUwhheNp/EVyTYfpHUzOxv2KdINqt+lphKJ
+      mOQcj6OvFR22ODUC5fFvtmAGQymt2HXTiMymbYSBHRBdUBnZ2WHhrEmvkyHEjEOn
+      vNu3ixtcP64WBMj0dSYZgC8PsmpZ7jWBUtBEu0NzNnkJ/AY/KAm/18/CMPQiwTcN
+      x6JYJNs+BDH54IPTyGGMn0fz1s/xM7POlHZpAZmpwzSqv2J4WRNvjsXTdJw9I0Ik
+      B8Yjh0/NIxdUyWGqdUs3gGuyE4zzVItFCh/YvCGozsNm2yo4
+      -----END CERTIFICATE-----
     auth:
       kubernetes:
         role: cert-manager
