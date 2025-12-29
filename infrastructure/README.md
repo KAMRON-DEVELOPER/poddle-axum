@@ -86,7 +86,7 @@ helm install cilium cilium/cilium \
 
 # or
 
-helm install cilium cilium/cilium \
+helm upgrade --install cilium cilium/cilium \
   --namespace kube-system \
   --set k8sServiceHost=192.168.31.4 \
   --set k8sServicePort=6443 \
@@ -116,15 +116,12 @@ kubectl get nodes
 ### 2. Install MetalLB
 
 ```bash
-helm repo add metallb https://metallb.github.io/metallb
-helm repo update
-
 helm install metallb metallb/metallb \
   --namespace metallb-system --create-namespace
 
 # or
 
-helm install metallb metallb/metallb \                                                      
+helm upgrade --install metallb metallb/metallb \                                                      
   --values infrastructure/charts/metallb/metallb-values.yaml \
   --namespace metallb-system --create-namespace
 ```
@@ -188,7 +185,7 @@ helm install traefik traefik/traefik --wait \
 
 # or
 
-helm install traefik traefik/traefik \                                                      
+helm upgrade --install traefik traefik/traefik \                                                      
   --values infrastructure/charts/traefik/traefik-values.yaml
   --namespace traefik --create-namespace \
 ```
@@ -210,7 +207,7 @@ helm install vault hashicorp/vault \
 
 # or
 
-helm install vault hashicorp/vault \ 
+helm upgrade --install vault hashicorp/vault \ 
   --values infrastructure/charts/vault/vault-values.yaml
   --namespace vault --create-namespace
 
@@ -306,7 +303,7 @@ helm install vault-secrets-operator hashicorp/vault-secrets-operator \
 
 # or
 
-helm install vault-secrets-operator hashicorp/vault-secrets-operator \
+helm upgrade --install vault-secrets-operator hashicorp/vault-secrets-operator \
   --values infrastructure/charts/vault-secrets-operator/vault-secrets-operator-values.yaml \
   -n vault-secrets-operator --create-namespace
 ```
@@ -325,16 +322,12 @@ vault-secrets-operator-controller-manager-645c4f6b6d-jpkrz   3/3     Running   0
 ## 6. Install cert-manager
 
 ```bash
-helm repo add jetstack https://charts.jetstack.io
-helm repo update
-
 helm install cert-manager jetstack/cert-manager \
   --set crds.enabled=true \
   --namespace cert-manager --create-namespace
 
 # or
-
-helm repo add jetstack https://charts.jetstack.io --force-update
+ 
 helm upgrade --install \
 cert-manager jetstack/cert-manager \
 --set crds.enabled=true \
