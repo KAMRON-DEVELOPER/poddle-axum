@@ -364,7 +364,7 @@ source ~/.zsh_secrets
 
 ```bash
 kubectl create secret generic poddle-kms-service-account-secret \
-  --from-file=poddle-kms-service-account.json=~/certs/poddle-kms-service-account.json \
+  --from-file=poddle-kms-service-account.json=$HOME/certs/poddle-kms-service-account.json \
   -n vault
 ```
 
