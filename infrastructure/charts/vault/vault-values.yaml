@@ -17,7 +17,7 @@ server:
   # Mount TLS certificates
   extraEnvironmentVars:
     # GOOGLE_REGION: global
-    # GOOGLE_PROJECT: my-poddle-project
+    # GOOGLE_PROJECT: poddle-cloud-dev
     # GOOGLE_CREDENTIALS: /vault/gcpkms/poddle-kms-service-account.json
     # VAULT_GCPCKMS_SEAL_KEY_RING: vault-unseal-key-ring
     # VAULT_GCPCKMS_SEAL_CRYPTO_KEY: vault-unseal-crypto-key
@@ -100,7 +100,7 @@ server:
         seal "gcpckms" {
           disabled    = "true"
           region      = "global"
-          project     = "Poddle-Dev"
+          project     = "poddle-cloud-dev"
           credentials = "/vault/gcpkms/poddle-kms-service-account.json"
           key_ring    = "vault-unseal-key-ring"
           crypto_key  = "vault-unseal-crypto-key"
