@@ -1,0 +1,37 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: vault-ui-auth
+  namespace: vault
+type: kubernetes.io/basic-auth
+stringData:
+  username: admin
+  password: "1213"
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: vault-ui-auth
+  namespace: vault
+spec:
+  basicAuth:
+    secret: vault-ui-auth
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: vault-ui
+  namespace: vault
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`vault.poddle.uz`)
+      kind: Rule
+      services:
+        - name: vault-active
+          port: 8200
+      middlewares:
+        - name: vault-ui-auth
+  tls:
+    secretName: wildcard-poddle-uz-tls

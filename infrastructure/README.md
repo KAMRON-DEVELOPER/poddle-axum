@@ -199,7 +199,124 @@ kubectl get svc -n traefik
 
 ---
 
-## 4. Install vault
+## 4. Install cert-manager
+
+```bash
+helm install cert-manager jetstack/cert-manager \
+  --set crds.enabled=true \
+  --namespace cert-manager --create-namespace
+
+# or
+ 
+helm upgrade --install cert-manager jetstack/cert-manager \
+--set crds.enabled=true \
+--set "extraArgs={--enable-gateway-api}" \
+--namespace cert-manager --create-namespace
+```
+
+Verify:
+
+```bash
+kubectl get pods -n cert-manager
+# All pods should be Running
+```
+
+> [!NOTE]
+> We ues cert manager for TLS to Vault
+
+```bash
+# Create namespace first
+kubectl create namespace vault
+
+# Apply CA configuration
+kubectl apply -f infrastructure/charts/cert-manager/vault/
+
+# Verify CA is ready
+kubectl get issuers -n vault
+kubectl get certificates -n vault vault-ca
+kubectl get certificate -n vault vault-server-tls
+
+# Check the secret was created
+kubectl get secret -n vault vault-server-tls
+# Should show 3 data items: tls.crt, tls.key, ca.crt
+```
+
+Get the CA `vault-ca-secret` for Axum microservices and for CLI and cert-maanger ClusterIssuer.
+> vault-k8s-ci ClusterIssuer caBundle should be replaced
+
+```bash
+# For Axum microservices
+kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-ca.crt
+# For vault-k8s-ci ClusterIssuer
+kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d
+```
+
+> [!NOTE]
+> Don't forget to add this to `~/.zsh_secrets`
+
+```bash
+cat > ~/.zsh_secrets <<EOF
+VAULT_CACERT=~/certs/vault-ca.crt
+EOF
+```
+
+> [!NOTE]
+> `infrastructure/charts/cert-manager/vault` folder is implementing a Self-Contained PKI just for Vault's internal health.
+>
+> This breaks the "Chicken and Egg" problem where Vault needs a cert to start, but you want Vault to issue certs.
+
+Here is the flow of your files:
+
+1. The Root of Trust: `issuer.yaml` (First part)
+    * What it does: Creates a SelfSigned Issuer named `selfsigned-issuer`.
+    * Why: We need someone to sign the very first CA certificate. Since Vault isn't up yet, we sign it ourselves.
+2. The Authority: `certificate.yaml`
+    * What it does: Asks selfsigned-issuer to generate a Root CA Certificate.
+    * Result: A Secret named vault-ca-secret is created. This contains `ca.crt`, `tls.crt`, and `tls.key`. This is your Cluster's Internal Root CA.
+3. The Manager: `issuer.yaml` (Second part)
+    * What it does: Creates an Issuer named `vault-ca-issuer`.
+    * Configuration: It points to `vault-ca-secret`.
+    * Why: Now Cert-Manager can say, "I have the keys to the Castle (the Root CA), I can now sign certificates for the Vault servers."
+4. The Server Certificate: vault-server-tls.yaml
+    * What it does: Asks `vault-ca-issuer` to sign a certificate for `vault-0`, `vault-1`, `localhost`, `vault.vault.svc`, etc.
+    * Result: A Secret named `vault-server-tls` is created.
+    * Usage: Your `vault-values.yaml` mounts this secret so Vault can serve HTTPS.
+
+---
+
+## 5. Install vault
+
+### How Vault HA Works with Raft on Kubernetes
+
+**Key Concept**: In Raft-based HA mode, only the **first pod (vault-0)** is initialized. The other pods (vault-1, vault-2) are **standby replicas** that join the Raft cluster automatically but are NOT independently initialized.
+
+#### Architecture Overview
+
+```yaml
+┌─────────────┐     ┌─────────────┐     ┌─────────────┐
+│   vault-0   │────▶│   vault-1   │────▶│   vault-2   │
+│  (Leader)   │◀────│ (Follower)  │◀────│ (Follower)  │
+│ INITIALIZED │     │ JOINS RAFT  │     │ JOINS RAFT  │
+└─────────────┘     └─────────────┘     └─────────────┘
+       │                   │                   │
+       └───────────────────┴───────────────────┘
+              Raft Consensus Protocol
+```
+
+#### How It Works
+
+1. **Raft Consensus**: Vault uses the Raft algorithm for distributed consensus. One node is the leader (active), others are followers (standby).
+
+2. **Storage**: Each pod has its own persistent volume (`/vault/data`), but they replicate data through Raft protocol.
+
+3. **Leader Election**: If the leader fails, followers automatically elect a new leader (typically within seconds).
+
+4. **Data Replication**: All write operations go through the leader, which replicates them to followers.
+
+5. **High Availability**:
+   * With 3 replicas, the cluster can tolerate 1 node failure
+   * Minimum 2 nodes needed for quorum (majority)
+   * Formula: quorum = (n/2) + 1, where n = total nodes
 
 ```bash
 helm install vault hashicorp/vault \
@@ -212,7 +329,141 @@ helm upgrade --install vault hashicorp/vault \
   --namespace vault --create-namespace
 ```
 
-aaa
+```bash
+kubectl get pods -n vault -w
+```
+
+Expected output:
+
+```bash
+NAME                       READY   STATUS    RESTARTS   AGE
+vault-0                    0/1     Running   0          30s
+vault-1                    0/1     Running   0          30s
+vault-2                    0/1     Running   0          30s
+```
+
+All pods will be 0/1 (Not Ready) because Vault is sealed.
+
+#### Initialize Vault (vault-0 only)
+
+```bash
+# Initialize vault-0
+kubectl exec -n vault vault-0 -- vault operator init \
+  -key-shares=5 \
+  -key-threshold=3 \
+  -format=json > vault-keys.json
+
+# Extract keys (save these securely!)
+cat vault-keys.json | jq -r '.unseal_keys_b64[]'
+cat vault-keys.json | jq -r '.root_token'
+```
+
+Export temporarly
+
+```bash
+export VAULT_UNSEAL_KEY1=$(cat vault-keys.json | jq -r '.unseal_keys_b64[0]')
+export VAULT_UNSEAL_KEY2=$(cat vault-keys.json | jq -r '.unseal_keys_b64[1]')
+export VAULT_UNSEAL_KEY3=$(cat vault-keys.json | jq -r '.unseal_keys_b64[2]')
+export VAULT_UNSEAL_KEY4=$(cat vault-keys.json | jq -r '.unseal_keys_b64[3]')
+export VAULT_UNSEAL_KEY5=$(cat vault-keys.json | jq -r '.unseal_keys_b64[4]')
+export VAULT_ROOT_TOKEN=$(cat vault-keys.json | jq -r '.root_token')
+```
+
+Keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.json`
+
+```bash
+cat > ~/.zsh_secrets <<EOF
+# Vault unseal keys
+export VAULT_UNSEAL_KEY1="$(jq -r '.unseal_keys_b64[0]' vault-keys.json)"
+export VAULT_UNSEAL_KEY2="$(jq -r '.unseal_keys_b64[1]' vault-keys.json)"
+export VAULT_UNSEAL_KEY3="$(jq -r '.unseal_keys_b64[2]' vault-keys.json)"
+export VAULT_UNSEAL_KEY4="$(jq -r '.unseal_keys_b64[3]' vault-keys.json)"
+export VAULT_UNSEAL_KEY5="$(jq -r '.unseal_keys_b64[4]' vault-keys.json)"
+
+# Vault root token
+export VAULT_TOKEN="$(jq -r '.root_token' vault-keys.json)"
+EOF && [ -f ~/.zsh_secrets ] && source ~/.zsh_secrets
+```
+
+#### Unseal vault-0
+
+```bash
+# Unseal vault-0 (need 3 keys)
+kubectl exec -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY1
+kubectl exec -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY2
+kubectl exec -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY3
+
+# Verify vault-0 is unsealed and ready
+kubectl exec -n vault vault-0 -- vault status
+```
+
+#### Join and Unseal vault-1 and vault-2
+
+With retry_join configured, vault-1 and vault-2 should automatically join. You just need to unseal them.
+
+For vault-1:
+
+```bash
+# Check if it auto-joined (wait 30 seconds after vault-0 is unsealed)
+kubectl logs -n vault vault-1 | grep -i "join\|raft"
+
+# If auto-joined, just unseal it
+kubectl exec -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY1
+kubectl exec -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY2
+kubectl exec -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY3
+
+# Verify
+kubectl exec -n vault vault-1 -- vault status
+```
+
+For vault-2:
+
+```bash
+kubectl exec -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY1
+kubectl exec -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY2
+kubectl exec -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY3
+
+# Verify
+kubectl exec -n vault vault-2 -- vault status
+```
+
+Verify Cluster
+
+```bash
+# Check all pods are ready
+kubectl get pods -n vault
+
+# Expected:
+# NAME      READY   STATUS    RESTARTS   AGE
+# vault-0   1/1     Running   0          5m
+# vault-1   1/1     Running   0          5m
+# vault-2   1/1     Running   0          5m
+
+# Check Raft cluster status
+kubectl exec -n vault vault-0 -- vault login $VAULT_ROOT_TOKEN
+kubectl exec -n vault vault-0 -- vault operator raft list-peers
+# Node       Address                        State       Voter
+# ----       -------                        -----       -----
+# vault-0    vault-0.vault-internal:8201    leader      true
+# vault-1    vault-1.vault-internal:8201    follower    true
+# vault-2    vault-2.vault-internal:8201    follower    true
+```
+
+#### TLS Verification
+
+```bash
+# Get CA certificate
+kubectl get secret -n vault vault-server-tls \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d > vault-ca.crt
+
+# Port forward
+kubectl port-forward -n vault vault-0 8200:8200
+
+# In another terminal, test
+curl --cacert vault-ca.crt https://localhost:8200/v1/sys/health
+```
+
+-=-=-=-=-=-=-=-=-=-=--=-=============-=-=-=-=-=-=-=-=-=-=--=-=============-=-=-=-=-=-=-=-=-=-=--=-=============
 
 ### Initialization (important)
 
@@ -249,38 +500,33 @@ UNSEAL_KEY4=''
 UNSEAL_KEY5=''
 
 VAULT_TOKEN=''
-EOF
+EOF && source ~/.zshrc
 ```
-
-Save:
-
-* Unseal keys
-* Root token
 
 Then unseal each pod because each pod has vault
 
 vault-0
 
 ```bash
-kubectl exec -it -n vault vault-0 -- vault operator unseal &UNSEAL_KEY1
-kubectl exec -it -n vault vault-0 -- vault operator unseal &UNSEAL_KEY2
-kubectl exec -it -n vault vault-0 -- vault operator unseal &UNSEAL_KEY3
+kubectl exec -it -n vault vault-0 -- vault operator unseal $UNSEAL_KEY1
+kubectl exec -it -n vault vault-0 -- vault operator unseal $UNSEAL_KEY2
+kubectl exec -it -n vault vault-0 -- vault operator unseal $UNSEAL_KEY3
 ```
 
 vault-1
 
 ```bash
-kubectl exec -it -n vault vault-1 -- vault operator unseal &UNSEAL_KEY1
-kubectl exec -it -n vault vault-1 -- vault operator unseal &UNSEAL_KEY2
-kubectl exec -it -n vault vault-1 -- vault operator unseal &UNSEAL_KEY3
+kubectl exec -it -n vault vault-1 -- vault operator unseal $UNSEAL_KEY1
+kubectl exec -it -n vault vault-1 -- vault operator unseal $UNSEAL_KEY2
+kubectl exec -it -n vault vault-1 -- vault operator unseal $UNSEAL_KEY3
 ```
 
 vault-2
 
 ```bash
-kubectl exec -it -n vault vault-2 -- vault operator unseal &UNSEAL_KEY1
-kubectl exec -it -n vault vault-2 -- vault operator unseal &UNSEAL_KEY2
-kubectl exec -it -n vault vault-2 -- vault operator unseal &UNSEAL_KEY3
+kubectl exec -it -n vault vault-2 -- vault operator unseal $UNSEAL_KEY1
+kubectl exec -it -n vault vault-2 -- vault operator unseal $UNSEAL_KEY2
+kubectl exec -it -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3
 ```
 
 Repeat until quorum is reached (usually 2/3)
@@ -340,7 +586,7 @@ vault write auth/kubernetes/role/compute-provisioner \
 
 ---
 
-## 5. Install vault-secrets-operator
+## 6. Install vault-secrets-operator
 
 ### Prerequisites
 
@@ -369,25 +615,3 @@ vault-secrets-operator-controller-manager-645c4f6b6d-jpkrz   3/3     Running   0
 ```
 
 ---
-
-## 6. Install cert-manager
-
-```bash
-helm install cert-manager jetstack/cert-manager \
-  --set crds.enabled=true \
-  --namespace cert-manager --create-namespace
-
-# or
- 
-helm upgrade --install cert-manager jetstack/cert-manager \
---set crds.enabled=true \
---set "extraArgs={--enable-gateway-api}" \
---namespace cert-manager --create-namespace
-```
-
-Verify:
-
-```bash
-kubectl get pods -n cert-manager
-# All pods should be Running
-```

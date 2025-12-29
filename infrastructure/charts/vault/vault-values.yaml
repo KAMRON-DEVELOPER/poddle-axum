@@ -1,15 +1,65 @@
 global:
   enabled: true
-  tlsDisable: true
+  tlsDisable: false
 
-server:
   resources:
     requests:
       memory: 256Mi
       cpu: 250m
     limits:
-      memory: 512Mi
-      cpu: 500m
+      memory: 256Mi
+      cpu: 250m
+
+injector:
+  enabled: false
+
+server:
+  # Mount TLS certificates
+  extraEnvironmentVars:
+    VAULT_CACERT: /vault/userconfig/vault-server-tls/ca.crt
+    VAULT_TLSCERT: /vault/userconfig/vault-server-tls/tls.crt
+    VAULT_TLSKEY: /vault/userconfig/vault-server-tls/tls.key
+
+  volumes:
+    - name: tls
+      secret:
+        defaultMode: 420
+        secretName: vault-server-tls
+
+  volumeMounts:
+    - mountPath: /vault/userconfig/vault-server-tls
+      name: tls
+      readOnly: true
+
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 256Mi
+      cpu: 250m
+
+  # Health checks adjusted for TLS
+  # For HA configuration and because we need to manually init the vault,
+  # we need to define custom readiness/liveness Probe settings
+  readinessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+  livenessProbe:
+    enabled: true
+    path: "/v1/sys/health?standbyok=true"
+    initialDelaySeconds: 60
+
+  # Affinity to spread across nodes
+  affinity: |
+    podAntiAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        - labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ template "vault.name" . }}
+              app.kubernetes.io/instance: "{{ .Release.Name }}"
+              component: server
+          topologyKey: kubernetes.io/hostname
 
   ha:
     enabled: true
@@ -19,10 +69,54 @@ server:
       enabled: true
       setNodeId: true
 
+      config: |
+        ui = true
+
+        cluster_name = "vault-integrated-storage"
+
+        listener "tcp" {
+          tls_disable = 0
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+          tls_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+          tls_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+          tls_client_ca_file = "/vault/userconfig/vault-server-tls/ca.crt"
+        }
+
+        storage "raft" {
+          path = "/vault/data"
+          
+          retry_join {
+            leader_api_addr = "https://vault-0.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+            leader_tls_servername = "vault-0.vault-internal"
+          }
+          
+          retry_join {
+            leader_api_addr = "https://vault-1.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+            leader_tls_servername = "vault-1.vault-internal"
+          }
+          
+          retry_join {
+            leader_api_addr = "https://vault-2.vault-internal:8200"
+            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
+            leader_client_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
+            leader_client_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+            leader_tls_servername = "vault-2.vault-internal"
+          }
+        }
+
+        service_registration "kubernetes" {}
+
   dataStorage:
     size: 10Gi
     mountPath: "/vault/data"
-    storageClass: local-path
+    storageClass: local-path # Change to longhorn/rook-ceph for production
 
   auditStorage:
     enabled: true
@@ -32,3 +126,4 @@ server:
 
 ui:
   enabled: true
+  serviceType: ClusterIP
