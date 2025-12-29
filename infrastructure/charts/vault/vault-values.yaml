@@ -16,20 +16,32 @@ injector:
 server:
   # Mount TLS certificates
   extraEnvironmentVars:
-    VAULT_CACERT: /vault/userconfig/vault-server-tls/ca.crt
-    VAULT_TLSCERT: /vault/userconfig/vault-server-tls/tls.crt
-    VAULT_TLSKEY: /vault/userconfig/vault-server-tls/tls.key
+    # GOOGLE_REGION: global
+    # GOOGLE_PROJECT: my-poddle-project
+    # GOOGLE_CREDENTIALS: /vault/userconfig/poddle-kms-service-account.json
+    # VAULT_GCPCKMS_SEAL_KEY_RING: vault-unseal-key-ring
+    # VAULT_GCPCKMS_SEAL_CRYPTO_KEY: vault-unseal-crypto-key
+    VAULT_CACERT: /vault/userconfig/ca.crt
+    VAULT_TLSCERT: /vault/userconfig/tls.crt
+    VAULT_TLSKEY: /vault/userconfig/tls.key
 
   volumes:
-    - name: userconfig-vault-server-tls
+    - name: vault-server-tls-secret-volume
       secret:
         defaultMode: 420
-        secretName: vault-server-tls
+        secretName: vault-server-tls-secret
+    # - name: poddle-kms-service-account-volume
+    #   secret:
+    #     defaultMode: 420
+    #     secretName: poddle-kms-service-account-secret
 
   volumeMounts:
-    - mountPath: /vault/userconfig/vault-server-tls
-      name: userconfig-vault-server-tls
+    - mountPath: /vault/userconfig
+      name: vault-server-tls-secret-volume
       readOnly: true
+    # - mountPath: /vault/userconfig
+    #   name: poddle-kms-service-account-volume
+    #   readOnly: true
 
   resources:
     requests:
@@ -78,9 +90,18 @@ server:
           tls_disable = 0
           address = "[::]:8200"
           cluster_address = "[::]:8201"
-          tls_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
-          tls_key_file = "/vault/userconfig/vault-server-tls/tls.key"
-          tls_client_ca_file = "/vault/userconfig/vault-server-tls/ca.crt"
+          tls_cert_file = "/vault/tls/tls.crt"
+          tls_key_file = "/vault/tls/tls.key"
+          tls_client_ca_file = "/vault/tls/ca.crt"
+        }
+
+        seal "gcpckms" {
+          disabled    = "true"
+          # region      = "global"
+          # project     = "Poddle-Dev"
+          # credentials = "/vault/userconfig/poddle-kms-service-account.json"
+          # key_ring    = "vault-unseal-key-ring"
+          # crypto_key  = "vault-unseal-crypto-key"
         }
 
         storage "raft" {
@@ -89,25 +110,25 @@ server:
           retry_join {
             leader_api_addr = "https://vault-0.${SERVICE}:8200"
             leader_tls_servername = "${CN}"
-            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
-            leader_client_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
-            leader_client_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+            leader_ca_cert_file = "/vault/tls/ca.crt"
+            leader_client_cert_file = "/vault/tls/tls.crt"
+            leader_client_key_file = "/vault/tls/tls.key"
           }
           
           retry_join {
             leader_api_addr = "https://vault-1.${SERVICE}:8200"
             leader_tls_servername = "${CN}"
-            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
-            leader_client_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
-            leader_client_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+            leader_ca_cert_file = "/vault/tls/ca.crt"
+            leader_client_cert_file = "/vault/tls/tls.crt"
+            leader_client_key_file = "/vault/tls/tls.key"
           }
           
           retry_join {
             leader_api_addr = "https://vault-2.${SERVICE}:8200"
             leader_tls_servername = "${CN}"
-            leader_ca_cert_file = "/vault/userconfig/vault-server-tls/ca.crt"
-            leader_client_cert_file = "/vault/userconfig/vault-server-tls/tls.crt"
-            leader_client_key_file = "/vault/userconfig/vault-server-tls/tls.key"
+            leader_ca_cert_file = "/vault/tls/ca.crt"
+            leader_client_cert_file = "/vault/tls/tls.crt"
+            leader_client_key_file = "/vault/tls/tls.key"
           }
         }
 

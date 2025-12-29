@@ -227,78 +227,140 @@ kubectl get pods -n cert-manager
 
 ---
 
-## 5. Install Vault with HA mode with TLS
+## 5. Install Vault (HA) with internal TLS via cert-manager
 
-> [!NOTE]
-> You may want to use vault CLI, so install `sudo pacman -S vault` and enable aaa with `vault -autocomplete-install`
-
-### Create CA secrets
+[!NOTE]
+If you plan to use the Vault CLI locally, install it and enable shell completion:
 
 ```bash
-# Create namespace first
+sudo pacman -S vault
+vault -autocomplete-install
+```
+
+### 5.1 Create Vault namespace
+
+```bash
 kubectl create namespace vault
+```
 
-# Apply CA configuration
-kubectl apply -f cert-manager/vault/ca/selfsigned-issuer.yaml
-kubectl apply -f cert-manager/vault/ca/root-ca-certificate.yaml
-kubectl apply -f cert-manager/vault/ca/root-ca-issuer.yaml
-kubectl apply -f cert-manager/vault/certs/vault-server-tls.yaml
+### 5.2 Bootstrap Vault internal PKI (cert-manager)
 
+This directory implements a self-contained internal PKI used only to bootstrap Vault TLS.
 
-# Verify CA is ready
+```bash
+infrastructure/charts/cert-manager/vault/
+├── ca/
+│   ├── selfsigned-issuer.yaml
+│   ├── vault-root-ca-certificate.yaml
+│   └── vault-root-ca-issuer.yaml
+└── certs/
+    └── vault-server-tls-certificate.yaml
+```
+
+Apply manifests in order:
+
+```bash
+kubectl apply -f infrastructure/charts/cert-manager/vault/ca/selfsigned-issuer.yaml
+kubectl apply -f infrastructure/charts/cert-manager/vault/ca/vault-root-ca-certificate.yaml
+kubectl apply -f infrastructure/charts/cert-manager/vault/ca/vault-root-ca-issuer.yaml
+kubectl apply -f infrastructure/charts/cert-manager/vault/certs/vault-server-tls-certificate.yaml
+```
+
+### 5.3 Verify PKI resources
+
+```bash
 kubectl get issuers -n vault
-kubectl get certificates -n vault vault-ca
-kubectl get certificate -n vault vault-server-tls
-
-# Check the secret was created
-kubectl get secret -n vault vault-server-tls
-# Should show 3 data items: tls.crt, tls.key, ca.crt
+kubectl get certificates -n vault
+kubectl get secrets -n vault
 ```
 
-* Secret `vault-root-ca-secret` contains
-  * tls.crt (self-signed root)
-  * tls.key (CA private key)
-This is the most sensitive object.
+Expected important secrets:
 
-> [!NOTE]
-> `infrastructure/charts/cert-manager/vault` folder is implementing a Self-Contained PKI just for Vault's internal health.
->
-> This breaks the "Chicken and Egg" problem where Vault needs a cert to start, but you want Vault to issue certs.
+* `vault-root-ca-secret`
+* `vault-server-tls-secret`
 
-Here is the flow of your files:
+The server TLS secret should contain:
 
-1. The Root of Trust: `issuer.yaml` (First part)
-    * What it does: Creates a SelfSigned Issuer named `selfsigned-issuer`.
-    * Why: We need someone to sign the very first CA certificate. Since Vault isn't up yet, we sign it ourselves.
-2. The Authority: `certificate.yaml`
-    * What it does: Asks selfsigned-issuer to generate a Root CA Certificate.
-    * Result: A Secret named vault-ca-secret is created. This contains `ca.crt`, `tls.crt`, and `tls.key`. This is your Cluster's Internal Root CA.
-3. The Manager: `issuer.yaml` (Second part)
-    * What it does: Creates an Issuer named `vault-ca-issuer`.
-    * Configuration: It points to `vault-ca-secret`.
-    * Why: Now Cert-Manager can say, "I have the keys to the Castle (the Root CA), I can now sign certificates for the Vault servers."
-4. The Server Certificate: vault-server-tls.yaml
-    * What it does: Asks `vault-ca-issuer` to sign a certificate for `vault-0`, `vault-1`, `localhost`, `vault.vault.svc`, etc.
-    * Result: A Secret named `vault-server-tls` is created.
-    * Usage: Your `vault-values.yaml` mounts this secret so Vault can serve HTTPS.
+* `tls.crt`
+* `tls.key`
+* `ca.crt`
 
-Get the CA `vault-ca-secret` for Axum microservices and for CLI and cert-maanger ClusterIssuer.
-> vault-k8s-ci ClusterIssuer caBundle should be replaced
+### 5.4 What this PKI setup does (important)
+
+This setup solves the chicken-and-egg problem:
+> Vault needs TLS to start, but you want Vault to be your long-term PKI.
+
+So cert-manager provides only the bootstrap PKI, after which Vault can take over.
+
+1. Flow overview
+    * Bootstrap Issuer
+    * File: selfsigned-issuer.yaml
+    * Creates a one-time self-signed Issuer
+    * Used only to mint the root CA
+2. Root CA Certificate
+    * File: vault-root-ca-certificate.yaml
+    * Generates a self-signed root CA
+    * Stored in Secret: vault-root-ca-secret
+3. CA-backed Issuer
+    * File: vault-root-ca-issuer.yaml
+    * Uses vault-root-ca-secret
+    * Becomes the real signing authority
+4. Vault Server TLS Certificate
+    * File: vault-server-tls-certificate.yaml
+    * Issues TLS certs for:
+      * vault.vault.svc
+      * vault-active
+      * vault-standby
+      * StatefulSet pod DNS
+      * Internal wildcards
+    * Stored in Secret: vault-server-tls-secret
+
+### 5.6 Export Vault CA for clients and ClusterIssuers
+
+* This CA is required by:
+  * Axum microservices
+  * Vault CLI
+  * cert-manager ClusterIssuer (vault-k8s-ci)
+
+Export CA certificate
 
 ```bash
-# For Axum microservices
-kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-ca.crt
-# For vault-k8s-ci ClusterIssuer
-kubectl get secret vault-ca-secret -n vault -o jsonpath='{.data.ca\.crt}' | base64 -d
+mkdir -p ~/certs
+kubectl get secret vault-root-ca-secret -n vault \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-ca.crt
 ```
 
-> [!NOTE]
-> Don't forget to add this to `~/.zsh_secrets`
+For cert-manager ClusterIssuer
 
 ```bash
-cat > ~/.zsh_secrets <<EOF
-VAULT_CACERT=~/certs/vault-ca.crt
+kubectl get secret vault-root-ca-secret -n vault \
+  -o jsonpath='{.data.ca\.crt}' | base64 -d
+```
+
+Use this value as caBundle in your vault-k8s-ci ClusterIssuer.
+
+### 5.7 Configure Vault CLI trust
+
+Add to your shell secrets:
+
+```bash
+cat >> ~/.zsh_secrets <<EOF
+export VAULT_CACERT=~/certs/vault-ca.crt111
 EOF
+```
+
+Reload:
+
+```bash
+source ~/.zsh_secrets
+```
+
+### Setup GCP KMS for auto unseal
+
+```bash
+kubectl create secret generic vault-kms-config \
+  --from-file=gcp-creds.json=./my-gcp-sa.json \
+  -n vault
 ```
 
 ### How Vault HA Works with Raft on Kubernetes
