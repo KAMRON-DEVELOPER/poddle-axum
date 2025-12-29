@@ -185,7 +185,7 @@ helm install traefik traefik/traefik --wait \
 
 # or
 
-helm upgrade --install traefik traefik/traefik \                                                      
+helm upgrade --install traefik traefik/traefik \
   --values infrastructure/charts/traefik/traefik-values.yaml
   --namespace traefik --create-namespace \
 ```
@@ -207,7 +207,7 @@ helm install vault hashicorp/vault \
 
 # or
 
-helm upgrade --install vault hashicorp/vault \ 
+helm upgrade --install vault hashicorp/vault \
   --values infrastructure/charts/vault/vault-values.yaml
   --namespace vault --create-namespace
 
@@ -328,8 +328,7 @@ helm install cert-manager jetstack/cert-manager \
 
 # or
  
-helm upgrade --install \
-cert-manager jetstack/cert-manager \
+helm upgrade --install cert-manager jetstack/cert-manager \
 --set crds.enabled=true \
 --set "extraArgs={--enable-gateway-api}" \
 --namespace cert-manager --create-namespace
