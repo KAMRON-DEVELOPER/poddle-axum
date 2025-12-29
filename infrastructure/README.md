@@ -345,7 +345,7 @@ Add to your shell secrets:
 
 ```bash
 cat >> ~/.zsh_secrets <<EOF
-export VAULT_CACERT=~/certs/vault-ca.crt111
+export VAULT_CACERT=~/certs/vault-ca.crt
 EOF
 ```
 
