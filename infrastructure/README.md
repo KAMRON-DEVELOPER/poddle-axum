@@ -5,8 +5,12 @@
 ## Chart setup
 
 ```bash
+helm repo add cilium https://helm.cilium.io/
+helm repo add metallb https://metallb.github.io/metallb
+helm repo add traefik https://traefik.github.io/charts
 helm repo add hashicorp https://helm.releases.hashicorp.com
-
+helm repo add jetstack https://charts.jetstack.io
+helm repo add grafana https://grafana.github.io/helm-charts
 helm repo add minio https://helm.min.io/
 ```
 
@@ -23,8 +27,8 @@ mkdir -p infrastructure/charts/cilium
 mkdir -p infrastructure/charts/metallb
 mkdir -p infrastructure/charts/traefik
 mkdir -p infrastructure/charts/vault
-mkdir -p infrastructure/charts/cert-manager
 mkdir -p infrastructure/charts/vault-secrets-operator
+mkdir -p infrastructure/charts/cert-manager
 mkdir -p infrastructure/charts/grafana
 mkdir -p infrastructure/charts/alloy
 mkdir -p infrastructure/charts/tempo
