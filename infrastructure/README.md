@@ -284,7 +284,9 @@ Here is the flow of your files:
 
 ---
 
-## 5. Install vault
+## 5. Install Vault with HA mode with TLS
+
+### You may want to use vault CLI, so install `sudo pacman -S vault` and enable aaa with `vault -autocomplete-install`
 
 ### How Vault HA Works with Raft on Kubernetes
 
@@ -331,15 +333,11 @@ helm upgrade --install vault hashicorp/vault \
 
 ```bash
 kubectl get pods -n vault -w
-```
-
-Expected output:
-
-```bash
-NAME                       READY   STATUS    RESTARTS   AGE
-vault-0                    0/1     Running   0          30s
-vault-1                    0/1     Running   0          30s
-vault-2                    0/1     Running   0          30s
+# Expected output:
+# NAME                       READY   STATUS    RESTARTS   AGE
+# vault-0                    0/1     Running   0          30s
+# vault-1                    0/1     Running   0          30s
+# vault-2                    0/1     Running   0          30s
 ```
 
 All pods will be 0/1 (Not Ready) because Vault is sealed.
