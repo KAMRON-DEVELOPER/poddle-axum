@@ -121,7 +121,7 @@ helm install metallb metallb/metallb \
 
 # or
 
-helm upgrade --install metallb metallb/metallb \                                                      
+helm upgrade --install metallb metallb/metallb \
   --values infrastructure/charts/metallb/metallb-values.yaml \
   --namespace metallb-system --create-namespace
 ```
