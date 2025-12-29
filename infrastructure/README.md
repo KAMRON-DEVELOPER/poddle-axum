@@ -208,7 +208,7 @@ helm install vault hashicorp/vault \
 # or
 
 helm upgrade --install vault hashicorp/vault \
-  --values infrastructure/charts/vault/vault-values.yaml
+  --values infrastructure/charts/vault/vault-values.yaml \
   --namespace vault --create-namespace
 
 ```
