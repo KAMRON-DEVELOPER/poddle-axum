@@ -99,11 +99,11 @@ server:
 
         seal "gcpckms" {
           disabled    = "true"
-          # region      = "global"
-          # project     = "Poddle-Dev"
-          # credentials = "/vault/userconfig/poddle-kms-service-account.json"
-          # key_ring    = "vault-unseal-key-ring"
-          # crypto_key  = "vault-unseal-crypto-key"
+          region      = "global"
+          project     = "Poddle-Dev"
+          credentials = "/vault/userconfig/poddle-kms-service-account.json"
+          key_ring    = "vault-unseal-key-ring"
+          crypto_key  = "vault-unseal-crypto-key"
         }
 
         storage "raft" {
