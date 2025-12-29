@@ -186,8 +186,8 @@ helm install traefik traefik/traefik --wait \
 # or
 
 helm upgrade --install traefik traefik/traefik \
-  --values infrastructure/charts/traefik/traefik-values.yaml
-  --namespace traefik --create-namespace \
+  --values infrastructure/charts/traefik/traefik-values.yaml \
+  --namespace traefik --create-namespace
 ```
 
 Verify Traefik got an external IP:
