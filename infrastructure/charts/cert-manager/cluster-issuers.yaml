@@ -28,7 +28,7 @@ spec:
   vault:
     server: https://vault-active.vault.svc:8200
     path: pki/sign/poddle-uz
-    # You must inject the Base64 of vault-ca-secret -> ca.crt here
+    # You must inject the Base64 of vault-root-ca-secret -> ca.crt here
     caBundle: <base64 encoded CA Bundle PEM file>
     auth:
       kubernetes:
