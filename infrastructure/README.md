@@ -327,7 +327,7 @@ Export CA certificate
 ```bash
 mkdir -p ~/certs
 kubectl get secret vault-root-ca-secret -n vault \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-ca.crt
+  -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-root-ca.crt
 ```
 
 For cert-manager ClusterIssuer
@@ -345,7 +345,7 @@ Add to your shell secrets:
 
 ```bash
 cat >> ~/.zsh_secrets <<EOF
-export VAULT_CACERT=~/certs/vault-ca.crt
+export VAULT_CACERT=~/certs/vault-root-ca.crt
 EOF
 ```
 
@@ -355,11 +355,11 @@ Reload:
 source ~/.zsh_secrets
 ```
 
-### Setup GCP KMS for auto unseal
+### Setup GCP KMS for auto unseal (if enabled)
 
 ```bash
-kubectl create secret generic vault-kms-config \
-  --from-file=gcp-creds.json=./my-gcp-sa.json \
+kubectl create secret generic poddle-kms-service-account-secret \
+  --from-file=poddle-kms-service-account.json=~/certs/poddle-kms-service-account.json \
   -n vault
 ```
 
