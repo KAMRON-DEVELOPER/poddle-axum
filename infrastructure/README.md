@@ -532,6 +532,10 @@ kubectl exec -n vault vault-0 -- vault operator raft list-peers
 #### TLS Verification
 
 ```bash
+kubectl apply -f infrastructure/charts/vault/ingress.yaml
+```
+
+```bash
 # Get CA certificate
 kubectl get secret -n vault vault-server-tls-secret \
   -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-root-ca.crt
@@ -540,7 +544,7 @@ kubectl get secret -n vault vault-server-tls-secret \
 kubectl port-forward -n vault vault-0 8200:8200
 
 # In another terminal, test
-curl --cacert ~/certs/vault-root-ca.crt https://localhost:8200/v1/sys/health
+curl --cacert ~/certs/vault-root-ca.crt https://vault.poddle.uz/v1/sys/health
 ```
 
 -=-=-=-=-=-=-=-=-=-=--=-=============-=-=-=-=-=-=-=-=-=-=--=-=============-=-=-=-=-=-=-=-=-=-=--=-=============
