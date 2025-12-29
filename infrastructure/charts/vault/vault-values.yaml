@@ -1,0 +1,34 @@
+global:
+  enabled: true
+  tlsDisable: true
+
+server:
+  resources:
+    requests:
+      memory: 256Mi
+      cpu: 250m
+    limits:
+      memory: 512Mi
+      cpu: 500m
+
+  ha:
+    enabled: true
+    replicas: 3
+
+    raft:
+      enabled: true
+      setNodeId: true
+
+  dataStorage:
+    size: 10Gi
+    mountPath: "/vault/data"
+    storageClass: local-path
+
+  auditStorage:
+    enabled: true
+    size: 5Gi
+    mountPath: "/vault/audit"
+    storageClass: local-path
+
+ui:
+  enabled: true

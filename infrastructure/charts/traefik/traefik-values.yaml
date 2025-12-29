@@ -1,0 +1,132 @@
+# EntryPoints
+ports:
+  web:
+    port: 80
+    nodePort: 30000
+    redirections:
+      entryPoint:
+        to: websecure
+        scheme: https
+        permanent: true
+
+  websecure:
+    port: 443
+    nodePort: 30001
+    tls:
+      enabled: true
+
+  tcp:
+    port: 8443
+    protocol: TCP
+
+  udp:
+    port: 9000
+    protocol: UDP
+
+# Providers
+providers:
+  kubernetesCRD: # Watches IngressRoute, Middleware, TLSStore, etc.
+    enabled: true
+    # allowCrossNamespace: false
+    # allowExternalNameServices: false
+  kubernetesIngress: # Watches standard Kubernetes Ingress
+    enabled: true
+    # allowExternalNameServices: false
+  kubernetesGateway: # Watches Gateway API (HTTPRoute, TCPRoute, etc.)
+    enabled: true
+
+experimental:
+  kubernetesGateway:
+    enabled: true
+
+ingressClass:
+  enabled: true # Creates IngressClass resource
+  isDefaultClass: true # Makes it the default IngressClass
+  name: "traefik" # Name of the IngressClass
+
+gatewayClass:
+  enabled: true # Creates GatewayClass resource
+  name: "traefik" # Name of the GatewayClass
+
+# Gateway
+gateway:
+  enabled: true
+  name: "traefik-gateway"
+  annotations:
+    cert-manager.io/issuer: vault-k8s-ci
+  listeners:
+    web:
+      port: 80
+      protocol: HTTP
+      namespacePolicy:
+        from: All
+
+    websecure:
+      port: 443
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: wildcard-poddle-uz-tls
+          kind: Secret
+
+# Default TLSStore with wildcard cert
+tlsStore:
+  default:
+    defaultCertificate:
+      secretName: wildcard-poddle-uz-tls
+
+# ACME resolver for custom domains
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      email: atajanovkamronbek2003@gmail.com
+      storage: /data/acme.json
+      httpChallenge:
+        entryPoint: web
+
+# Persistence for ACME certificates
+persistence:
+  enabled: true
+  name: data
+  size: 1Gi
+  storageClass: "local-path"
+
+# Dashboard
+api:
+  dashboard: true
+  insecure: false
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.poddle.uz`)
+    entryPoints: ["websecure"]
+    middlewares:
+      - name: traefik-dashboard-auth
+
+# Dashboard auth
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: traefik-dashboard-auth-secret
+    type: kubernetes.io/basic-auth
+    stringData:
+      username: admin
+      password: "1213"
+
+  - apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: traefik-dashboard-auth
+    spec:
+      basicAuth:
+        secret: traefik-dashboard-auth-secret
+
+# Enable Observability
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true

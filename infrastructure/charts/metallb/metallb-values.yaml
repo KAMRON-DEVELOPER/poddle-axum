@@ -1,0 +1,15 @@
+1prometheus:
+2  podMonitor:
+3    enabled: true
+
+controller:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 100Mi
+
+speaker:
+  resources:
+    limits:
+      cpu: 100m
+      memory: 100Mi
