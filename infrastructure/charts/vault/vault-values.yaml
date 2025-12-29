@@ -18,30 +18,30 @@ server:
   extraEnvironmentVars:
     # GOOGLE_REGION: global
     # GOOGLE_PROJECT: my-poddle-project
-    # GOOGLE_CREDENTIALS: /vault/userconfig/poddle-kms-service-account.json
+    # GOOGLE_CREDENTIALS: /vault/gcpkms/poddle-kms-service-account.json
     # VAULT_GCPCKMS_SEAL_KEY_RING: vault-unseal-key-ring
     # VAULT_GCPCKMS_SEAL_CRYPTO_KEY: vault-unseal-crypto-key
-    VAULT_CACERT: /vault/userconfig/ca.crt
-    VAULT_TLSCERT: /vault/userconfig/tls.crt
-    VAULT_TLSKEY: /vault/userconfig/tls.key
+    VAULT_CACERT: /vault/tls/ca.crt
+    VAULT_TLSCERT: /vault/tls/tls.crt
+    VAULT_TLSKEY: /vault/tls/tls.key
 
   volumes:
     - name: vault-server-tls-secret-volume
       secret:
         defaultMode: 420
         secretName: vault-server-tls-secret
-    # - name: poddle-kms-service-account-volume
-    #   secret:
-    #     defaultMode: 420
-    #     secretName: poddle-kms-service-account-secret
+    - name: poddle-kms-service-account-volume
+      secret:
+        defaultMode: 420
+        secretName: poddle-kms-service-account-secret
 
   volumeMounts:
-    - mountPath: /vault/userconfig
+    - mountPath: /vault/tls
       name: vault-server-tls-secret-volume
       readOnly: true
-    # - mountPath: /vault/userconfig
-    #   name: poddle-kms-service-account-volume
-    #   readOnly: true
+    - mountPath: /vault/gcpkms
+      name: poddle-kms-service-account-volume
+      readOnly: true
 
   resources:
     requests:
@@ -101,7 +101,7 @@ server:
           disabled    = "true"
           region      = "global"
           project     = "Poddle-Dev"
-          credentials = "/vault/userconfig/poddle-kms-service-account.json"
+          credentials = "/vault/gcpkms/poddle-kms-service-account.json"
           key_ring    = "vault-unseal-key-ring"
           crypto_key  = "vault-unseal-crypto-key"
         }
