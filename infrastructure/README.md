@@ -358,7 +358,7 @@ source ~/.zsh_secrets
 ### Setup GCP KMS for auto unseal (if enabled)
 
 1. Enable `Cloud Key Management Service (KMS) API` from <https://console.cloud.google.com/marketplace/product/google/cloudkms.googleapis.com>
-2. Create a Service Account with the role `Cloud KMS CryptoKey Encrypter/Decrypter` from <https://console.cloud.google.com/apis/credentials>
+2. Create a Service Account with the role `Cloud KMS CryptoKey Encrypter/Decrypter` and `Cloud KMS Viewer` from <https://console.cloud.google.com/apis/credentials>
 3. Create Key Ring and CryptoKey(HSM Protection level, Symmetric encrypt/decrypt) from <https://console.cloud.google.com/security/kms>
 4. ownload the JSON Key for this service account(Create key for the service account)
 
