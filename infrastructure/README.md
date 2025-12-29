@@ -425,22 +425,22 @@ All pods will be 0/1 (Not Ready) because Vault is sealed.
 kubectl exec -n vault vault-0 -- vault operator init \
   -key-shares=5 \
   -key-threshold=3 \
-  -format=json > vault-keys.json
+  -format=json > ~/certs/vault-keys.json
 
 # Extract keys (save these securely!)
-cat vault-keys.json | jq -r '.unseal_keys_b64[]'
-cat vault-keys.json | jq -r '.root_token'
+cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[]'
+cat ~/certs/vault-keys.json | jq -r '.root_token'
 ```
 
 Export temporarly
 
 ```bash
-export VAULT_UNSEAL_KEY1=$(cat vault-keys.json | jq -r '.unseal_keys_b64[0]')
-export VAULT_UNSEAL_KEY2=$(cat vault-keys.json | jq -r '.unseal_keys_b64[1]')
-export VAULT_UNSEAL_KEY3=$(cat vault-keys.json | jq -r '.unseal_keys_b64[2]')
-export VAULT_UNSEAL_KEY4=$(cat vault-keys.json | jq -r '.unseal_keys_b64[3]')
-export VAULT_UNSEAL_KEY5=$(cat vault-keys.json | jq -r '.unseal_keys_b64[4]')
-export VAULT_ROOT_TOKEN=$(cat vault-keys.json | jq -r '.root_token')
+export VAULT_UNSEAL_KEY1=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[0]')
+export VAULT_UNSEAL_KEY2=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[1]')
+export VAULT_UNSEAL_KEY3=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[2]')
+export VAULT_UNSEAL_KEY4=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[3]')
+export VAULT_UNSEAL_KEY5=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[4]')
+export VAULT_ROOT_TOKEN=$(cat ~/certs/vault-keys.json | jq -r '.root_token')
 ```
 
 Keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.json`
