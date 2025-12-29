@@ -210,15 +210,46 @@ helm install vault hashicorp/vault \
 helm upgrade --install vault hashicorp/vault \
   --values infrastructure/charts/vault/vault-values.yaml \
   --namespace vault --create-namespace
-
 ```
+
+aaa
 
 ### Initialization (important)
 
 After pods are running:
 
 ```bash
-kubectl exec -it vault-0 -- vault operator init
+kubectl exec -it -n vault vault-0 -- vault operator init
+# Unseal Key 1: ...
+# Unseal Key 2: ...
+# Unseal Key 3: ...
+# Unseal Key 4: ...
+# Unseal Key 5: ...
+#
+# Initial Root Token: ...
+#
+# Vault initialized with 5 key shares and a key threshold of 3. Please securely
+# distribute the key shares printed above. When the Vault is re-sealed,
+# restarted, or stopped, you must supply at least 3 of these keys to unseal it
+# before it can start servicing requests.
+#
+# Vault does not store the generated root key. Without at least 3 keys to
+# reconstruct the root key, Vault will remain permanently sealed!
+#
+# It is possible to generate new unseal keys, provided you have a quorum of
+# existing unseal keys shares. See "vault operator rekey" for more information.
+```
+
+```bash
+cat > ~/.zsh_secrets <<EOF
+UNSEAL_KEY1=''
+UNSEAL_KEY2=''
+UNSEAL_KEY3=''
+UNSEAL_KEY4=''
+UNSEAL_KEY5=''
+
+VAULT_TOKEN=''
+EOF
 ```
 
 Save:
@@ -228,8 +259,28 @@ Save:
 
 Then unseal each pod because each pod has vault
 
+vault-0
+
 ```bash
-vault operator unseal &UNSEAL_KEY1
+kubectl exec -it -n vault vault-0 -- vault operator unseal &UNSEAL_KEY1
+kubectl exec -it -n vault vault-0 -- vault operator unseal &UNSEAL_KEY2
+kubectl exec -it -n vault vault-0 -- vault operator unseal &UNSEAL_KEY3
+```
+
+vault-1
+
+```bash
+kubectl exec -it -n vault vault-1 -- vault operator unseal &UNSEAL_KEY1
+kubectl exec -it -n vault vault-1 -- vault operator unseal &UNSEAL_KEY2
+kubectl exec -it -n vault vault-1 -- vault operator unseal &UNSEAL_KEY3
+```
+
+vault-2
+
+```bash
+kubectl exec -it -n vault vault-2 -- vault operator unseal &UNSEAL_KEY1
+kubectl exec -it -n vault vault-2 -- vault operator unseal &UNSEAL_KEY2
+kubectl exec -it -n vault vault-2 -- vault operator unseal &UNSEAL_KEY3
 ```
 
 Repeat until quorum is reached (usually 2/3)
