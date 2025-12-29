@@ -469,9 +469,9 @@ Reload
 
 ```bash
 # Unseal vault-0 (need 3 keys)
-kubectl exec -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY1
-kubectl exec -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY2
-kubectl exec -n vault vault-0 -- vault operator unseal $VAULT_UNSEAL_KEY3
+kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY1
+kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY2
+kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY3
 
 # Verify vault-0 is unsealed and ready
 kubectl exec -n vault vault-0 -- vault status
@@ -488,9 +488,9 @@ For vault-1:
 kubectl logs -n vault vault-1 | grep -i "join\|raft"
 
 # If auto-joined, just unseal it
-kubectl exec -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY1
-kubectl exec -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY2
-kubectl exec -n vault vault-1 -- vault operator unseal $VAULT_UNSEAL_KEY3
+kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY1
+kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY2
+kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY3
 
 # Verify
 kubectl exec -n vault vault-1 -- vault status
@@ -499,9 +499,9 @@ kubectl exec -n vault vault-1 -- vault status
 For vault-2:
 
 ```bash
-kubectl exec -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY1
-kubectl exec -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY2
-kubectl exec -n vault vault-2 -- vault operator unseal $VAULT_UNSEAL_KEY3
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY1
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY2
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3
 
 # Verify
 kubectl exec -n vault vault-2 -- vault status
