@@ -520,7 +520,7 @@ kubectl get pods -n vault
 # vault-2   1/1     Running   0          5m
 
 # Check Raft cluster status
-kubectl exec -n vault vault-0 -- vault login $VAULT_ROOT_TOKEN
+kubectl exec -n vault vault-0 -- vault login $VAULT_TOKEN
 kubectl exec -n vault vault-0 -- vault operator raft list-peers
 # Node       Address                        State       Voter
 # ----       -------                        -----       -----
