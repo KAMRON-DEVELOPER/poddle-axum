@@ -440,7 +440,7 @@ export UNSEAL_KEY2=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[1]')
 export UNSEAL_KEY3=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[2]')
 export UNSEAL_KEY4=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[3]')
 export UNSEAL_KEY5=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[4]')
-export VAULT_ROOT_TOKEN=$(cat ~/certs/vault-keys.json | jq -r '.root_token')
+export VAULTVAULT_TOKEN_TOKEN=$(cat ~/certs/vault-keys.json | jq -r '.root_token')
 ```
 
 Keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.json`
