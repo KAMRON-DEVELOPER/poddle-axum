@@ -167,7 +167,7 @@ spec:
 
 ---
 
-## 3. Install Traefik
+### 3. Install Traefik
 
 ```bash
 helm install traefik traefik/traefik \
@@ -199,7 +199,7 @@ kubectl get svc -n traefik
 
 ---
 
-## 4. Install cert-manager
+### 4. Install cert-manager
 
 ```bash
 helm install cert-manager jetstack/cert-manager \
@@ -331,13 +331,11 @@ kubectl get secret vault-root-ca-secret -n vault \
 ```
 
 For cert-manager ClusterIssuer
+Use this value as caBundle in your vault-k8s-ci ClusterIssuer.
 
 ```bash
-kubectl get secret vault-root-ca-secret -n vault \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d
+kubectl get secret vault-root-ca-secret -n vault -o jsonpath='{.data.ca\.crt}'
 ```
-
-Use this value as caBundle in your vault-k8s-ci ClusterIssuer.
 
 ### 5.7 Configure Vault CLI trust
 
@@ -355,7 +353,7 @@ Reload:
 source ~/.zsh_secrets
 ```
 
-### Setup GCP KMS for auto unseal (if enabled)
+#### Setup GCP KMS for auto unseal (if enabled)
 
 1. Enable `Cloud Key Management Service (KMS) API` from <https://console.cloud.google.com/marketplace/product/google/cloudkms.googleapis.com>
 2. Create a Service Account with the role `Cloud KMS CryptoKey Encrypter/Decrypter` and `Cloud KMS Viewer` from <https://console.cloud.google.com/apis/credentials>
@@ -457,7 +455,7 @@ export UNSEAL_KEY2=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[1]')
 export UNSEAL_KEY3=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[2]')
 export UNSEAL_KEY4=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[3]')
 export UNSEAL_KEY5=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[4]')
-export VAULTVAULT_TOKEN_TOKEN=$(cat ~/certs/vault-keys.json | jq -r '.root_token')
+export VAULT_TOKEN=$(cat ~/certs/vault-keys.json | jq -r '.root_token')
 ```
 
 Keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.json`
@@ -510,7 +508,7 @@ VAULT_TOKEN='...'
 
 ```bash
 export KUBE_EDITOR="nvim"
-export VAULT_ADDR='http://vault.poddle.uz:8200'
+export VAULT_ADDR='https://vault.poddle.uz'
 
 # Load local secrets
 [[ -f "$HOME/.zsh_secrets" ]] && source "$HOME/.zsh_secrets"
@@ -567,17 +565,96 @@ kubectl exec -n vault vault-0 -- vault operator raft list-peers
 # vault-2    vault-2.vault-internal:8201    follower    true
 ```
 
-#### A
+#### Create ingress, so applications can access to vault
 
 ```bash
 kubectl apply -f infrastructure/charts/vault/ingress.yaml
 ```
 
+======================================== Configure Kubernetes Auth ===============================================
+
+#### Enable Kubernetes Auth in Vault
+
 ```bash
-# Get CA certificate
-kubectl get secret -n vault vault-server-tls-secret \
-  -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-root-ca.crt
+vault auth enable kubernetes
 ```
+
+##### Create Token Reviewer ServiceAccount
+
+Vault needs a ServiceAccount with `system:auth-delegator` permission to verify JWT tokens via the TokenReview API.
+
+```bash
+# Create a ServiceAccount for Vault token review
+kubectl create serviceaccount vault-reviewer -n kube-system
+
+# Bind it to the system:auth-delegator ClusterRole
+kubectl create clusterrolebinding vault-reviewer-binding \
+  --clusterrole=system:auth-delegator \
+  --serviceaccount=kube-system:vault-reviewer
+```
+
+Get the required values from your cluster:
+
+```bash
+# Get Kubernetes CA certificate
+K8S_CA_CERT=$(kubectl config view --raw --minify --flatten \
+    -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)
+
+# Get the Kubernetes API server address
+K8S_HOST="https://192.168.31.4:6443"
+
+# Get token from vault-reviewer SA (has TokenReview permissions)
+REVIEWER_TOKEN=$(kubectl create token vault-reviewer -n kube-system --duration=87600h)
+
+# Configure Kubernetes auth
+vault write auth/kubernetes/config \
+  kubernetes_host="$K8S_HOST" \
+  kubernetes_ca_cert="$K8S_CA_CERT" \
+  token_reviewer_jwt="$REVIEWER_TOKEN"
+```
+
+> **IMPORTANT**: The `token_reviewer_jwt` must be from a ServiceAccount with `system:auth-delegator` role.  
+> Using the `cert-manager` SA will cause "permission denied" errors because it can't call the TokenReview API.
+> there is no flag like `--serviceaccount=...` But!
+> The vault-reviewer in this command is the ServiceAccount name. The command is specifically creating a token for that ServiceAccount.
+
+##### Create Vault Role for cert-manager
+
+```bash
+vault write auth/kubernetes/role/cert-manager \
+  bound_service_account_names=cert-manager \
+  bound_service_account_namespaces=cert-manager \
+  policies=cert-manager \
+  ttl=24h
+```
+
+##### Create ClusterIssuers
+
+```bash
+kubectl apply -f infrastructure/charts/cert-manager/cluster-issuers.yaml
+kubectl get clusterissuers
+```
+
+##### Checking
+
+```bash
+kubectl get clusterissuers
+# NAME                        READY   AGE
+# letsencrypt-production-ci   True    2m37s
+# letsencrypt-staging-ci      True    2m37s
+# selfsigned-ci               True    2m37s
+# vault-k8s-ci                True    2m37s
+# vault-token-ci              False   2m37s
+```
+
+##### Apply wildcard certificate
+
+```bash
+kubectl apply -f infrastructure/charts/cert-manager/wildcard-certificate.yaml
+kubectl get certificate -n traefik
+```
+
+=========================================== Configure Vault PKI ==================================================
 
 #### Configure Vault PKI
 
@@ -592,7 +669,7 @@ vault secrets tune -max-lease-ttl=87600h pki
 vault write -field=certificate pki/root/generate/internal \
   common_name="Poddle Root CA" \
   issuer_name="poddle-issuer-2025-12-26" \
-  ttl=87600h > ~/poddle-root-ca.crt
+  ttl=87600h > ~/certs/poddle-root-ca.crt
 
 # Configure CA URLs
 vault write pki/config/urls \
@@ -612,95 +689,10 @@ vault write pki/roles/poddle-uz \
 ```
 
 ```bash
-vault policy write tenant-policy infrastructure/vault/cert-manager-policy.hcl
+vault policy write cert-manager infrastructure/charts/vault/cert-manager-policy.hcl
 ```
 
-Kubernetes Auth with Vault
-> More secure than static tokens. Vault verifies Kubernetes Service Account JWTs.
-
-Enable Kubernetes Auth in Vault
-
-```bash
-vault auth enable kubernetes
-```
-
-Create Token Reviewer ServiceAccount
-Vault needs a ServiceAccount with `system:auth-delegator` permission to verify JWT tokens via the TokenReview API.
-
-```bash
-# Create a ServiceAccount for Vault token review
-kubectl create serviceaccount vault-reviewer -n kube-system
-
-# Bind it to the system:auth-delegator ClusterRole
-kubectl create clusterrolebinding vault-reviewer-binding \
-  --clusterrole=system:auth-delegator \
-  --serviceaccount=kube-system:vault-reviewer
-```
-
-Configure Kubernetes Auth
-
-Get the required values from your cluster:
-
-```bash
-# Get Kubernetes CA certificate
-K8S_CA_CERT=$(kubectl config view --raw --minify --flatten \
-    -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)
-
-# Get the Kubernetes API server address
-K8S_HOST="https://192.168.31.4:6443"
-
-# Get token from vault-reviewer SA (has TokenReview permissions)
-REVIEWER_TOKEN=$(kubectl create token vault-reviewer -n kube-system --duration=87600h)
-
-# Configure Kubernetes auth
-vault write auth/kubernetes/config \
-    kubernetes_host="$K8S_HOST" \
-    kubernetes_ca_cert="$K8S_CA_CERT" \
-    token_reviewer_jwt="$REVIEWER_TOKEN"
-```
-
-> **IMPORTANT**: The `token_reviewer_jwt` must be from a ServiceAccount with `system:auth-delegator` role.  
-> Using the `cert-manager` SA will cause "permission denied" errors because it can't call the TokenReview API.
-> there is no flag like `--serviceaccount=...` But!
-> The vault-reviewer in this command is the ServiceAccount name. The command is specifically creating a token for that ServiceAccount.
-
-Create Vault Role for cert-manager
-
-```bash
-vault write auth/kubernetes/role/cert-manager \
-  bound_service_account_names=cert-manager \
-  bound_service_account_namespaces=cert-manager \
-  policies=cert-manager \
-  ttl=24h
-```
-
-Create ClusterIssuers
-
-```bash
-kubectl apply -f infrastructure/manifests/cluster-issuers.yaml
-```
-
-Checking
-
-```bash
-~ ❯ kubectl get clusterissuers
-# NAME                        READY   AGE
-# letsencrypt-production-ci   True    2m37s
-# letsencrypt-staging-ci      True    2m37s
-# selfsigned-ci               True    2m37s
-# vault-k8s-ci                True    2m37s
-# vault-token-ci              False   2m37s
-```
-
-Apply wildcard certificate
-
-```bash
-kubectl apply -f infrastructure/manifests/wildcard-certificate.yaml
-```
-
-```bash
-kubectl get certificate -w
-```
+========================== Vault KV Secrets setup with Kubernetes auth method ===================================
 
 #### Vault KV Secrets setup with Kubernetes auth method
 
@@ -718,7 +710,9 @@ vault auth enable kubernetes  ← ONE auth backend, MULTIPLE uses
            Purpose: Store/retrieve deployment secrets
 ```
 
-Enable KV Secrets Engine
+======================================== Enable KV Secrets Engine ===============================================
+
+#### Enable KV Secrets Engine
 
 ```bash
 vault secrets enable -path=kvv2 -version=2 kv
@@ -738,13 +732,17 @@ path "kvv2/delete/deployments/*" {
 EOF
 ```
 
-Create ServiceAccount for Application
+```bash
+vault policy write vso-policy infrastructure/charts/vault/vso-policy.hcl
+```
+
+##### Create ServiceAccount for Application
 
 ```bash
 kubectl create serviceaccount compute-provisioner -n poddle-system
 ```
 
-Create Vault Role for compute-provisioner
+##### Create Vault Role for compute-provisioner
 
 ```bash
 vault write auth/kubernetes/role/compute-provisioner \
@@ -754,27 +752,27 @@ vault write auth/kubernetes/role/compute-provisioner \
   ttl=24h
 ```
 
-Setup vault policies and roles for Tenant
+##### Setup vault policies and roles for Tenant
+
 This is the "Dynamic" policy. It uses the {{identity...}} template to lock the user into their own namespace
 
 > First run this command and get Accessor, because vault generate dynamically!
 
 ```bash
-~ ❯ vault auth list
-Path           Type          Accessor                    Description                Version
-----           ----          --------                    -----------                -------
-kubernetes/    kubernetes    auth_kubernetes_4df6263c    n/a                        n/a
-token/         token         auth_token_3bb5335c         token based credentials    n/a
-~ ❯
+vault auth list
+# Path           Type          Accessor                    Description                Version
+# ----           ----          --------                    -----------                -------
+# kubernetes/    kubernetes    auth_kubernetes_4df6263c    n/a                        n/a
+# token/         token         auth_token_3bb5335c         token based credentials    n/a
 ```
 
 > Then replace tenant-policy.hcl to take account correct Accessor!
 
 ```bash
-vault policy write tenant-policy infrastructure/vault/tenant-policy.hcl
+vault policy write tenant-policy infrastructure/charts/vault/tenant-policy.hcl
 ```
 
-#### Write role for tenant
+###### Write role for tenant
 
 > Vault secret policies to roles because it enforces least privilege, ensuring applications and users only access the > specific secrets and paths they need, rather than having broad access. Roles act as logical groupings for identities > (like apps or users), and policies define what actions (read, write, list) they can perform on specific secret paths > (e.g., kv/data/myapp/*), creating fine-grained authorization for secure, efficient secrets management.
 
@@ -786,13 +784,13 @@ vault write auth/kubernetes/role/tenant-role \
   ttl=24h
 ```
 
-Setup vault policies and roles for Admin
+##### Setup vault policies and roles for Admin
 
 ```bash
-vault policy write admin-policy infrastructure/vault/admin-policy.hcl
+vault policy write admin-policy infrastructure/charts/vault/admin-policy.hcl
 ```
 
-#### Write role for admin
+###### Write role for admin
 
 ```bash
 vault write auth/kubernetes/role/compute-provisioner \
@@ -826,10 +824,9 @@ helm upgrade --install vault-secrets-operator hashicorp/vault-secrets-operator \
 Verify
 
 ```bash
-~/Documents/linux-setup master ❯ kubectl get pods -n vault-secrets-operator
-NAME                                                         READY   STATUS    RESTARTS   AGE
-vault-secrets-operator-controller-manager-645c4f6b6d-jpkrz   3/3     Running   0          85s
-~/Documents/linux-setup master ❯
+kubectl get pods -n vault-secrets-operator
+# NAME                                                         READY   STATUS    RESTARTS   AGE
+# vault-secrets-operator-controller-manager-645c4f6b6d-jpkrz   3/3     Running   0          85s
 ```
 
 ---
@@ -853,7 +850,7 @@ trust list | grep -A4 "Poddle Root CA"
 FIREFOX_PROFILE=$(ls -d ~/.mozilla/firefox/*.default-release 2>/dev/null | head -1)
 
 # Import CA certificate
-certutil -A -n "Poddle Root CA" -t "C,C,C" -i ~/poddle-root-ca.crt -d "sql:$FIREFOX_PROFILE"
+certutil -A -n "Poddle Root CA" -t "C,C,C" -i ~/certs/poddle-root-ca.crt -d "sql:$FIREFOX_PROFILE"
 
 # Verify
 certutil -L -d "sql:$FIREFOX_PROFILE" | grep "Poddle Root CA"
