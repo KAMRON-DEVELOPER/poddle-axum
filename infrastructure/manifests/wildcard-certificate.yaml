@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-poddle-uz-certificate
+  namespace: traefik
+spec:
+  secretName: wildcard-poddle-uz-tls
+  issuerRef:
+    name: vault-k8s-ci
+    kind: ClusterIssuer
+    group: cert-manager.io
+  commonName: "*.poddle.uz"
+  dnsNames:
+    - "*.poddle.uz"
+    - "poddle.uz"
+  duration: 720h # 30 days
+  renewBefore: 168h # Renew 7 days before expiry

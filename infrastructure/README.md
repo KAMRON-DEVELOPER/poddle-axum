@@ -420,16 +420,33 @@ All pods will be 0/1 (Not Ready) because Vault is sealed.
 
 #### Initialize Vault (vault-0 only)
 
-```bash
-# Initialize vault-0
-kubectl exec -n vault vault-0 -- vault operator init \
-  -key-shares=5 \
-  -key-threshold=3 \
-  -format=json > ~/certs/vault-keys.json
+After pods are running:
 
-# Extract keys (save these securely!)
-cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[]'
-cat ~/certs/vault-keys.json | jq -r '.root_token'
+```bash
+kubectl exec -it -n vault vault-0 -- vault operator init
+# Unseal Key 1: ...
+# Unseal Key 2: ...
+# Unseal Key 3: ...
+# Unseal Key 4: ...
+# Unseal Key 5: ...
+#
+# Initial Root Token: ...
+#
+# Vault initialized with 5 key shares and a key threshold of 3. Please securely
+# distribute the key shares printed above. When the Vault is re-sealed,
+# restarted, or stopped, you must supply at least 3 of these keys to unseal it
+# before it can start servicing requests.
+#
+# Vault does not store the generated root key. Without at least 3 keys to
+# reconstruct the root key, Vault will remain permanently sealed!
+#
+# It is possible to generate new unseal keys, provided you have a quorum of
+# existing unseal keys shares. See "vault operator rekey" for more information.
+```
+
+```bash
+kubectl exec -n vault vault-0 -- vault operator init -key-shares=5 -key-threshold=3 \
+  -format=json > ~/certs/vault-keys.json
 ```
 
 Export temporarly
@@ -459,51 +476,72 @@ export VAULT_TOKEN="$(jq -r '.root_token' ~/certs/vault-keys.json)"
 EOF
 ```
 
+```bash
+cat > ~/.zsh_secrets <<EOF
+UNSEAL_KEY1=''
+UNSEAL_KEY2=''
+UNSEAL_KEY3=''
+UNSEAL_KEY4=''
+UNSEAL_KEY5=''
+
+VAULT_TOKEN=''
+EOF
+```
+
 Reload
 
 ```bash
 [ -f ~/.zsh_secrets ] && source ~/.zsh_secrets
 ```
 
-#### Unseal vault-0
+> ~/.zsh_secrets file should be like this
 
 ```bash
-# Unseal vault-0 (need 3 keys)
+UNSEAL_KEY1='...'
+UNSEAL_KEY2='...'
+UNSEAL_KEY3='...'
+UNSEAL_KEY4='...'
+UNSEAL_KEY5='...'
+
+VAULT_TOKEN='...'
+```
+
+> ~/.zshrc file should be added these, so it prevent from adding secrets to git/stow
+
+```bash
+export KUBE_EDITOR="nvim"
+export VAULT_ADDR='http://vault.poddle.uz:8200'
+
+# Load local secrets
+[[ -f "$HOME/.zsh_secrets" ]] && source "$HOME/.zsh_secrets"
+# if [[ -f "$HOME/.zsh_secrets" ]]; then
+#   source "$HOME/.zsh_secrets"
+# fi
+```
+
+#### Unseal vault-0, Join and Unseal vault-1 and vault-2
+
+With retry_join configured, vault-1 and vault-2 should automatically join. You just need to unseal them.
+
+```bash
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY1
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY2
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY3
 
-# Verify vault-0 is unsealed and ready
-kubectl exec -n vault vault-0 -- vault status
-```
-
-#### Join and Unseal vault-1 and vault-2
-
-With retry_join configured, vault-1 and vault-2 should automatically join. You just need to unseal them.
-
-For vault-1:
-
-```bash
-# Check if it auto-joined (wait 30 seconds after vault-0 is unsealed)
-kubectl logs -n vault vault-1 | grep -i "join\|raft"
-
-# If auto-joined, just unseal it
 kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY1
 kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY2
 kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY3
 
-# Verify
-kubectl exec -n vault vault-1 -- vault status
-```
-
-For vault-2:
-
-```bash
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY1
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY2
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3
+```
 
-# Verify
+You can check statuses of pods
+
+```bash
+kubectl exec -n vault vault-0 -- vault status
+kubectl exec -n vault vault-1 -- vault status
 kubectl exec -n vault vault-2 -- vault status
 ```
 
@@ -529,7 +567,7 @@ kubectl exec -n vault vault-0 -- vault operator raft list-peers
 # vault-2    vault-2.vault-internal:8201    follower    true
 ```
 
-#### TLS Verification
+#### A
 
 ```bash
 kubectl apply -f infrastructure/charts/vault/ingress.yaml
@@ -539,89 +577,185 @@ kubectl apply -f infrastructure/charts/vault/ingress.yaml
 # Get CA certificate
 kubectl get secret -n vault vault-server-tls-secret \
   -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-root-ca.crt
-
-# Port forward
-kubectl port-forward -n vault vault-0 8200:8200
-
-# In another terminal, test
-curl --cacert ~/certs/vault-root-ca.crt https://vault.poddle.uz/v1/sys/health
 ```
 
--=-=-=-=-=-=-=-=-=-=--=-=============-=-=-=-=-=-=-=-=-=-=--=-=============-=-=-=-=-=-=-=-=-=-=--=-=============
-
-### Initialization (important)
-
-After pods are running:
+#### Configure Vault PKI
 
 ```bash
-kubectl exec -it -n vault vault-0 -- vault operator init
-# Unseal Key 1: ...
-# Unseal Key 2: ...
-# Unseal Key 3: ...
-# Unseal Key 4: ...
-# Unseal Key 5: ...
-#
-# Initial Root Token: ...
-#
-# Vault initialized with 5 key shares and a key threshold of 3. Please securely
-# distribute the key shares printed above. When the Vault is re-sealed,
-# restarted, or stopped, you must supply at least 3 of these keys to unseal it
-# before it can start servicing requests.
-#
-# Vault does not store the generated root key. Without at least 3 keys to
-# reconstruct the root key, Vault will remain permanently sealed!
-#
-# It is possible to generate new unseal keys, provided you have a quorum of
-# existing unseal keys shares. See "vault operator rekey" for more information.
+# Enable PKI secrets engine
+vault secrets enable pki
+
+# Set max TTL to 10 years
+vault secrets tune -max-lease-ttl=87600h pki
+
+# Generate Root CA
+vault write -field=certificate pki/root/generate/internal \
+  common_name="Poddle Root CA" \
+  issuer_name="poddle-issuer-2025-12-26" \
+  ttl=87600h > ~/poddle-root-ca.crt
+
+# Configure CA URLs
+vault write pki/config/urls \
+  issuing_certificates="http://vault.poddle.uz:8200/v1/pki/ca" \
+  crl_distribution_points="http://vault.poddle.uz:8200/v1/pki/crl"
+
+# Create role for issuing certificates
+vault write pki/roles/poddle-uz \
+  allowed_domains="poddle.uz" \
+  allow_subdomains=true \
+  allow_bare_domains=true \
+  allow_localhost=false \
+  max_ttl="8760h" \
+  ttl="720h" \
+  key_bits=2048 \
+  key_type=rsa
 ```
 
 ```bash
-cat > ~/.zsh_secrets <<EOF
-UNSEAL_KEY1=''
-UNSEAL_KEY2=''
-UNSEAL_KEY3=''
-UNSEAL_KEY4=''
-UNSEAL_KEY5=''
-
-VAULT_TOKEN=''
-EOF && source ~/.zshrc
+vault policy write tenant-policy infrastructure/vault/cert-manager-policy.hcl
 ```
 
-Then unseal each pod because each pod has vault
+Kubernetes Auth with Vault
+> More secure than static tokens. Vault verifies Kubernetes Service Account JWTs.
 
-vault-0
+Enable Kubernetes Auth in Vault
 
 ```bash
-kubectl exec -it -n vault vault-0 -- vault operator unseal $UNSEAL_KEY1
-kubectl exec -it -n vault vault-0 -- vault operator unseal $UNSEAL_KEY2
-kubectl exec -it -n vault vault-0 -- vault operator unseal $UNSEAL_KEY3
+vault auth enable kubernetes
 ```
 
-vault-1
+Create Token Reviewer ServiceAccount
+Vault needs a ServiceAccount with `system:auth-delegator` permission to verify JWT tokens via the TokenReview API.
 
 ```bash
-kubectl exec -it -n vault vault-1 -- vault operator unseal $UNSEAL_KEY1
-kubectl exec -it -n vault vault-1 -- vault operator unseal $UNSEAL_KEY2
-kubectl exec -it -n vault vault-1 -- vault operator unseal $UNSEAL_KEY3
+# Create a ServiceAccount for Vault token review
+kubectl create serviceaccount vault-reviewer -n kube-system
+
+# Bind it to the system:auth-delegator ClusterRole
+kubectl create clusterrolebinding vault-reviewer-binding \
+  --clusterrole=system:auth-delegator \
+  --serviceaccount=kube-system:vault-reviewer
 ```
 
-vault-2
+Configure Kubernetes Auth
+
+Get the required values from your cluster:
 
 ```bash
-kubectl exec -it -n vault vault-2 -- vault operator unseal $UNSEAL_KEY1
-kubectl exec -it -n vault vault-2 -- vault operator unseal $UNSEAL_KEY2
-kubectl exec -it -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3
+# Get Kubernetes CA certificate
+K8S_CA_CERT=$(kubectl config view --raw --minify --flatten \
+    -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)
+
+# Get the Kubernetes API server address
+K8S_HOST="https://192.168.31.4:6443"
+
+# Get token from vault-reviewer SA (has TokenReview permissions)
+REVIEWER_TOKEN=$(kubectl create token vault-reviewer -n kube-system --duration=87600h)
+
+# Configure Kubernetes auth
+vault write auth/kubernetes/config \
+    kubernetes_host="$K8S_HOST" \
+    kubernetes_ca_cert="$K8S_CA_CERT" \
+    token_reviewer_jwt="$REVIEWER_TOKEN"
 ```
 
-Repeat until quorum is reached (usually 2/3)
+> **IMPORTANT**: The `token_reviewer_jwt` must be from a ServiceAccount with `system:auth-delegator` role.  
+> Using the `cert-manager` SA will cause "permission denied" errors because it can't call the TokenReview API.
+> there is no flag like `--serviceaccount=...` But!
+> The vault-reviewer in this command is the ServiceAccount name. The command is specifically creating a token for that ServiceAccount.
 
-#### Vault KV setup with Kubernetes auth method
+Create Vault Role for cert-manager
 
-## Setup vault policies and roles
+```bash
+vault write auth/kubernetes/role/cert-manager \
+  bound_service_account_names=cert-manager \
+  bound_service_account_namespaces=cert-manager \
+  policies=cert-manager \
+  ttl=24h
+```
 
-### Tenant setup
+Create ClusterIssuers
 
-#### This is the "Dynamic" policy. It uses the {{identity...}} template to lock the user into their own namespace
+```bash
+kubectl apply -f infrastructure/manifests/cluster-issuers.yaml
+```
+
+Checking
+
+```bash
+~ ❯ kubectl get clusterissuers
+# NAME                        READY   AGE
+# letsencrypt-production-ci   True    2m37s
+# letsencrypt-staging-ci      True    2m37s
+# selfsigned-ci               True    2m37s
+# vault-k8s-ci                True    2m37s
+# vault-token-ci              False   2m37s
+```
+
+Apply wildcard certificate
+
+```bash
+kubectl apply -f infrastructure/manifests/wildcard-certificate.yaml
+```
+
+```bash
+kubectl get certificate -w
+```
+
+#### Vault KV Secrets setup with Kubernetes auth method
+
+> This section configures Vault to store application secrets (env vars, API keys, etc.) separately from PKI certificates.
+
+```bash
+vault auth enable kubernetes  ← ONE auth backend, MULTIPLE uses
+    │
+    ├─→ Use #1: cert-manager (for PKI/TLS certificates)
+    │      Role: cert-manager
+    │      Purpose: Issue TLS certificates
+    │
+    └─→ Use #2: compute-provisioner (for secrets)
+           Role: compute-provisioner
+           Purpose: Store/retrieve deployment secrets
+```
+
+Enable KV Secrets Engine
+
+```bash
+vault secrets enable -path=kvv2 -version=2 kv
+```
+
+```bash
+vault policy write vso-policy - <<EOF
+path "kvv2/data/deployments/*" {
+  capabilities = ["read", "create", "update"]
+}
+path "kvv2/metadata/deployments/*" {
+  capabilities = ["list", "read"]
+}
+path "kvv2/delete/deployments/*" {
+  capabilities = ["update"]
+}
+EOF
+```
+
+Create ServiceAccount for Application
+
+```bash
+kubectl create serviceaccount compute-provisioner -n poddle-system
+```
+
+Create Vault Role for compute-provisioner
+
+```bash
+vault write auth/kubernetes/role/compute-provisioner \
+  bound_service_account_names=compute-provisioner \
+  bound_service_account_namespaces=poddle-system \
+  policies=vso-policy \
+  ttl=24h
+```
+
+Setup vault policies and roles for Tenant
+This is the "Dynamic" policy. It uses the {{identity...}} template to lock the user into their own namespace
 
 > First run this command and get Accessor, because vault generate dynamically!
 
@@ -652,7 +786,7 @@ vault write auth/kubernetes/role/tenant-role \
   ttl=24h
 ```
 
-### Admin setup
+Setup vault policies and roles for Admin
 
 ```bash
 vault policy write admin-policy infrastructure/vault/admin-policy.hcl
@@ -699,3 +833,31 @@ vault-secrets-operator-controller-manager-645c4f6b6d-jpkrz   3/3     Running   0
 ```
 
 ---
+
+### 5.8 Trust Root CA
+
+#### Arch Linux System-Wide
+
+```bash
+sudo cp ~/certs/poddle-root-ca.crt /etc/ca-certificates/trust-source/anchors/
+sudo update-ca-trust
+
+# Verify
+trust list | grep -A4 "Poddle Root CA"
+```
+
+#### Firefox
+
+```bash
+# Find Firefox profile
+FIREFOX_PROFILE=$(ls -d ~/.mozilla/firefox/*.default-release 2>/dev/null | head -1)
+
+# Import CA certificate
+certutil -A -n "Poddle Root CA" -t "C,C,C" -i ~/poddle-root-ca.crt -d "sql:$FIREFOX_PROFILE"
+
+# Verify
+certutil -L -d "sql:$FIREFOX_PROFILE" | grep "Poddle Root CA"
+
+# Restart Firefox
+pkill -9 firefox
+```
