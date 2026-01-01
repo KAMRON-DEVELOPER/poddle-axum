@@ -15,3 +15,5 @@ spec:
         - name: vault-active
           port: 8200
           serversTransport: vault-transport
+  # tls:
+  #   secretName: wildcard-poddle-uz-tls-secret
