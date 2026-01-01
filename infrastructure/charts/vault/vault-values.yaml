@@ -86,7 +86,7 @@ server:
       config: |
         ui = true
 
-        cluster_name = "vault-integrated-storage"
+        cluster_name = "vault-cluster"
 
         listener "tcp" {
           tls_disable = 0
@@ -98,7 +98,7 @@ server:
         }
 
         seal "gcpckms" {
-          disabled    = "true"
+          disabled    = "false"
           region      = "global"
           project     = "poddle-cloud-dev"
           credentials = "/vault/gcpkms/poddle-kms-service-account.json"

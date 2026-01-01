@@ -8,5 +8,6 @@ spec:
   insecureSkipVerify: false
   rootCAs:
     - secret: vault-root-ca-secret
+  # This is for mTLS
   # certificatesSecrets:
   #   - vault-root-ca-secret

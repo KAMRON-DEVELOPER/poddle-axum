@@ -226,24 +226,25 @@ kubectl get pods -n cert-manager
 ```
 
 ---
+========================= Install Vault (HA) with internal TLS via cert-manager =======================================
 
-## 5. Install Vault (HA) with internal TLS via cert-manager
+#### 5. Install Vault (HA) with internal TLS via cert-manager
 
-[!NOTE]
-If you plan to use the Vault CLI locally, install it and enable shell completion:
+> [!NOTE]
+> If you plan to use the Vault CLI locally, install it and enable shell completion:
 
 ```bash
 sudo pacman -S vault
 vault -autocomplete-install
 ```
 
-### 5.1 Create Vault namespace
+#### 5.1 Create Vault namespace
 
 ```bash
 kubectl create namespace vault
 ```
 
-### 5.2 Bootstrap Vault internal PKI (cert-manager)
+#### 5.2 Bootstrap Vault internal PKI (cert-manager)
 
 This directory implements a self-contained internal PKI used only to bootstrap Vault TLS.
 
@@ -266,7 +267,9 @@ kubectl apply -f infrastructure/charts/cert-manager/vault/ca/vault-root-ca-issue
 kubectl apply -f infrastructure/charts/cert-manager/vault/certs/vault-server-tls-certificate.yaml
 ```
 
-### 5.3 Verify PKI resources
+======================================== Enable KV Secrets Engine ===============================================
+
+#### 5.3 Verify PKI resources
 
 ```bash
 kubectl get issuers -n vault
@@ -285,7 +288,9 @@ The server TLS secret should contain:
 * `tls.key`
 * `ca.crt`
 
-### 5.4 What this PKI setup does (important)
+======================================== Enable KV Secrets Engine ===============================================
+
+#### 5.4 What this PKI setup does (important)
 
 This setup solves the chicken-and-egg problem:
 > Vault needs TLS to start, but you want Vault to be your long-term PKI.
@@ -315,7 +320,9 @@ So cert-manager provides only the bootstrap PKI, after which Vault can take over
       * Internal wildcards
     * Stored in Secret: vault-server-tls-secret
 
-### 5.6 Export Vault CA for clients and ClusterIssuers
+======================================== Enable KV Secrets Engine ===============================================
+
+#### 5.6 Export Vault CA for clients and ClusterIssuers
 
 * This CA is required by:
   * Axum microservices
@@ -337,7 +344,9 @@ Use this value as caBundle in your vault-k8s-ci ClusterIssuer.
 kubectl get secret vault-root-ca-secret -n vault -o jsonpath='{.data.ca\.crt}'
 ```
 
-### 5.7 Configure Vault CLI trust
+======================================== Enable KV Secrets Engine ===============================================
+
+#### 5.7 Configure Vault CLI trust
 
 Add to your shell secrets:
 
@@ -831,7 +840,7 @@ kubectl get pods -n vault-secrets-operator
 
 ---
 
-### 5.8 Trust Root CA
+#### 5.8 Trust Root CA
 
 #### Arch Linux System-Wide
 

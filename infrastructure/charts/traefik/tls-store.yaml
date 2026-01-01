@@ -5,10 +5,4 @@ metadata:
   namespace: traefik
 spec:
   certificates:
-    - secretName: wildcard-poddle-uz-tls
-  # defaultGeneratedCert:
-  #   resolver: vault-k8s-ci
-  #   domain:
-  #     main: poddle.uz
-  #     sans:
-  #       - \*.poddle.uz
+    - secretName: wildcard-poddle-uz-tls-secret

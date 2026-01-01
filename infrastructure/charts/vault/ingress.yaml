@@ -1,11 +1,13 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: vault-ui
+  name: vault
   namespace: vault
 spec:
   entryPoints:
-    - websecure
+    # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
+    # - web
+    # - websecure
   routes:
     - match: Host(`vault.poddle.uz`)
       kind: Rule
@@ -13,79 +15,3 @@ spec:
         - name: vault-active
           port: 8200
           serversTransport: vault-transport
-  # tls:
-  #   options:
-  #     default:
-  #       clientAuth:
-  #         secretNames:
-  #           - vault-root-ca-secret
-  #         clientAuthType: RequireAndVerifyClientCert
-  # tls:
-  #   secretName: wildcard-poddle-uz-tls
-# apiVersion: v1
-# kind: Secret
-# metadata:
-#   name: vault-ui-auth
-#   namespace: vault
-# type: kubernetes.io/basic-auth
-# stringData:
-#   username: admin
-#   password: "1213"
-# ---
-# apiVersion: traefik.io/v1alpha1
-# kind: Middleware
-# metadata:
-#   name: vault-ui-auth
-#   namespace: vault
-# spec:
-#   basicAuth:
-#     secret: vault-ui-auth
-# ---
-# apiVersion: traefik.io/v1alpha1
-# kind: IngressRoute
-# metadata:
-#   name: vault-ui-ingressroute
-#   namespace: vault
-# spec:
-#   entryPoints:
-#     - websecure
-#   routes:
-#     - match: Host(`vault.poddle.uz`)
-#       kind: Rule
-#       services:
-#         - name: vault-active
-#           port: 8200
-#       middlewares:
-#         - name: vault-ui-auth
-#   tls:
-#     secretName: wildcard-poddle-uz-tls
-# apiVersion: traefik.io/v1alpha1
-# kind: IngressRoute
-# metadata:
-#   name: vault-ui
-#   namespace: vault
-# spec:
-#   entryPoints:
-#     - websecure
-#   routes:
-#     # 1. API Route: No Basic Auth (High Priority)
-#     # Matches paths starting with /v1/ (API) or /sys/ (System)
-#     - match: Host(`vault.poddle.uz`) && (PathPrefix(`/v1/`) || PathPrefix(`/sys/`))
-#       kind: Rule
-#       services:
-#         - name: vault-active
-#           port: 8200
-#       priority: 20
-
-#     # 2. UI Route: With Basic Auth (Low Priority)
-#     # Catches everything else (mostly the web UI assets)
-#     - match: Host(`vault.poddle.uz`)
-#       kind: Rule
-#       services:
-#         - name: vault-active
-#           port: 8200
-#       middlewares:
-#         - name: vault-ui-auth
-#       priority: 10
-#   tls:
-#     secretName: wildcard-poddle-uz-tls

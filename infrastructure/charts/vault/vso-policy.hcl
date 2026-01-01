@@ -1,9 +1,9 @@
-path "kvv2/data/deployments/*" {
+path "kvv2/data/*" {
   capabilities = ["read", "create", "update"]
 }
-path "kvv2/metadata/deployments/*" {
+path "kvv2/metadata/*" {
   capabilities = ["list", "read"]
 }
-path "kvv2/delete/deployments/*" {
+path "kvv2/delete/*" {
   capabilities = ["update"]
 }

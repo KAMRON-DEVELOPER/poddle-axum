@@ -51,7 +51,7 @@ gatewayClass:
 # Gateway
 gateway:
   enabled: true
-  name: "traefik-gateway"
+  name: "traefik"
   annotations:
     cert-manager.io/issuer: vault-k8s-ci
   listeners:
@@ -67,14 +67,14 @@ gateway:
       namespacePolicy:
         from: All
       certificateRefs:
-        - name: wildcard-poddle-uz-tls
+        - name: wildcard-poddle-uz-tls-secret
           kind: Secret
 
 # Default TLSStore with wildcard cert
 tlsStore:
   default:
     defaultCertificate:
-      secretName: wildcard-poddle-uz-tls
+      secretName: wildcard-poddle-uz-tls-secret
 
 # ACME resolver for custom domains
 certificatesResolvers:

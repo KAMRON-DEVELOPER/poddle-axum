@@ -4,7 +4,7 @@ metadata:
   name: wildcard-poddle-uz-certificate
   namespace: traefik
 spec:
-  secretName: wildcard-poddle-uz-tls
+  secretName: wildcard-poddle-uz-tls-secret
   issuerRef:
     name: vault-k8s-ci
     kind: ClusterIssuer

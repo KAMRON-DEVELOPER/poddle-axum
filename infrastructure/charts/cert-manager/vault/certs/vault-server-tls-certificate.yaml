@@ -37,6 +37,9 @@ spec:
     # Internal wildcard
     - "*.vault-internal"
     - "*.vault-internal.vault.svc.cluster.local"
+
+    # For CLI and external accses
+    - "vault.poddle.uz"
   ipAddresses:
     - 127.0.0.1
   privateKey:
