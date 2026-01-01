@@ -1,0 +1,12 @@
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: vault-transport
+  namespace: vault
+spec:
+  serverName: vault-active
+  insecureSkipVerify: false
+  rootCAs:
+    - secret: vault-root-ca-secret
+  # certificatesSecrets:
+  #   - vault-root-ca-secret

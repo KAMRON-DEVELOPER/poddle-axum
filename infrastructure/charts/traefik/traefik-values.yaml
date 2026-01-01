@@ -27,7 +27,7 @@ ports:
 providers:
   kubernetesCRD: # Watches IngressRoute, Middleware, TLSStore, etc.
     enabled: true
-    # allowCrossNamespace: false
+    allowCrossNamespace: true
     # allowExternalNameServices: false
   kubernetesIngress: # Watches standard Kubernetes Ingress
     enabled: true

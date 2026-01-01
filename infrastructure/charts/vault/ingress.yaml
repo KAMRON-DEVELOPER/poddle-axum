@@ -1,7 +1,7 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: vault-ui-ingressroute
+  name: vault-ui
   namespace: vault
 spec:
   entryPoints:
@@ -12,8 +12,16 @@ spec:
       services:
         - name: vault-active
           port: 8200
-  tls:
-    secretName: wildcard-poddle-uz-tls
+          serversTransport: vault-transport
+  # tls:
+  #   options:
+  #     default:
+  #       clientAuth:
+  #         secretNames:
+  #           - vault-root-ca-secret
+  #         clientAuthType: RequireAndVerifyClientCert
+  # tls:
+  #   secretName: wildcard-poddle-uz-tls
 # apiVersion: v1
 # kind: Secret
 # metadata:
