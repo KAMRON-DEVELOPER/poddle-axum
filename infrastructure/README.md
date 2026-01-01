@@ -167,39 +167,7 @@ spec:
 
 ---
 
-### 3. Install Traefik
-
-```bash
-helm install traefik traefik/traefik \
-  --namespace traefik --create-namespace
-
-# or `https://doc.traefik.io/traefik/getting-started/quick-start-with-kubernetes/`
-
-helm install traefik traefik/traefik --wait \
-  --set ingressRoute.dashboard.enabled=true \
-  --set ingressRoute.dashboard.matchRule='Host(`traefik.poddle.uz`)' \
-  --set ingressRoute.dashboard.entryPoints={web} \
-  --set providers.kubernetesGateway.enabled=true \
-  --set gateway.listeners.web.namespacePolicy.from=All \
-  --namespace traefik --create-namespace
-
-# or
-
-helm upgrade --install traefik traefik/traefik \
-  --values infrastructure/charts/traefik/traefik-values.yaml \
-  --namespace traefik --create-namespace
-```
-
-Verify Traefik got an external IP:
-
-```bash
-kubectl get svc -n traefik
-# Should show EXTERNAL-IP: 192.168.31.10
-```
-
----
-
-### 4. Install cert-manager
+### 3. Install cert-manager
 
 ```bash
 helm install cert-manager jetstack/cert-manager \
@@ -226,25 +194,42 @@ kubectl get pods -n cert-manager
 ```
 
 ---
-========================= Install Vault (HA) with internal TLS via cert-manager =======================================
 
-#### 5. Install Vault (HA) with internal TLS via cert-manager
+### 4. Install Vault (HA) with internal TLS via cert-manager
 
 > [!NOTE]
+> There many things you need to be carefull and consider, tls certificates(secrets) are namespaced
+>
+> You can setup ServersTransport to control tls comunication beetween vault and traefik or
+>
+> by IngressRouteTCP and setting `passthrough: false`.
+>
+> Also there we are not using mTLS which requires client and server(vault) to authenticate each other.
+>
+> Only client need to verify vault server certificate, client must trust ca that issued vault server certs.
+>
 > If you plan to use the Vault CLI locally, install it and enable shell completion:
+
+#### Flow
+
+> [!INFO]
+> Vault bootstrap PKI certs will be created by cert-manager
+>
+> vault-k8s-ci
+>
 
 ```bash
 sudo pacman -S vault
 vault -autocomplete-install
 ```
 
-#### 5.1 Create Vault namespace
+#### Create Vault namespace
 
 ```bash
 kubectl create namespace vault
 ```
 
-#### 5.2 Bootstrap Vault internal PKI (cert-manager)
+#### Bootstrap Vault internal PKI (cert-manager)
 
 This directory implements a self-contained internal PKI used only to bootstrap Vault TLS.
 
@@ -267,9 +252,7 @@ kubectl apply -f infrastructure/charts/cert-manager/vault/ca/vault-root-ca-issue
 kubectl apply -f infrastructure/charts/cert-manager/vault/certs/vault-server-tls-certificate.yaml
 ```
 
-======================================== Enable KV Secrets Engine ===============================================
-
-#### 5.3 Verify PKI resources
+#### Verify PKI resources
 
 ```bash
 kubectl get issuers -n vault
@@ -288,9 +271,7 @@ The server TLS secret should contain:
 * `tls.key`
 * `ca.crt`
 
-======================================== Enable KV Secrets Engine ===============================================
-
-#### 5.4 What this PKI setup does (important)
+#### What this PKI setup does (important)
 
 This setup solves the chicken-and-egg problem:
 > Vault needs TLS to start, but you want Vault to be your long-term PKI.
@@ -320,16 +301,12 @@ So cert-manager provides only the bootstrap PKI, after which Vault can take over
       * Internal wildcards
     * Stored in Secret: vault-server-tls-secret
 
-======================================== Enable KV Secrets Engine ===============================================
-
-#### 5.6 Export Vault CA for clients and ClusterIssuers
-
-* This CA is required by:
-  * Axum microservices
-  * Vault CLI
-  * cert-manager ClusterIssuer (vault-k8s-ci)
-
-Export CA certificate
+#### Extra
+>
+> [!NOTE]
+> Since we are dealing TLS termination in the Vault <-> Traefik we don't strictly need to do this.
+>
+> if IngressRoute is using `websucure` we need to use `poddle-root-ca.crt`
 
 ```bash
 mkdir -p ~/certs
@@ -344,15 +321,9 @@ Use this value as caBundle in your vault-k8s-ci ClusterIssuer.
 kubectl get secret vault-root-ca-secret -n vault -o jsonpath='{.data.ca\.crt}'
 ```
 
-======================================== Enable KV Secrets Engine ===============================================
-
-#### 5.7 Configure Vault CLI trust
-
-Add to your shell secrets:
-
 ```bash
 cat >> ~/.zsh_secrets <<EOF
-export VAULT_CACERT=~/certs/vault-root-ca.crt
+export VAULT_CACERT="$HOME/certs/poddle-root-ca.crt"
 EOF
 ```
 
@@ -375,7 +346,7 @@ kubectl create secret generic poddle-kms-service-account-secret \
   -n vault
 ```
 
-### How Vault HA Works with Raft on Kubernetes
+#### How Vault HA Works with Raft on Kubernetes
 
 **Key Concept**: In Raft-based HA mode, only the **first pod (vault-0)** is initialized. The other pods (vault-1, vault-2) are **standby replicas** that join the Raft cluster automatically but are NOT independently initialized.
 
@@ -405,7 +376,7 @@ kubectl create secret generic poddle-kms-service-account-secret \
 
 ```bash
 helm install vault hashicorp/vault \
-  --namespace traefik --create-namespace
+  --namespace vault --create-namespace
 
 # or
 
@@ -574,18 +545,11 @@ kubectl exec -n vault vault-0 -- vault operator raft list-peers
 # vault-2    vault-2.vault-internal:8201    follower    true
 ```
 
-#### Create ingress, so applications can access to vault
-
-```bash
-kubectl apply -f infrastructure/charts/vault/ingress.yaml
-```
-
-======================================== Configure Kubernetes Auth ===============================================
-
 #### Enable Kubernetes Auth in Vault
 
 ```bash
-vault auth enable kubernetes
+kubectl exec -n vault vault-0 -- vault auth enable kubernetes
+# Success! Enabled kubernetes auth method at: kubernetes/
 ```
 
 ##### Create Token Reviewer ServiceAccount
@@ -607,7 +571,7 @@ Get the required values from your cluster:
 ```bash
 # Get Kubernetes CA certificate
 K8S_CA_CERT=$(kubectl config view --raw --minify --flatten \
-    -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)
+  -o jsonpath='{.clusters[0].cluster.certificate-authority-data}' | base64 -d)
 
 # Get the Kubernetes API server address
 K8S_HOST="https://192.168.31.4:6443"
@@ -616,7 +580,7 @@ K8S_HOST="https://192.168.31.4:6443"
 REVIEWER_TOKEN=$(kubectl create token vault-reviewer -n kube-system --duration=87600h)
 
 # Configure Kubernetes auth
-vault write auth/kubernetes/config \
+kubectl exec -n vault vault-0 -- vault write auth/kubernetes/config \
   kubernetes_host="$K8S_HOST" \
   kubernetes_ca_cert="$K8S_CA_CERT" \
   token_reviewer_jwt="$REVIEWER_TOKEN"
@@ -630,7 +594,7 @@ vault write auth/kubernetes/config \
 ##### Create Vault Role for cert-manager
 
 ```bash
-vault write auth/kubernetes/role/cert-manager \
+kubectl exec -n vault vault-0 -- vault write auth/kubernetes/role/cert-manager \
   bound_service_account_names=cert-manager \
   bound_service_account_namespaces=cert-manager \
   policies=cert-manager \
@@ -656,37 +620,28 @@ kubectl get clusterissuers
 # vault-token-ci              False   2m37s
 ```
 
-##### Apply wildcard certificate
-
-```bash
-kubectl apply -f infrastructure/charts/cert-manager/wildcard-certificate.yaml
-kubectl get certificate -n traefik
-```
-
-=========================================== Configure Vault PKI ==================================================
-
 #### Configure Vault PKI
 
 ```bash
 # Enable PKI secrets engine
-vault secrets enable pki
+kubectl exec -n vault vault-0 -- vault secrets enable pki
 
 # Set max TTL to 10 years
-vault secrets tune -max-lease-ttl=87600h pki
+kubectl exec -n vault vault-0 -- vault secrets tune -max-lease-ttl=87600h pki
 
 # Generate Root CA
-vault write -field=certificate pki/root/generate/internal \
+kubectl exec -n vault vault-0 -- vault write -field=certificate pki/root/generate/internal \
   common_name="Poddle Root CA" \
   issuer_name="poddle-issuer-2025-12-26" \
   ttl=87600h > ~/certs/poddle-root-ca.crt
 
 # Configure CA URLs
-vault write pki/config/urls \
+kubectl exec -n vault vault-0 -- vault write pki/config/urls \
   issuing_certificates="http://vault.poddle.uz:8200/v1/pki/ca" \
   crl_distribution_points="http://vault.poddle.uz:8200/v1/pki/crl"
 
 # Create role for issuing certificates
-vault write pki/roles/poddle-uz \
+kubectl exec -n vault vault-0 -- vault write pki/roles/poddle-uz \
   allowed_domains="poddle.uz" \
   allow_subdomains=true \
   allow_bare_domains=true \
@@ -698,10 +653,17 @@ vault write pki/roles/poddle-uz \
 ```
 
 ```bash
-vault policy write cert-manager infrastructure/charts/vault/cert-manager-policy.hcl
+kubectl exec -n vault -i vault-0 -- vault policy write cert-manager - < infrastructure/charts/vault/cert-manager-policy.hcl
 ```
 
-========================== Vault KV Secrets setup with Kubernetes auth method ===================================
+##### Apply wildcard certificate
+
+```bash
+kubectl apply -f infrastructure/charts/cert-manager/wildcard-certificate.yaml
+kubectl get certificate -n traefik
+# NAME                             READY   SECRET                          AGE
+# wildcard-poddle-uz-certificate   True    wildcard-poddle-uz-tls-secret   4h11m
+```
 
 #### Vault KV Secrets setup with Kubernetes auth method
 
@@ -719,16 +681,14 @@ vault auth enable kubernetes  ← ONE auth backend, MULTIPLE uses
            Purpose: Store/retrieve deployment secrets
 ```
 
-======================================== Enable KV Secrets Engine ===============================================
-
-#### Enable KV Secrets Engine
+##### Enable KV Secrets Engine
 
 ```bash
-vault secrets enable -path=kvv2 -version=2 kv
+kubectl exec -n vault -i vault-0 -- vault secrets enable -path=kvv2 -version=2 kv
 ```
 
 ```bash
-vault policy write vso-policy - <<EOF
+kubectl exec -n vault -i vault-0 -- vault policy write vso-policy - <<EOF
 path "kvv2/data/deployments/*" {
   capabilities = ["read", "create", "update"]
 }
@@ -742,7 +702,7 @@ EOF
 ```
 
 ```bash
-vault policy write vso-policy infrastructure/charts/vault/vso-policy.hcl
+kubectl exec -n vault -i vault-0 -- vault policy write vso-policy - < infrastructure/charts/vault/vso-policy.hcl
 ```
 
 ##### Create ServiceAccount for Application
@@ -754,7 +714,7 @@ kubectl create serviceaccount compute-provisioner -n poddle-system
 ##### Create Vault Role for compute-provisioner
 
 ```bash
-vault write auth/kubernetes/role/compute-provisioner \
+kubectl exec -n vault -i vault-0 -- vault write auth/kubernetes/role/compute-provisioner \
   bound_service_account_names=compute-provisioner \
   bound_service_account_namespaces=poddle-system \
   policies=vso-policy \
@@ -768,7 +728,7 @@ This is the "Dynamic" policy. It uses the {{identity...}} template to lock the u
 > First run this command and get Accessor, because vault generate dynamically!
 
 ```bash
-vault auth list
+kubectl exec -n vault -i vault-0 -- vault auth list
 # Path           Type          Accessor                    Description                Version
 # ----           ----          --------                    -----------                -------
 # kubernetes/    kubernetes    auth_kubernetes_4df6263c    n/a                        n/a
@@ -778,7 +738,7 @@ vault auth list
 > Then replace tenant-policy.hcl to take account correct Accessor!
 
 ```bash
-vault policy write tenant-policy infrastructure/charts/vault/tenant-policy.hcl
+kubectl exec -n vault -i vault-0 -- vault policy write tenant-policy - < infrastructure/charts/vault/tenant-policy.hcl
 ```
 
 ###### Write role for tenant
@@ -786,7 +746,7 @@ vault policy write tenant-policy infrastructure/charts/vault/tenant-policy.hcl
 > Vault secret policies to roles because it enforces least privilege, ensuring applications and users only access the > specific secrets and paths they need, rather than having broad access. Roles act as logical groupings for identities > (like apps or users), and policies define what actions (read, write, list) they can perform on specific secret paths > (e.g., kv/data/myapp/*), creating fine-grained authorization for secure, efficient secrets management.
 
 ```bash
-vault write auth/kubernetes/role/tenant-role \
+kubectl exec -n vault -i vault-0 -- vault write auth/kubernetes/role/tenant-role \
   bound_service_account_names=default \
   bound_service_account_namespaces="user-*" \
   policies=tenant-policy \
@@ -796,13 +756,13 @@ vault write auth/kubernetes/role/tenant-role \
 ##### Setup vault policies and roles for Admin
 
 ```bash
-vault policy write admin-policy infrastructure/charts/vault/admin-policy.hcl
+kubectl exec -n vault -i vault-0 -- vault policy write admin-policy - < infrastructure/charts/vault/admin-policy.hcl
 ```
 
 ###### Write role for admin
 
 ```bash
-vault write auth/kubernetes/role/compute-provisioner \
+kubectl exec -n vault -i vault-0 -- vault write auth/kubernetes/role/compute-provisioner \
   bound_service_account_names=compute-provisioner \
   bound_service_account_namespaces=poddle-system \
   policies=admin-policy \
@@ -811,7 +771,45 @@ vault write auth/kubernetes/role/compute-provisioner \
 
 ---
 
-## 6. Install vault-secrets-operator
+### 5. Install Traefik
+
+```bash
+helm install traefik traefik/traefik \
+  --namespace traefik --create-namespace
+
+# or `https://doc.traefik.io/traefik/getting-started/quick-start-with-kubernetes/`
+
+helm install traefik traefik/traefik --wait \
+  --set ingressRoute.dashboard.enabled=true \
+  --set ingressRoute.dashboard.matchRule='Host(`traefik.poddle.uz`)' \
+  --set ingressRoute.dashboard.entryPoints={web} \
+  --set providers.kubernetesGateway.enabled=true \
+  --set gateway.listeners.web.namespacePolicy.from=All \
+  --namespace traefik --create-namespace
+
+# or
+
+helm upgrade --install traefik traefik/traefik \
+  --values infrastructure/charts/traefik/traefik-values.yaml \
+  --namespace traefik --create-namespace
+```
+
+Verify Traefik got an external IP:
+
+```bash
+kubectl get svc -n traefik
+# Should show EXTERNAL-IP: 192.168.31.10
+```
+
+#### Create ingress, so applications can access to vault
+
+```bash
+kubectl apply -f infrastructure/charts/vault/ingress.yaml
+```
+
+---
+
+### 6. Install vault-secrets-operator
 
 ### Prerequisites
 
@@ -820,22 +818,22 @@ vault write auth/kubernetes/role/compute-provisioner \
 * `vault` CLI installed and configured
 
 ```bash
-helm install vault-secrets-operator hashicorp/vault-secrets-operator \
-  -n vault-secrets-operator --create-namespace
+helm install vso hashicorp/vault-secrets-operator \
+  -n vso --create-namespace
 
 # or
 
-helm upgrade --install vault-secrets-operator hashicorp/vault-secrets-operator \
-  --values infrastructure/charts/vault-secrets-operator/vault-secrets-operator-values.yaml \
-  -n vault-secrets-operator --create-namespace
+helm upgrade --install vso hashicorp/vault-secrets-operator \
+  --values infrastructure/charts/vso/vso-values.yaml \
+  -n vso --create-namespace
 ```
 
 Verify
 
 ```bash
-kubectl get pods -n vault-secrets-operator
-# NAME                                                         READY   STATUS    RESTARTS   AGE
-# vault-secrets-operator-controller-manager-645c4f6b6d-jpkrz   3/3     Running   0          85s
+kubectl get pods -n vso
+# NAME                                                            READY   STATUS    RESTARTS   AGE
+# vso-vault-secrets-operator-controller-manager-d58f9c859-g2kk6   2/2     Running   0          57s
 ```
 
 ---
