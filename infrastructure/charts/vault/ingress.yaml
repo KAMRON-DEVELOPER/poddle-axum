@@ -4,7 +4,7 @@ metadata:
   name: vault
   namespace: vault
 spec:
-  entryPoints:
+  entryPoints: []
     # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
     # - web
     # - websecure
