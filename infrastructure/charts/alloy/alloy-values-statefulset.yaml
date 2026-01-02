@@ -1,0 +1,90 @@
+alloy:
+  clustering:
+    enabled: true
+    name: "alloy-cluster"
+    portName: http
+
+  # Use hostAliases to resolve poddle.uz domains to host IP
+  hostAliases:
+    - ip: "192.168.31.53"
+      hostnames:
+        - "loki.poddle.uz"
+        - "mimir.poddle.uz"
+        - "tempo.poddle.uz"
+        - "grafana.poddle.uz"
+  controller:
+    type: daemonset
+
+  configMap:
+    create: false
+    name: alloy-config
+    key: config.alloy
+
+  mounts:
+    varlog: true
+    dockercontainers: true
+
+  # Security context - need root for log access
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  runAsGroup: 0
+
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+  serviceMonitor:
+    enabled: false
+
+  # Storage path
+  storagePath: /var/lib/alloy
+
+  # Extra environment variables
+  extraEnv:
+    - name: HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+# Service configuration
+service:
+  type: ClusterIP
+  clusterIP: ""
+
+# OTLP receiver ports
+extraPorts:
+  - name: "otlp-grpc"
+    port: 4317
+    targetPort: 4317
+    protocol: "TCP"
+  - name: "otlp-http"
+    port: 4318
+    targetPort: 4318
+    protocol: "TCP"
+
+# RBAC permissions
+rbac:
+  create: true
+
+serviceAccount:
+  create: true
+  name: alloy
+
+# Additional volumes
+extraVolumes:
+  - name: etcmachineid
+    hostPath:
+      path: /etc/machine-id
+  - name: alloy-data
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: etcmachineid
+    mountPath: /etc/machine-id
+    readOnly: true
+  - name: alloy-data
+    mountPath: /var/lib/alloy

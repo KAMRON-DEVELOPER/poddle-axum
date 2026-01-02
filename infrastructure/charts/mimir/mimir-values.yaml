@@ -1,0 +1,15 @@
+minio:
+  enabled: false
+
+mimir:
+  structuredConfig:
+  common:
+    storage:
+      backend: s3
+      s3:
+        bucket_name: "mimir"
+        endpoint: "$192.168.31.2:9000"
+        access_key_id: "${AWS_ACCESS_KEY_ID}"
+        secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
+        http:
+          insecure_skip_verify: true

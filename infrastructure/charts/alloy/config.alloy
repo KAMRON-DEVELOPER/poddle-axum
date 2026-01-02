@@ -3,30 +3,22 @@ logging {
 	format = "logfmt"
 }
 
-// ====================
-// Kubernetes Discovery
-// ====================
+// ==============================================================================
+// LOGS
+// ==============================================================================
 
+// Discover Kubernetes pods to scrape
 discovery.kubernetes "pods" {
 	role = "pod"
 }
 
-discovery.relabel "pods" {
+discovery.relabel "default" {
 	targets = discovery.kubernetes.pods.targets
 
+	// Standard K8s Labeling
 	rule {
 		source_labels = ["__meta_kubernetes_namespace"]
 		target_label  = "namespace"
-	}
-
-	rule {
-		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
-		target_label  = "app"
-	}
-
-	rule {
-		source_labels = ["__meta_kubernetes_pod_container_name"]
-		target_label  = "container"
 	}
 
 	rule {
@@ -35,225 +27,345 @@ discovery.relabel "pods" {
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_pod_node_name"]
-		target_label  = "node"
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_name"]
+		target_label  = "app"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_poddle_project_id"]
+		target_label  = "project_id"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_poddle_deployment_id"]
+		target_label  = "deployment_id"
 	}
 }
 
-// ====================
-// Logs Collection
-// ====================
+loki.echo "default" { }
 
-loki.source.kubernetes "pods" {
-	targets    = discovery.relabel.pods.output
-	forward_to = [loki.process.add_trace_context.receiver]
+loki.source.syslog "local" {
+	listener {
+		address = "127.0.0.1:51893"
+		labels  = {component = "loki.source.syslog", protocol = "tcp"}
+	}
+
+	listener {
+		address  = "127.0.0.1:51898"
+		protocol = "udp"
+		labels   = {component = "loki.source.syslog", protocol = "udp"}
+	}
+
+	forward_to = [loki.write.default.receiver]
 }
 
-loki.process "add_trace_context" {
-	forward_to = [loki.process.parse_json.receiver]
+/*
+Make sure that the grafana-alloy user is a member of the following groups:
+  adm
+  systemd-journal
+*/
+loki.source.journal "default" {
+	forward_to = [loki.process.default.receiver]
+}
 
-	// Extract trace_id from logs if present
-	stage.regex {
-		expression = "trace_id=(?P<trace_id>\\w+)"
+loki.source.file "default" {
+	targets    = discovery.relabel.default.output
+	forward_to = [loki.process.default.receiver]
+}
+
+loki.source.file "tmpfiles" {
+	targets = [
+		{__path__ = "/tmp/foo.txt", "color" = "pink"},
+		{__path__ = "/tmp/bar.txt", "color" = "blue"},
+		{__path__ = "/tmp/baz.txt", "color" = "grey"},
+	]
+	forward_to = [loki.write.default.receiver]
+}
+
+loki.source.file "tmpfiles" {
+	targets = [
+		{__path__ = "/tmp/*.log"},
+	]
+	forward_to = [loki.write.default.receiver]
+
+	file_match {
+		enabled     = true
+		sync_period = "10s"
+	}
+}
+
+// Extract data from log messages and add labels
+loki.process "add_labels" {
+	stage.logfmt {
+		mapping = {
+			"extracted_level"   = "level",
+			"extracted_service" = "service",
+		}
 	}
 
 	stage.labels {
 		values = {
-			trace_id = "",
+			"level"   = "extracted_level",
+			"service" = "extracted_service",
 		}
 	}
+
+	forward_to = [loki.write.default.receiver]
 }
 
-loki.process "parse_json" {
-	forward_to = [loki.write.loki.receiver]
+// loki.source.kubernetes "default" {
+// 	targets    = discovery.relabel.default.output
+// 	forward_to = [loki.process.default.receiver]
+// }
 
+// loki.source.podlogs "default" {
+// 	forward_to = [loki.process.default.receiver]
+// }
+
+loki.process "default" {
+	forward_to = [loki.write.default.receiver]
+
+	// I ensure that Rust microservices log in JSON, can't guarantee tenants follow it
 	stage.json {
 		expressions = {
-			level     = "level",
-			message   = "message",
-			timestamp = "timestamp",
-			trace_id  = "trace_id",
-			span_id   = "span_id",
+			level    = "level",
+			trace_id = "trace_id",
 		}
 	}
 
+	// Set Log Level as a Label (makes querying easier)
 	stage.labels {
 		values = {
-			level = "",
+			level = "level",
 		}
-	}
-
-	stage.label_drop {
-		values = ["filename", "stream"]
 	}
 }
 
-loki.write "loki" {
+loki.write "default" {
 	endpoint {
-		url = "http://loki.poddle.uz:3100/loki/api/v1/push"
-
-		// For production with authentication, uncomment:
-		// basic_auth {
-		//   username = env("LOKI_USERNAME")
-		//   password = env("LOKI_PASSWORD")
-		// }
+		url = "http://loki-gateway.loki.svc.cluster.local/loki/api/v1/push"
 	}
 }
 
-// ====================
-// OTLP Receivers
-// ====================
+// ==============================================================================
+// METRICS
+// ==============================================================================
 
-otelcol.receiver.otlp "default" {
-	grpc {
-		endpoint = "0.0.0.0:4317"
-	}
+// Discovery for specific services (e.g., your Rust apps with prometheus.io/scrape=true)
+discovery.relabel "default" {
+	targets = discovery.kubernetes.pods.targets
 
-	http {
-		endpoint = "0.0.0.0:4318"
-	}
-
-	output {
-		metrics = [otelcol.processor.memory_limiter.default.input]
-		logs    = [otelcol.processor.memory_limiter.default.input]
-		traces  = [otelcol.processor.memory_limiter.default.input]
-	}
-}
-
-// ====================
-// OTLP Processors
-// ====================
-
-otelcol.processor.memory_limiter "default" {
-	check_interval = "1s"
-	limit          = "512MiB"
-	spike_limit    = "128MiB"
-
-	output {
-		metrics = [otelcol.processor.batch.default.input]
-		logs    = [otelcol.processor.batch.default.input]
-		traces  = [otelcol.processor.batch.default.input]
-	}
-}
-
-otelcol.processor.batch "default" {
-	timeout             = "5s"
-	send_batch_size     = 1024
-	send_batch_max_size = 2048
-
-	output {
-		metrics = [otelcol.processor.attributes.default.input]
-		logs    = [otelcol.processor.attributes.default.input]
-		traces  = [otelcol.processor.attributes.default.input]
-	}
-}
-
-otelcol.processor.attributes "default" {
-	action {
-		key    = "cluster"
-		value  = "k3s-dev"
-		action = "upsert"
-	}
-
-	output {
-		metrics = [otelcol.exporter.otlp.mimir.input]
-		logs    = [otelcol.exporter.otlp.loki.input]
-		traces  = [otelcol.exporter.otlp.tempo.input]
-	}
-}
-
-// ====================
-// OTLP Exporters
-// ====================
-
-otelcol.exporter.otlp "tempo" {
-	client {
-		endpoint = "tempo.poddle.uz:4317"
-
-		tls {
-			insecure = true
-		}
-	}
-}
-
-otelcol.exporter.otlp "loki" {
-	client {
-		endpoint = "loki.poddle.uz:4317"
-
-		tls {
-			insecure = true
-		}
-	}
-}
-
-otelcol.exporter.otlp "mimir" {
-	client {
-		endpoint = "mimir.poddle.uz:4317"
-
-		tls {
-			insecure = true
-		}
-	}
-}
-
-// ====================
-// Prometheus Scraping (Optional)
-// ====================
-
-discovery.kubernetes "services" {
-	role = "service"
-}
-
-discovery.relabel "prometheus_services" {
-	targets = discovery.kubernetes.services.targets
-
-	// Only scrape services with prometheus.io/scrape annotation
 	rule {
-		source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_scrape"]
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
 		action        = "keep"
 		regex         = "true"
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_service_annotation_prometheus_io_path"]
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+		action        = "replace"
 		target_label  = "__metrics_path__"
 		regex         = "(.+)"
+		replacement   = "$1"
 	}
-
+	// Ensure we address the pod IP and annotated port
 	rule {
-		source_labels = ["__address__", "__meta_kubernetes_service_annotation_prometheus_io_port"]
-		target_label  = "__address__"
+		source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+		action        = "replace"
 		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
 		replacement   = "$1:$2"
+		target_label  = "__address__"
 	}
-
+	// Add Metadata
 	rule {
 		source_labels = ["__meta_kubernetes_namespace"]
 		target_label  = "namespace"
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_service_name"]
-		target_label  = "service"
+		source_labels = ["__meta_kubernetes_pod_label_app"]
+		target_label  = "app"
 	}
 }
 
-prometheus.scrape "services" {
-	targets    = discovery.relabel.prometheus_services.output
-	forward_to = [prometheus.remote_write.mimir.receiver]
-
-	scrape_interval = "30s"
-	scrape_timeout  = "10s"
+prometheus.scrape "default" {
+	targets         = discovery.relabel.default.output
+	forward_to      = [prometheus.remote_write.default.receiver]
+	forward_to      = [otelcol.receiver.prometheus.default.receiver]
+	scrape_interval = "15s"
 }
 
-prometheus.remote_write "mimir" {
+// Receive OTLP Metrics 
+otelcol.receiver.otlp "default" {
+	grpc {
+		endpoint = "0.0.0.0:4317"
+		// auth = otelcol.auth.basic.creds.handler
+	}
+
+	http {
+		endpoint = "0.0.0.0:4318"
+		// auth = otelcol.auth.basic.creds.handler
+	}
+
+	output {
+		metrics = [otelcol.processor.batch.default.input]
+		logs    = []
+		traces  = [otelcol.processor.batch.default.input]
+	}
+}
+
+otelcol.processor.batch "default" {
+	output {
+		// Convert OTLP Metrics to Prometheus -> Send to Mimir
+		metrics = [otelcol.exporter.prometheus.default.input]
+		logs    = [otelcol.exporter.otlp.default.input]
+		// Send Traces to Tempo
+		traces = [otelcol.exporter.otlp.default.input]
+	}
+}
+
+// Convert OTLP Metrics to Prometheus format
+otelcol.exporter.prometheus "default" {
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+// Write Metrics to Host Mimir
+prometheus.remote_write "default" {
 	endpoint {
-		url = "http://mimir.poddle.uz:9009/api/v1/push"
-
-		// For production with authentication:
-		// basic_auth {
-		//   username = env("MIMIR_USERNAME")
-		//   password = env("MIMIR_PASSWORD")
-		// }
+		url = "http://mimir:9009/api/v1/push"
 	}
+}
+
+// ==============================================================================
+// TRACES
+// ==============================================================================
+
+otelcol.exporter.otlp "tempo" {
+	client {
+		endpoint = "tempo:4317"
+		// auth     = otelcol.auth.basic.grafana_cloudgrafana_traces_traces.handler
+
+		tls {
+			insecure             = true
+			insecure_skip_verify = true
+		}
+	}
+}
+
+// otelcol.auth.basic "creds" {
+// 	username = sys.env("<USERNAME>")
+// 	password = sys.env("<PASSWORD>")
+// }
+
+// ==============================================================================
+// USEFULL, CHEATSHEET
+// ==============================================================================
+
+otelcol.exporter.syslog "default" {
+	endpoint = "localhost"
+
+	tls {
+		insecure             = true
+		insecure_skip_verify = true
+	}
+}
+
+otelcol.receiver.filelog "default" {
+	include = ["/var/log/*.log"]
+	//   operators = [
+	//       {
+	//         type = "container"
+	//       }
+	//     ]
+	operators = [{
+		type      = "regex_parser",
+		regex     = "^(?P<timestamp>\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3,6}Z)",
+		timestamp = {
+			parse_from = "attributes.timestamp",
+			layout     = "%Y-%m-%dT%H:%M:%S.%fZ",
+			location   = "UTC",
+		},
+	}]
+
+	output {
+		logs = [otelcol.exporter.debug.default.input]
+	}
+}
+
+otelcol.exporter.debug "default" { }
+
+loki.source.file "default" {
+	targets = [
+		{__path__ = "/tmp/foo.txt", "loki.format" = "logfmt"},
+		{__path__ = "/tmp/bar.txt", "loki.format" = "json"},
+	]
+	forward_to = [otelcol.receiver.loki.default.receiver]
+}
+
+otelcol.receiver.loki "default" {
+	output {
+		logs = [otelcol.exporter.otlp.default.input]
+	}
+}
+
+otelcol.exporter.otlp "default" {
+	client {
+		endpoint = sys.env("<OTLP_ENDPOINT>")
+	}
+}
+
+otelcol.receiver.prometheus "default" {
+	output {
+		metrics = [otelcol.exporter.otlp.default.input]
+	}
+}
+
+otelcol.receiver.syslog "default" {
+	protocol = "rfc5424"
+
+	tcp {
+		listen_address = "localhost:1515"
+	}
+
+	output {
+		logs = [otelcol.exporter.syslog.default.input]
+	}
+}
+
+otelcol.exporter.syslog "default" {
+	endpoint              = "localhost"
+	network               = "tcp"
+	port                  = 1514
+	protocol              = "rfc5424"
+	enable_octet_counting = false
+
+	tls {
+		insecure = true
+	}
+}
+
+loki.source.syslog "default" {
+	listener {
+		address               = "localhost:1514"
+		protocol              = "tcp"
+		syslog_format         = "rfc5424"
+		label_structured_data = true
+		use_rfc5424_message   = true
+	}
+	forward_to = [loki.echo.default.receiver]
+}
+
+loki.echo "default" { }
+
+prometheus.exporter.postgres "example" {
+	data_source_names = ["postgresql://username:password@localhost:5432/database_name?sslmode=disable"]
+}
+
+prometheus.exporter.redis "example" {
+	redis_addr = "localhost:6379"
 }
