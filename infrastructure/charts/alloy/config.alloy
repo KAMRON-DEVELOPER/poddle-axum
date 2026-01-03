@@ -245,7 +245,7 @@ otelcol.exporter.prometheus "default" {
 // Write Metrics to Host Mimir
 prometheus.remote_write "default" {
 	endpoint {
-		url = "http://prometheus-server.monitoring.svc:80/api/v1/write"
+		url = "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write"
 	}
 }
 

@@ -3,14 +3,20 @@
 server:
   enabled: true
 
-  global:
-    scrape_interval: 60s
-    scrape_timeout: 10s
-    evaluation_interval: 60s
+  extraFlags:
+    - web.enable-lifecycle
+    - storage.tsdb.wal-compression
+    - storage.tsdb.no-lockfile
 
-  # Disable scraping by Prometheus itself
+  global:
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    evaluation_interval: 1m
+
   extraArgs:
-    enable-feature: "exemplar-storage"
+    # Helm takes null to indicate that a key needs to be removed
+    # https://helm.sh/docs/chart_template_guide/values_files/#deleting-a-default-key
+    web.enable-remote-write-receiver: ""
 
   persistentVolume:
     enabled: true
@@ -20,30 +26,47 @@ server:
   resources:
     requests:
       cpu: 100m
-      memory: 512Mi
+      memory: 256Mi
     limits:
       cpu: 300m
-      memory: 1Gi
+      memory: 512Mi
 
-  retention: "7d"
+  retention: "30d"
 
-  # Do NOT configure scrape_configs
-  # Alloy will push or remote_write later
+scrapeConfigs:
+  prometheus:
+    enabled: false
+  kubernetes-api-servers:
+    enabled: false
+  kubernetes-nodes:
+    enabled: false
+  kubernetes-nodes-cadvisor:
+    enabled: false
+  kubernetes-service-endpoints:
+    enabled: false
+  kubernetes-service-endpoints-slow:
+    enabled: false
+  prometheus-pushgateway:
+    enabled: false
+  kubernetes-services:
+    enabled: false
+  kubernetes-pods:
+    enabled: false
+  kubernetes-pods-slow:
+    enabled: false
+
+serverFiles:
+  prometheus.yml:
+    scrape_configs: []
 
 alertmanager:
   enabled: false
 
-pushgateway:
+prometheus-pushgateway:
   enabled: false
 
-kubeStateMetrics:
+kube-state-metrics:
   enabled: false
 
-nodeExporter:
+prometheus-node-exporter:
   enabled: false
-
-serverFiles:
-  prometheus.yml:
-    global:
-      scrape_interval: 60s
-    scrape_configs: []
