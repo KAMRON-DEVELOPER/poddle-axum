@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=values.schema.json
+
+server:
+  enabled: true
+
+  global:
+    scrape_interval: 60s
+    scrape_timeout: 10s
+    evaluation_interval: 60s
+
+  # Disable scraping by Prometheus itself
+  extraArgs:
+    enable-feature: "exemplar-storage"
+
+  persistentVolume:
+    enabled: true
+    size: 10Gi
+    storageClass: local-path
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 512Mi
+    limits:
+      cpu: 300m
+      memory: 1Gi
+
+  retention: "7d"
+
+  # Do NOT configure scrape_configs
+  # Alloy will push or remote_write later
+
+alertmanager:
+  enabled: false
+
+pushgateway:
+  enabled: false
+
+kubeStateMetrics:
+  enabled: false
+
+nodeExporter:
+  enabled: false
+
+serverFiles:
+  prometheus.yml:
+    global:
+      scrape_interval: 60s
+    scrape_configs: []

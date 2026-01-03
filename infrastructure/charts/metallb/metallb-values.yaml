@@ -1,14 +1,49 @@
-1prometheus:
-2  podMonitor:
-3    enabled: true
+# yaml-language-server: $schema=values.schema.json
+
+prometheus:
+  prometheusRule:
+    # enable alertmanager alerts
+    enabled: false
+
+    # MetalLBStaleConfig
+    staleConfig:
+      enabled: true
+
+    # MetalLBConfigNotLoaded
+    configNotLoaded:
+      enabled: true
+
+    # MetalLBAddressPoolExhausted
+    addressPoolExhausted:
+      enabled: true
+
+    addressPoolUsage:
+      enabled: true
+
+    # MetalLBBGPSessionDown
+    bgpSessionDown:
+      enabled: true
+
+  # Prometheus Operator PodMonitors
+  podMonitor:
+    enabled: false
 
 controller:
+  image:
+    repository: quay.io/metallb/controller
+  serviceAccount:
+    create: true
   resources:
     limits:
       cpu: 100m
       memory: 100Mi
 
 speaker:
+  tolerateMaster: true
+  image:
+    repository: quay.io/metallb/speaker
+  serviceAccount:
+    create: true
   resources:
     limits:
       cpu: 100m

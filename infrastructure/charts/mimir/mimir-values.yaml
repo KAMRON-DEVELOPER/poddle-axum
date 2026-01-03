@@ -1,15 +1,115 @@
 minio:
   enabled: false
 
+kafka:
+  enabled: false
+
+# Enable direct communication since Kafka is gone
+ingester:
+  push_grpc_method_enabled: true
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+# Reduce all other microservices to 1 replica to fit your CPU count
+distributor:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+querier:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+query_frontend:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+
+query_scheduler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 64Mi
+
+store_gateway:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 256Mi
+
+compactor:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+ruler:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 20m
+      memory: 128Mi
+
+alertmanager:
+  replicas: 0
+
+overrides_exporter:
+  replicas: 1
+
+# Disable Gateway autoscaling and heavy nginx logging
+gateway:
+  replicas: 1
+  nginx:
+    verboseLogging: false
+
+# global:
+#   extraEnvFrom:
+#     - secretRef:
+#         name: credentials
+
 mimir:
+  extraEnvFrom:
+    - secretRef:
+        name: minio-credentials
+
   structuredConfig:
-  common:
-    storage:
-      backend: s3
-      s3:
-        bucket_name: "mimir"
-        endpoint: "$192.168.31.2:9000"
-        access_key_id: "${AWS_ACCESS_KEY_ID}"
-        secret_access_key: "${AWS_SECRET_ACCESS_KEY}"
-        http:
-          insecure_skip_verify: true
+    memberlist:
+      cluster_label: "mimir"
+      cluster_label_verification_disabled: false
+    server:
+      log_level: info
+      grpc_server_max_recv_msg_size: 104857600
+      grpc_server_max_send_msg_size: 104857600
+      grpc_server_max_concurrent_streams: 1000
+    limits:
+      max_label_names_per_series: 120
+      max_global_series_per_user: 12000000
+      ingestion_burst_size: 200000
+      ingestion_rate: 150000
+      max_global_series_per_metric: 200000000
+      compactor_blocks_retention_period: 24h
+    compactor:
+      compaction_interval: 24h
+    common:
+      storage:
+        backend: s3
+        s3:
+          endpoint: "192.168.31.2:9000"
+          bucket_name: "mimir"
+          access_key_id: "${S3_ACCESS_KEY}"
+          secret_access_key: "${S3_SECRET_KEY}"
+          http:
+            insecure_skip_verify: true

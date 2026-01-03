@@ -200,6 +200,14 @@ prometheus.scrape "default" {
 	scrape_interval = "15s"
 }
 
+prometheus.scrape "apps" {
+	targets = [
+		{
+			__address__ = "host.docker.internal:9100",
+		},
+	]
+}
+
 // Receive OTLP Metrics 
 otelcol.receiver.otlp "default" {
 	grpc {
@@ -237,8 +245,12 @@ otelcol.exporter.prometheus "default" {
 // Write Metrics to Host Mimir
 prometheus.remote_write "default" {
 	endpoint {
-		url = "http://mimir:9009/api/v1/push"
+		url = "http://prometheus-server.monitoring.svc:80/api/v1/write"
 	}
+}
+
+prometheus.relabel "default" {
+	forward_to = [prometheus.remote_write.default.receiver]
 }
 
 // ==============================================================================

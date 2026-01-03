@@ -1,4 +1,6 @@
 tempo:
+  auth_enabled: false
+
   receivers:
     otlp:
       protocols:
@@ -6,26 +8,31 @@ tempo:
           endpoint: "0.0.0.0:4317"
         http:
           endpoint: "0.0.0.0:4318"
+
   resources:
     requests:
       cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 500m
-      memory: 1Gi
+      cpu: 300m
+      memory: 768Mi
 
   metricsGenerator:
-    enabled: true
-    remoteWriteUrl: "http://prometheus-kube-prometheus-prometheus.monitoring.svc.cluster.local:9090/api/v1/write"
+    enabled: false
+    remoteWriteUrl: "http://mimir-gateway.observability.svc.cluster.local/api/v1/push"
+
+  extraEnvFrom:
+    - secretRef:
+        name: minio-credentials
 
   storage:
     trace:
       backend: s3
       s3:
-        access_key: "grafana-tempo"
-        secret_key: "supersecret"
-        bucket: "tempo-traces"
-        endpoint: "tempo-minio:9000"
+        endpoint: 192.168.31.2:9000
+        bucket: tempo
+        access_key: ${S3_ACCESS_KEY}
+        secret_key: ${S3_SECRET_KEY}
         insecure: true
 
 persistence:

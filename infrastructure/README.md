@@ -11,6 +11,7 @@ helm repo add traefik https://traefik.github.io/charts
 helm repo add hashicorp https://helm.releases.hashicorp.com
 helm repo add jetstack https://charts.jetstack.io
 helm repo add grafana https://grafana.github.io/helm-charts
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 helm repo add minio https://helm.min.io/
 ```
 
@@ -31,9 +32,10 @@ mkdir -p infrastructure/charts/vault-secrets-operator
 mkdir -p infrastructure/charts/cert-manager
 mkdir -p infrastructure/charts/grafana
 mkdir -p infrastructure/charts/alloy
-mkdir -p infrastructure/charts/tempo
 mkdir -p infrastructure/charts/loki
+mkdir -p infrastructure/charts/tempo
 mkdir -p infrastructure/charts/mimir
+mkdir -p infrastructure/charts/prometheus-community
 mkdir -p infrastructure/charts/minio
 
 helm show values cilium/cilium > infrastructure/charts/cilium/values.yaml
@@ -44,9 +46,13 @@ helm show values hashicorp/vault-secrets-operator > infrastructure/charts/vault-
 helm show values jetstack/cert-manager > infrastructure/charts/cert-manager/values.yaml
 helm show values grafana/grafana > infrastructure/charts/grafana/values.yaml
 helm show values grafana/alloy > infrastructure/charts/alloy/values.yaml
-helm show values grafana/tempo-distributed > infrastructure/charts/tempo/values.yaml
-helm show values grafana/loki-distributed > infrastructure/charts/loki/values.yaml
-helm show values grafana/mimir-distributed > infrastructure/charts/mimir/values.yaml
+helm show values grafana/loki > infrastructure/charts/loki/values.yaml
+helm show values grafana/loki-simple-scalable > infrastructure/charts/loki/simple-scalable-values.yaml
+helm show values grafana/loki-distributed > infrastructure/charts/loki/distributed-values.yaml
+helm show values grafana/tempo > infrastructure/charts/tempo/values.yaml
+helm show values grafana/tempo-distributed > infrastructure/charts/tempo/distributed-values.yaml
+helm show values grafana/mimir-distributed > infrastructure/charts/mimir/distributed-values.yaml
+helm show values prometheus-community/prometheus > infrastructure/charts/prometheus-community/values.yaml
 helm show values minio/minio > infrastructure/charts/minio/values.yaml
 ```
 
@@ -60,11 +66,15 @@ helm pull hashicorp/vault --untar --untardir infrastructure/charts/vault
 helm pull hashicorp/vault-secrets-operator --untar --untardir infrastructure/charts/vault-secrets-operator
 helm pull jetstack/cert-manager --untar --untardir infrastructure/charts/cert-manager
 helm pull grafana/grafana --untar --untardir infrastructure/charts/grafana
-helm pull grafana/alloy --untar --untardir infrastructure/charts/cert-manager
-helm pull grafana/tempo-distributed --untar --untardir infrastructure/charts/tempo
+helm pull grafana/alloy --untar --untardir infrastructure/charts/alloy
+helm pull grafana/loki --untar --untardir infrastructure/charts/loki
+helm pull grafana/loki-simple-scalable --untar --untardir infrastructure/charts/loki
 helm pull grafana/loki-distributed --untar --untardir infrastructure/charts/loki
+helm pull grafana/tempo --untar --untardir infrastructure/charts/tempo
+helm pull grafana/tempo-distributed --untar --untardir infrastructure/charts/tempo
 helm pull grafana/mimir-distributed --untar --untardir infrastructure/charts/mimir
 helm pull minio/minio --untar --untardir infrastructure/charts/minio
+helm pull prometheus-community/prometheus --untar --untardir infrastructure/charts/prometheus-community
 
 helm pull prometheus-community/kube-prometheus-stack --untar --untardir infrastructure/charts/prometheus-community-manifests
 helm pull open-telemetry/opentelemetry-collector --untar --untardir infrastructure/charts/open-telemetry-manifests
