@@ -12,7 +12,36 @@ helm show values grafana/mimir-distributed > infrastructure/charts/mimir/values.
 
 ---
 
-## Constraints
+## Install Promethues, Loki, Tempo, Alloy
+
+> [!NOTE]
+> When creating Loki and Tempo we use Traefik's externalaa to referance host Minio instance
+>
+> Then `Loki` and `Tempo` s3 endpoint will be like `minio-external.observability.svc.cluster.local:9000`
+
+### Create Minio ExternalService(Traefik)
+
+```bash
+kubectl create ns observability
+kubectl apply -f infrastructure/manifests/minio-external.yaml
+```
+
+### Create Minio secrets for `loki` and `tempo`, so they can connect
+
+```bash
+kubectl create ns loki
+kubectl create secret generic minio-credentials \
+  --from-literal=S3_ACCESS_KEY=... \
+  --from-literal=S3_SECRET_KEY=... \
+  -n loki
+kubectl create ns tempo
+kubectl create secret generic minio-credentials \
+  --from-literal=S3_ACCESS_KEY=... \
+  --from-literal=S3_SECRET_KEY=... \
+  -n tempo
+```
+
+### Install Prometheus
 
 > [!INFO]
 > In dev mode we don't deploy mimir, it is too heavy, we deploy prometheus-community/promethues.
@@ -45,37 +74,13 @@ kubectl get pod prometheus-server-674f658949-spg7p -n prometheus -o jsonpath='{.
 # prometheus-server-configmap-reload prometheus-server
 ```
 
-### Create ingress, so applications can access to prometheus
+#### We may need to create IngressRoute(Traefik) for Prometheus, so axum microservices can access
 
 ```bash
 kubectl apply -f infrastructure/charts/prometheus-community/ingress.yaml
 ```
 
-### When creating Loki and Tempo we use Traefik's externalaa to referance host Minio instance
-
-Then `Loki` and `Tempo` s3 endpoint will be like `minio-external.observability.svc.cluster.local:9000`
-
-```bash
-kubectl create ns observability
-kubectl apply -f infrastructure/manifests/minio-external.yaml
-```
-
-#### Create Minio secrets for `loki` and `tempo`, so they can connect
-
-```bash
-kubectl create ns loki
-kubectl create secret generic minio-credentials \
-  --from-literal=S3_ACCESS_KEY=... \
-  --from-literal=S3_SECRET_KEY=... \
-  -n loki
-kubectl create ns tempo
-kubectl create secret generic minio-credentials \
-  --from-literal=S3_ACCESS_KEY=... \
-  --from-literal=S3_SECRET_KEY=... \
-  -n tempo
-```
-
-### Loki setup
+### Install Loki
 
 ```bash
 helm upgrade --install loki grafana/loki \
@@ -104,13 +109,13 @@ kubectl get pod loki-0 -n loki -o jsonpath='{.spec.containers[*].name}'
 # loki loki-sc-rules
 ```
 
-#### We may need to create IngressRoute(Traefik), so axum microservices can access
+#### We may need to create IngressRoute(Traefik) for Loki, so axum microservices can access
 
 ```bash
 kubectl apply -f infrastructure/charts/loki/ingress.yaml
 ```
 
-### Tempo setup
+### Install Tempo
 
 ```bash
 helm upgrade --install tempo grafana/tempo \
@@ -118,8 +123,8 @@ helm upgrade --install tempo grafana/tempo \
   --namespace tempo --create-namespace
 ```
 
-Connecting Grafana to Loki
+#### We may need to create IngressRoute(Traefik) for Tempo, so axum microservices can access
 
-If Grafana operates within the cluster, you'll set up a new Loki datasource by utilizing the following URL:
-
-<http://loki.loki.svc.cluster.local:3100/>
+```bash
+kubectl apply -f infrastructure/charts/loki/ingress.yaml
+```
