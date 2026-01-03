@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: tempo-ingressroute
+  namespace: tempo
+spec:
+  entryPoints: []
+    # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
+    # - web
+    # - websecure
+  routes:
+    - match: Host(`tempo.poddle.uz`)
+      kind: Rule
+      services:
+        - name: tempo
+          port: 3100
+  # tls:
+  #   secretName: wildcard-poddle-uz-tls-secret
