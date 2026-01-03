@@ -133,6 +133,20 @@ helm upgrade --install tempo grafana/tempo \
   --namespace tempo --create-namespace
 ```
 
+Verify
+
+```bash
+kubectl get all -n tempo
+# NAME          READY   STATUS    RESTARTS   AGE
+# pod/tempo-0   1/1     Running   0          2m41s
+
+# NAME            TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)                                                                                                   AGE
+# service/tempo   ClusterIP   10.43.57.85   <none>        6831/UDP,6832/UDP,3200/TCP,14268/TCP,14250/TCP,9411/TCP,55680/TCP,55681/TCP,4317/TCP,4318/TCP,55678/TCP   2m41s
+
+# NAME                     READY   AGE
+# statefulset.apps/tempo   1/1     2m41s
+```
+
 #### We may need to create IngressRoute(Traefik) for Tempo, so axum microservices can access
 
 ```bash
