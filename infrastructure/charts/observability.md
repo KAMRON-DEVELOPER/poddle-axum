@@ -60,7 +60,7 @@ kubectl create ns observability
 kubectl apply -f infrastructure/manifests/minio-external.yaml
 ```
 
-Create Minio secrets for `loki` and `tempo`, so they can connect
+#### Create Minio secrets for `loki` and `tempo`, so they can connect
 
 ```bash
 kubectl create ns loki
@@ -81,6 +81,33 @@ kubectl create secret generic minio-credentials \
 helm upgrade --install loki grafana/loki \
   --values infrastructure/charts/loki/loki-values.yaml \
   --namespace loki --create-namespace
+```
+
+Verify
+
+```bash
+kubectl get all -n loki
+# NAME         READY   STATUS    RESTARTS   AGE
+# pod/loki-0   2/2     Running   0          2m24s
+
+# NAME                      TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)             AGE
+# service/loki              ClusterIP   10.43.102.19   <none>        3100/TCP,9095/TCP   2m24s
+# service/loki-headless     ClusterIP   None           <none>        3100/TCP            2m24s
+# service/loki-memberlist   ClusterIP   None           <none>        7946/TCP            2m24s
+
+# NAME                    READY   AGE
+# statefulset.apps/loki   1/1     2m24s
+```
+
+```bash
+kubectl get pod loki-0 -n loki -o jsonpath='{.spec.containers[*].name}'
+# loki loki-sc-rules
+```
+
+#### We may need to create IngressRoute(Traefik), so axum microservices can access
+
+```bash
+kubectl apply -f infrastructure/charts/loki/ingress.yaml
 ```
 
 ### Tempo setup

@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: loki-ingressroute
+  namespace: loki
+spec:
+  entryPoints: []
+    # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
+    # - web
+    # - websecure
+  routes:
+    - match: Host(`loki.poddle.uz`)
+      kind: Rule
+      services:
+        - name: loki
+          port: 3100
+  # tls:
+  #   secretName: wildcard-poddle-uz-tls-secret
