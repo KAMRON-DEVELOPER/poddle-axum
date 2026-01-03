@@ -66,7 +66,7 @@ Create Minio secrets to connect
 kubectl create secret generic minio-credentials \
   --from-literal=S3_ACCESS_KEY=... \
   --from-literal=S3_SECRET_KEY=... \
-  -n observability
+  -n loki --create-namespace
 ```
 
 ### Loki setup
@@ -84,3 +84,9 @@ helm upgrade --install tempo grafana/tempo \
   --values infrastructure/charts/tempo/tempo-values.yaml \
   --namespace tempo --create-namespace
 ```
+
+Connecting Grafana to Loki
+
+If Grafana operates within the cluster, you'll set up a new Loki datasource by utilizing the following URL:
+
+<http://loki.loki.svc.cluster.local:3100/>
