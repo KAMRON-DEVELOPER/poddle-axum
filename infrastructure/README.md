@@ -28,6 +28,7 @@ mkdir -p infrastructure/charts/cilium
 mkdir -p infrastructure/charts/metallb
 mkdir -p infrastructure/charts/traefik
 mkdir -p infrastructure/charts/vault
+mkdir -p infrastructure/charts/vso
 mkdir -p infrastructure/charts/vault-secrets-operator
 mkdir -p infrastructure/charts/cert-manager
 mkdir -p infrastructure/charts/grafana
@@ -42,6 +43,7 @@ helm show values cilium/cilium > infrastructure/charts/cilium/values.yaml
 helm show values metallb/metallb > infrastructure/charts/metallb/values.yaml
 helm show values traefik/traefik > infrastructure/charts/traefik/values.yaml
 helm show values hashicorp/vault > infrastructure/charts/vault/values.yaml
+helm show values hashicorp/vault-secrets-operator > infrastructure/charts/vso/values.yaml
 helm show values hashicorp/vault-secrets-operator > infrastructure/charts/vault-secrets-operator/values.yaml
 helm show values jetstack/cert-manager > infrastructure/charts/cert-manager/values.yaml
 helm show values grafana/grafana > infrastructure/charts/grafana/values.yaml
@@ -63,6 +65,7 @@ helm pull cilium/cilium --untar --untardir infrastructure/charts/cilium
 helm pull metallb/metallb --untar --untardir infrastructure/charts/metallb
 helm pull traefik/traefik --untar --untardir infrastructure/charts/traefik
 helm pull hashicorp/vault --untar --untardir infrastructure/charts/vault
+helm pull hashicorp/vault-secrets-operator --untar --untardir infrastructure/charts/vso
 helm pull hashicorp/vault-secrets-operator --untar --untardir infrastructure/charts/vault-secrets-operator
 helm pull jetstack/cert-manager --untar --untardir infrastructure/charts/cert-manager
 helm pull grafana/grafana --untar --untardir infrastructure/charts/grafana
@@ -78,6 +81,34 @@ helm pull prometheus-community/prometheus --untar --untardir infrastructure/char
 
 helm pull prometheus-community/kube-prometheus-stack --untar --untardir infrastructure/charts/prometheus-community-manifests
 helm pull open-telemetry/opentelemetry-collector --untar --untardir infrastructure/charts/open-telemetry-manifests
+```
+
+### Putting schemas and add `yaml-language-server: $schema=values.schema.json`
+
+```bash
+helm pull cilium/cilium --untar --untardir infrastructure/charts/cilium
+helm pull metallb/metallb --untar --untardir infrastructure/charts/metallb
+helm pull traefik/traefik --untar --untardir infrastructure/charts/traefik
+helm pull hashicorp/vault --untar --untardir infrastructure/charts/vault
+helm pull jetstack/cert-manager --untar --untardir infrastructure/charts/cert-manager
+helm pull grafana/loki --untar --untardir infrastructure/charts/loki
+helm pull prometheus-community/prometheus --untar --untardir infrastructure/charts/prometheus-community
+
+mv infrastructure/charts/cilium/cilium/values.schema.json infrastructure/charts/cilium
+mv infrastructure/charts/metallb/metallb/values.schema.json infrastructure/charts/metallb
+mv infrastructure/charts/traefik/traefik/values.schema.json infrastructure/charts/traefik
+mv infrastructure/charts/vault/vault/values.schema.json infrastructure/charts/vault
+mv infrastructure/charts/cert-manager/cert-manager/values.schema.json infrastructure/charts/cert-manager
+mv infrastructure/charts/loki/loki/values.schema.json infrastructure/charts/loki
+mv infrastructure/charts/prometheus-community/prometheus/values.schema.json infrastructure/charts/prometheus-community
+
+rm -rf infrastructure/charts/cilium/cilium
+rm -rf infrastructure/charts/metallb/metallb
+rm -rf infrastructure/charts/traefik/traefik
+rm -rf infrastructure/charts/vault/vault
+rm -rf infrastructure/charts/cert-manager/cert-manager
+rm -rf infrastructure/charts/loki/loki
+rm -rf infrastructure/charts/prometheus-community/prometheus
 ```
 
 ---
