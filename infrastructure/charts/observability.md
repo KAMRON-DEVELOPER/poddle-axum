@@ -60,13 +60,19 @@ kubectl create ns observability
 kubectl apply -f infrastructure/manifests/minio-external.yaml
 ```
 
-Create Minio secrets to connect
+Create Minio secrets for `loki` and `tempo`, so they can connect
 
 ```bash
+kubectl create ns loki
 kubectl create secret generic minio-credentials \
   --from-literal=S3_ACCESS_KEY=... \
   --from-literal=S3_SECRET_KEY=... \
-  -n loki --create-namespace
+  -n loki
+kubectl create ns tempo
+kubectl create secret generic minio-credentials \
+  --from-literal=S3_ACCESS_KEY=... \
+  --from-literal=S3_SECRET_KEY=... \
+  -n tempo
 ```
 
 ### Loki setup
