@@ -170,38 +170,38 @@ tempo:
 # -- Tempo configuration file contents
 # @default -- Dynamically generated tempo configmap
 config: |
-  memberlist:
-    cluster_label: "{{ .Release.Name }}.{{ .Release.Namespace }}"
-  multitenancy_enabled: {{ .Values.tempo.multitenancyEnabled }}
-  usage_report:
-    reporting_enabled: {{ .Values.tempo.reportingEnabled }}
-  compactor:
-    compaction:
-      block_retention: {{ .Values.tempo.retention }}
-  distributor:
-    receivers:
-      {{- toYaml .Values.tempo.receivers | nindent 8 }}
-  ingester:
-    {{- toYaml .Values.tempo.ingester | nindent 6 }}
-  server:
-    {{- toYaml .Values.tempo.server | nindent 6 }}
-  storage:
-    {{- toYaml .Values.tempo.storage | nindent 6 }}
-  querier:
-    {{- toYaml .Values.tempo.querier | nindent 6 }}
-  query_frontend:
-    {{- toYaml .Values.tempo.queryFrontend | nindent 6 }}
-  overrides:
-    {{- toYaml .Values.tempo.overrides | nindent 6 }}
-    {{- if .Values.tempo.metricsGenerator.enabled }}
-  metrics_generator:
-        storage:
-          path: "/tmp/tempo"
-          remote_write:
-            - url: {{ .Values.tempo.metricsGenerator.remoteWriteUrl }}
-        traces_storage:
-          path: "/tmp/traces"
-    {{- end }}
+    memberlist:
+      cluster_label: "{{ .Release.Name }}.{{ .Release.Namespace }}"
+    multitenancy_enabled: {{ .Values.tempo.multitenancyEnabled }}
+    usage_report:
+      reporting_enabled: {{ .Values.tempo.reportingEnabled }}
+    compactor:
+      compaction:
+        block_retention: {{ .Values.tempo.retention }}
+    distributor:
+      receivers:
+        {{- toYaml .Values.tempo.receivers | nindent 8 }}
+    ingester:
+      {{- toYaml .Values.tempo.ingester | nindent 6 }}
+    server:
+      {{- toYaml .Values.tempo.server | nindent 6 }}
+    storage:
+      {{- toYaml .Values.tempo.storage | nindent 6 }}
+    querier:
+      {{- toYaml .Values.tempo.querier | nindent 6 }}
+    query_frontend:
+      {{- toYaml .Values.tempo.queryFrontend | nindent 6 }}
+    overrides:
+      {{- toYaml .Values.tempo.overrides | nindent 6 }}
+      {{- if .Values.tempo.metricsGenerator.enabled }}
+    metrics_generator:
+          storage:
+            path: "/tmp/tempo"
+            remote_write:
+              - url: {{ .Values.tempo.metricsGenerator.remoteWriteUrl }}
+          traces_storage:
+            path: "/tmp/traces"
+      {{- end }}
 
 tempoQuery:
   repository: grafana/tempo-query
@@ -251,6 +251,7 @@ tempoQuery:
     #       name: ssl-redirect
     #       port:
     #         name: use-annotation
+
 
     tls: []
     #  - secretName: tempo-query-tls
@@ -323,8 +324,7 @@ serviceMonitor:
   # scrapeTimeout: 10s
 
 persistence:
-  enabled:
-    false
+  enabled: false
     # -- Enable StatefulSetAutoDeletePVC feature
   enableStatefulSetAutoDeletePVC: false
   # storageClassName: local-path
@@ -414,3 +414,4 @@ networkPolicy:
     ##  - namespaceSelector:
     ##    matchExpressions:
   ##    - {key: role, operator: In, values: [tempo]}
+
