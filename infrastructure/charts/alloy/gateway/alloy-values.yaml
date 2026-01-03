@@ -14,7 +14,7 @@ alloy:
     # -- Deploy Alloy in a cluster to allow for load distribution.
     enabled: true
     # -- Name for the Alloy cluster. Used for differentiating between clusters.
-    name: "alloy-cluster"
+    name: "alloy-gateway-cluster"
 
   # -- Enables sending Grafana Labs anonymous usage stats to help improve Grafana
   # Alloy.
@@ -38,19 +38,6 @@ alloy:
       targetPort: 4318
       protocol: "TCP"
 
-  mounts:
-    # -- Mount /var/log from the host into the container for log collection.
-    varlog: true
-    # -- Mount /var/lib/docker/containers from the host into the container for log
-    # collection.
-    dockercontainers: true
-
-  # Security context - need root for log access
-  securityContext:
-    privileged: true
-    runAsUser: 0
-  runAsGroup: 0
-
   # -- Resource requests and limits to apply to the Grafana Alloy container.
   resources:
     limits:
@@ -62,27 +49,7 @@ alloy:
 controller:
   # -- Type of controller to use for deploying Grafana Alloy in the cluster.
   # Must be one of 'daemonset', 'deployment', or 'statefulset'.
-  type: "daemonset"
+  type: "statefulset"
 
   # -- Number of pods to deploy. Ignored when controller.type is 'daemonset'.
   replicas: 2
-
-serviceMonitor:
-  enabled: false
-  # -- Scrape interval. If not set, the Prometheus default scrape interval is used.
-  interval: ""
-
-# Additional volumes
-extraVolumes:
-  - name: etcmachineid
-    hostPath:
-      path: /etc/machine-id
-  - name: alloy-data
-    emptyDir: {}
-
-extraVolumeMounts:
-  - name: etcmachineid
-    mountPath: /etc/machine-id
-    readOnly: true
-  - name: alloy-data
-    mountPath: /var/lib/alloy

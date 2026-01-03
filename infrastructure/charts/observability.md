@@ -155,13 +155,480 @@ kubectl apply -f infrastructure/charts/tempo/ingress.yaml
 
 ### Install Alloy
 
-We install the Helm chart twice:
+#### Installing helm releases
 
-* alloy-logs (DaemonSet): Runs on every node. Responsible for tailing var/log/pods (Docker/Containerd logs) and Host metrics. It ensures you never miss a log line even if a node is heavily loaded.
-* alloy-data (StatefulSet): Runs as a cluster service. Responsible for receiving OTLP traces/metrics from your Rust apps and performing cluster-wide Prometheus scraping.
+Folder structure
 
-1. `alloy-daemonset-values.yaml` (Logs & Node Metrics)
-    * **Role**: Collects logs from all pods on the node and scrapes the node's own metrics (cAdvisor/Kubelet). It sends everything to Loki/Prometheus.
+```bash
+infrastructure/charts/alloy
+├── agent
+│   ├── alloy-values.yaml
+│   └── config.alloy
+├── gateway
+│   ├── alloy-values.yaml
+│   └── config.alloy
+└── values.yaml
+```
 
-2. `alloy-statefulset-values.yaml` (App Metrics & OTLP Traces)
-    * **Role**: The centralized cluster service. It receives OTLP pushes from your Rust apps (traces/metrics) and scrapes pods annotated with prometheus.io/scrape.
+Labels added by rust backend
+
+```rust
+let mut labels = BTreeMap::new();
+labels.insert("app".to_string(), deployment_name.to_string());
+labels.insert("project-id".to_string(), project_id.to_string());
+labels.insert("deployment-id".to_string(), deployment_id.to_string());
+labels.insert("managed-by".to_string(), "poddle".to_string());
+```
+
+##### 1. Install Gateway (StatefulSet)
+
+```bash
+kubectl create namespace alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap alloy-config \
+  --from-file=config.alloy=infrastructure/charts/alloy/gateway/config.alloy \
+  -n alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
+
+helm upgrade --install alloy-gateway grafana/alloy \
+  --values infrastructure/charts/alloy/gateway/alloy-values.yaml \
+  --namespace alloy-gateway
+```
+
+##### 2. Install Agent (DaemonSet)
+
+```bash
+kubectl create namespace alloy-agent --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap alloy-config \
+  --from-file=config.alloy=infrastructure/charts/alloy/agent/config.alloy \
+  -n alloy-agent --dry-run=client -o yaml | kubectl apply -f -
+
+helm upgrade --install alloy-agent grafana/alloy \
+  --values infrastructure/charts/alloy/agent/alloy-values.yaml \
+  --namespace alloy-agent
+```
+
+#### Grafana Alloy Architecture Overview
+
+This document explains the architecture of our observability stack using Grafana Alloy in a Kubernetes environment. We deploy Alloy in two distinct patterns: **DaemonSet** and **StatefulSet**, each serving specific purposes based on the physical constraints and logical requirements of different telemetry signals.
+
+---
+
+#### Understanding the Two Deployment Patterns
+
+##### Why Two Patterns?
+
+The key insight is that different telemetry signals have different collection requirements:
+
+- **Local signals** (logs, host metrics) benefit from physical proximity to the data source
+- **Remote signals** (traces, application metrics) require centralized processing and load balancing
+
+Using the right pattern for each signal type optimizes both performance and resource utilization.
+
+---
+
+#### DaemonSet: The Physical Collector
+
+##### Role and Purpose of DaemonSet
+
+The DaemonSet deployment runs one Alloy pod on **every node** in the cluster. It acts as a local collector that is "glued" to the node's physical resources.
+
+##### Why DaemonSet?
+
+**Physical Locality Requirements:**
+
+1. **Logs**: Container logs are written to `stdout`, and Kubernetes stores them as files on the node's filesystem at `/var/log/pods/...`. Reading these files locally is far more efficient than streaming them over the network via the Kubernetes API.
+
+2. **Host Metrics**: To measure node-level resources (CPU, RAM, disk), you need a process running directly on that node to query the kernel.
+
+##### What Data Does DaemonSet Collect?
+
+The DaemonSet handles **infrastructure-level signals**:
+
+- **Container logs** from pods running on its node
+- **Host metrics** (CPU, memory, disk, network) from the node itself
+- **Container metrics** (cAdvisor data) for all containers on the node
+
+##### Signal Flow for DaemonSet
+
+```bash
+Container Logs:
+Rust App → stdout → Node Disk (/var/log/pods/) → DaemonSet (file read) → Loki
+
+Host Metrics:
+Kernel → DaemonSet (local query) → Prometheus/Mimir
+
+Container Metrics:
+cAdvisor/Kubelet → DaemonSet (local scrape) → Prometheus/Mimir
+```
+
+##### Key Components Used in DaemonSet
+
+From the Alloy component list, these are the primary components configured in the DaemonSet:
+
+**Discovery:**
+
+- `discovery.kubernetes` - Discovers pods running on the local node only
+- `discovery.relabel` - Filters targets to ensure only local node resources are collected
+
+**Log Collection:**
+
+- `loki.source.file` - Tails log files directly from disk
+- `loki.process` - Optional log parsing and transformation
+- `loki.write` - Sends logs to Loki
+
+**Metrics Collection:**
+
+- `prometheus.exporter.unix` - Collects host-level metrics (Node Exporter equivalent)
+- `prometheus.exporter.cadvisor` - Collects container metrics
+- `discovery.kubelet` - Alternative way to discover containers on the node
+- `prometheus.scrape` - Scrapes local exporters
+- `prometheus.remote_write` - Sends metrics to Prometheus/Mimir
+
+**Why Not Use DaemonSet for Everything?**
+
+While you *could* collect application metrics from the DaemonSet, it creates problems:
+
+- Uneven load distribution: A node with 100 small pods would overload its DaemonSet, while a node with 1 large pod would have an idle DaemonSet
+- No coordination: DaemonSets work independently and can't distribute work efficiently
+
+---
+
+#### StatefulSet: The Central Aggregator
+
+##### Role and Purpose of StatefulSet
+
+The StatefulSet deployment runs a **fixed number of replicas** (typically 2-3) that form a cluster. It acts as a centralized receiver and intelligent processor for application-level telemetry.
+
+##### Why StatefulSet?
+
+**Stable Network Identity & Clustering Requirements:**
+
+1. **Traces (Push)**: Applications need a stable endpoint to send traces to (e.g., `http://alloy-gateway:4317`). A StatefulSet provides this through a headless service with predictable pod names (`alloy-0`, `alloy-1`).
+
+2. **Load Balancing**: For scraping thousands of application pods, StatefulSet replicas can coordinate and distribute the scraping work evenly across the cluster, regardless of pod placement.
+
+3. **Stateful Processing**: Advanced features like tail sampling require seeing complete traces, which means spans need to be aggregated in one place.
+
+##### What Data Does StatefulSet Collect?
+
+The StatefulSet handles **application-level signals**:
+
+- **Traces** pushed from applications via OTLP
+- **Application metrics** scraped from application `/metrics` endpoints
+- **Custom metrics** pushed from applications via OTLP
+
+##### Signal Flow for StatefulSet
+
+```bash
+Traces (Push):
+Rust App → (OTLP gRPC/HTTP) → StatefulSet (port 4317/4318) → Tempo
+
+Application Metrics (Pull):
+StatefulSet → (HTTP scrape) → Rust App /metrics endpoint → Prometheus/Mimir
+
+Application Metrics (Push):
+Rust App → (OTLP) → StatefulSet → Prometheus/Mimir
+```
+
+##### Key Components Used in StatefulSet
+
+From the Alloy component list, these are the primary components configured in the StatefulSet:
+
+**OTLP Receivers:**
+
+- `otelcol.receiver.otlp` - Accepts traces and metrics from applications (ports 4317 gRPC, 4318 HTTP)
+
+**OTLP Processors:**
+
+- `otelcol.processor.batch` - Batches telemetry data to reduce network overhead
+- `otelcol.processor.k8sattributes` - **Critical** - Enriches data with Kubernetes metadata (namespace, pod name, labels)
+- `otelcol.processor.tail_sampling` - Intelligent sampling (keep all errors, sample successful requests)
+- `otelcol.processor.attributes` - Modifies or adds attributes to spans/metrics
+- `otelcol.processor.filter` - Filters out unwanted telemetry
+- `otelcol.processor.transform` - Advanced data transformation
+
+**OTLP Exporters:**
+
+- `otelcol.exporter.otlp` - Sends traces to Tempo
+- `otelcol.exporter.otlphttp` - Alternative HTTP-based export
+- `otelcol.exporter.prometheus` - Converts OTLP metrics to Prometheus format
+
+**Prometheus Components:**
+
+- `prometheus.scrape` - Scrapes application `/metrics` endpoints (with clustering enabled)
+- `prometheus.operator.servicemonitors` - Discovers targets using ServiceMonitor CRDs
+- `prometheus.operator.podmonitors` - Discovers targets using PodMonitor CRDs
+- `prometheus.remote_write` - Sends metrics to Prometheus/Mimir
+
+**Discovery:**
+
+- `discovery.kubernetes` - Discovers all pods/services across the cluster
+- `discovery.relabel` - Filters and relabels discovered targets
+
+**Why StatefulSet for Application Metrics?**
+
+The StatefulSet cluster provides intelligent load distribution:
+
+- With 2 replicas, each replica automatically scrapes ~50% of application endpoints
+- Load is balanced across the entire cluster, not per-node
+- Replicas coordinate through clustering to avoid duplicate scraping
+
+---
+
+#### Component Reference Guide
+
+This section lists all available Alloy components organized by category. Use this as a reference when building your configurations.
+
+##### OpenTelemetry Collector Components (`otelcol.*`)
+
+**Authentication:**
+
+- `otelcol.auth.basic` - Basic authentication
+- `otelcol.auth.bearer` - Bearer token authentication
+- `otelcol.auth.headers` - Custom header authentication
+- `otelcol.auth.oauth2` - OAuth2 authentication
+- `otelcol.auth.sigv4` - AWS Signature V4 authentication
+
+**Connectors:**
+
+- `otelcol.connector.host_info` - Adds host information to telemetry
+- `otelcol.connector.servicegraph` - Generates service dependency graphs from traces
+- `otelcol.connector.spanlogs` - Converts spans to logs
+- `otelcol.connector.spanmetrics` - Generates metrics from spans (RED metrics)
+
+**Receivers:**
+
+- `otelcol.receiver.otlp` - Receives OTLP data (traces, metrics, logs)
+- `otelcol.receiver.prometheus` - Receives Prometheus metrics
+- `otelcol.receiver.jaeger` - Receives Jaeger traces
+- `otelcol.receiver.zipkin` - Receives Zipkin traces
+- `otelcol.receiver.kafka` - Receives data from Kafka
+- `otelcol.receiver.filelog` - Reads logs from files
+- Others: `awscloudwatch`, `datadog`, `influxdb`, `loki`, etc.
+
+**Processors:**
+
+- `otelcol.processor.batch` - Batches telemetry for efficiency
+- `otelcol.processor.k8sattributes` - Adds Kubernetes metadata
+- `otelcol.processor.attributes` - Modifies attributes
+- `otelcol.processor.filter` - Filters telemetry
+- `otelcol.processor.transform` - Transforms telemetry data
+- `otelcol.processor.tail_sampling` - Intelligent trace sampling
+- `otelcol.processor.memory_limiter` - Prevents OOM issues
+- `otelcol.processor.resourcedetection` - Detects resource attributes
+- Others: `span`, `probabilistic_sampler`, `groupbyattrs`, etc.
+
+**Exporters:**
+
+- `otelcol.exporter.otlp` - Exports to OTLP endpoints (Tempo, etc.)
+- `otelcol.exporter.otlphttp` - OTLP over HTTP
+- `otelcol.exporter.prometheus` - Exports as Prometheus metrics
+- `otelcol.exporter.loki` - Exports logs to Loki
+- `otelcol.exporter.kafka` - Exports to Kafka
+- Others: `datadog`, `splunkhec`, `awss3`, etc.
+
+##### Loki Components (`loki.*`)
+
+**Log Sources:**
+
+- `loki.source.file` - Reads logs from files (used in DaemonSet)
+- `loki.source.kubernetes` - Reads logs from Kubernetes API
+- `loki.source.podlogs` - Specific pod log collection
+- `loki.source.docker` - Docker container logs
+- `loki.source.journal` - Systemd journal logs
+- `loki.source.syslog` - Syslog protocol
+- Others: `kafka`, `api`, `gcplog`, `cloudflare`, etc.
+
+**Log Processing:**
+
+- `loki.process` - Parse and transform logs
+- `loki.relabel` - Relabel log streams
+- `loki.enrich` - Enrich logs with additional metadata
+- `loki.secretfilter` - Filter sensitive data from logs
+
+**Log Export:**
+
+- `loki.write` - Sends logs to Loki
+
+##### Prometheus Components (`prometheus.*`)
+
+**Exporters:**
+
+- `prometheus.exporter.unix` - Linux host metrics (Node Exporter)
+- `prometheus.exporter.cadvisor` - Container metrics
+- `prometheus.exporter.windows` - Windows host metrics
+- `prometheus.exporter.process` - Process-level metrics
+- Application-specific: `mysql`, `postgres`, `redis`, `mongodb`, `kafka`, etc.
+- Cloud-specific: `cloudwatch`, `azure`, `gcp`
+
+**Service Discovery & Scraping:**
+
+- `prometheus.scrape` - Scrapes Prometheus metrics
+- `prometheus.operator.servicemonitors` - Uses ServiceMonitor CRDs
+- `prometheus.operator.podmonitors` - Uses PodMonitor CRDs
+- `prometheus.relabel` - Relabels metrics
+
+**Metrics Export:**
+
+- `prometheus.remote_write` - Sends metrics to Prometheus/Mimir
+
+##### Discovery Components (`discovery.*`)
+
+**Kubernetes:**
+
+- `discovery.kubernetes` - Discovers K8s resources (pods, services, nodes)
+- `discovery.kubelet` - Discovers via Kubelet API
+
+**Cloud Providers:**
+
+- `discovery.ec2` - AWS EC2 instances
+- `discovery.gce` - Google Compute Engine
+- `discovery.azure` - Azure VMs
+- `discovery.digitalocean`, `discovery.hetzner`, `discovery.linode`, etc.
+
+**Service Discovery:**
+
+- `discovery.consul` - Consul services
+- `discovery.dns` - DNS SRV records
+- `discovery.docker` - Docker containers
+- `discovery.http` - HTTP-based discovery
+
+**Utility:**
+
+- `discovery.relabel` - Filters and transforms discovered targets
+
+##### Local Utilities (`local.*`)
+
+- `local.file` - Reads files from disk
+- `local.file_match` - Matches files by pattern
+
+---
+
+#### Decision Matrix: Which Pattern to Use?
+
+| Signal Type | Deployment Pattern | Why? |
+| ------------- | ------------------- | ------ |
+| **Container Logs** | DaemonSet | Files are on local disk |
+| **Host Metrics** | DaemonSet | Need direct kernel access |
+| **Container Metrics** | DaemonSet | cAdvisor/Kubelet are node-local |
+| **Traces** | StatefulSet | Need stable receiver endpoint & sampling logic |
+| **Application Metrics (scrape)** | StatefulSet | Need cluster-wide load balancing |
+| **Application Metrics (push)** | StatefulSet | Need stable receiver endpoint |
+
+---
+
+#### Common Configuration Patterns
+
+##### DaemonSet Configuration Example
+
+```river
+// Discover pods on this node only
+discovery.kubernetes "local_pods" {
+  role = "pod"
+  selectors {
+    role  = "pod"
+    field = "spec.nodeName=" + env("NODE_NAME")
+  }
+}
+
+// Read logs from disk
+loki.source.file "pod_logs" {
+  targets    = discovery.kubernetes.local_pods.targets
+  forward_to = [loki.write.default.receiver]
+}
+
+// Collect host metrics
+prometheus.exporter.unix "host" { }
+
+prometheus.scrape "host_metrics" {
+  targets    = prometheus.exporter.unix.host.targets
+  forward_to = [prometheus.remote_write.default.receiver]
+}
+```
+
+##### StatefulSet Configuration Example
+
+```river
+// Receive traces from applications
+otelcol.receiver.otlp "default" {
+  grpc {
+    endpoint = "0.0.0.0:4317"
+  }
+  http {
+    endpoint = "0.0.0.0:4318"
+  }
+  output {
+    traces  = [otelcol.processor.k8sattributes.default.input]
+  }
+}
+
+// Enrich with K8s metadata
+otelcol.processor.k8sattributes "default" {
+  extract {
+    metadata = ["k8s.namespace.name", "k8s.pod.name", "k8s.deployment.name"]
+  }
+  output {
+    traces = [otelcol.exporter.otlp.tempo.input]
+  }
+}
+
+// Discover all application pods cluster-wide
+discovery.kubernetes "app_pods" {
+  role = "pod"
+  namespaces {
+    names = ["production", "staging"]
+  }
+}
+
+// Scrape with clustering enabled
+prometheus.scrape "apps" {
+  targets      = discovery.kubernetes.app_pods.targets
+  forward_to   = [prometheus.remote_write.default.receiver]
+  clustering   {
+    enabled = true
+  }
+}
+```
+
+---
+
+#### Best Practices
+
+1. **Use DaemonSet for infrastructure signals** - Logs and host metrics should always be collected locally for efficiency
+
+2. **Use StatefulSet for application signals** - Traces and application metrics benefit from centralized processing and load balancing
+
+3. **Enable k8sattributes processor** - Always enrich OTLP data with Kubernetes metadata in the StatefulSet
+
+4. **Configure tail sampling wisely** - Keep 100% of errors, sample 1-5% of successful traces to control costs
+
+5. **Use clustering for scraping** - Enable clustering in StatefulSet's `prometheus.scrape` to distribute load
+
+6. **Set resource limits** - Use `otelcol.processor.memory_limiter` to prevent OOM issues
+
+7. **Batch before sending** - Use `otelcol.processor.batch` to reduce network overhead
+
+8. **Monitor Alloy itself** - Use `prometheus.exporter.self` to monitor Alloy's own metrics
+
+---
+
+#### Troubleshooting
+
+**DaemonSet Issues:**
+
+- Check that `NODE_NAME` environment variable is set for node-local discovery
+- Verify that log paths match Kubernetes log locations (`/var/log/pods/`)
+- Ensure proper volume mounts for accessing host filesystem
+
+**StatefulSet Issues:**
+
+- Verify network policies allow traffic to ports 4317/4318
+- Check that the headless service is configured correctly
+- Ensure clustering is working (check logs for cluster formation)
+- Verify k8sattributes processor has RBAC permissions to query Kubernetes API
+
+**General Issues:**
+
+- Check Alloy logs: `kubectl logs -n monitoring <pod-name>`
+- Verify component connections in the pipeline
+- Use `otelcol.exporter.debug` temporarily to see what data flows through
+- Check metrics endpoint: `http://pod-ip:12345/metrics`
