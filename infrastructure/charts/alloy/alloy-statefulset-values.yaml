@@ -1,0 +1,88 @@
+## Various Alloy settings. For backwards compatibility with the grafana-agent
+## chart, this field may also be called "agent". Naming this field "agent" is
+## deprecated and will be removed in a future release.
+alloy:
+  configMap:
+    # -- Create a new ConfigMap for the config file.
+    create: false
+    # -- Name of existing ConfigMap to use. Used when create is false.
+    name: alloy-daemonset-config
+    # -- Key in ConfigMap to get config from.
+    key: config.alloy
+
+  clustering:
+    # -- Deploy Alloy in a cluster to allow for load distribution.
+    enabled: true
+    # -- Name for the Alloy cluster. Used for differentiating between clusters.
+    name: "alloy-cluster"
+
+  # -- Enables sending Grafana Labs anonymous usage stats to help improve Grafana
+  # Alloy.
+  enableReporting: false
+
+  # Extra environment variables
+  extraEnv:
+    - name: HOSTNAME
+      valueFrom:
+        fieldRef:
+          fieldPath: spec.nodeName
+
+  # -- Extra ports to expose on the Alloy container.
+  extraPorts:
+    - name: "otlp-grpc"
+      port: 4317
+      targetPort: 4317
+      protocol: "TCP"
+    - name: "otlp-http"
+      port: 4318
+      targetPort: 4318
+      protocol: "TCP"
+
+  mounts:
+    # -- Mount /var/log from the host into the container for log collection.
+    varlog: true
+    # -- Mount /var/lib/docker/containers from the host into the container for log
+    # collection.
+    dockercontainers: true
+
+  # Security context - need root for log access
+  securityContext:
+    privileged: true
+    runAsUser: 0
+  runAsGroup: 0
+
+  # -- Resource requests and limits to apply to the Grafana Alloy container.
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+controller:
+  # -- Type of controller to use for deploying Grafana Alloy in the cluster.
+  # Must be one of 'daemonset', 'deployment', or 'statefulset'.
+  type: "daemonset"
+
+  # -- Number of pods to deploy. Ignored when controller.type is 'daemonset'.
+  replicas: 2
+
+serviceMonitor:
+  enabled: false
+  # -- Scrape interval. If not set, the Prometheus default scrape interval is used.
+  interval: ""
+
+# Additional volumes
+extraVolumes:
+  - name: etcmachineid
+    hostPath:
+      path: /etc/machine-id
+  - name: alloy-data
+    emptyDir: {}
+
+extraVolumeMounts:
+  - name: etcmachineid
+    mountPath: /etc/machine-id
+    readOnly: true
+  - name: alloy-data
+    mountPath: /var/lib/alloy

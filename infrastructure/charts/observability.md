@@ -152,3 +152,16 @@ kubectl get all -n tempo
 ```bash
 kubectl apply -f infrastructure/charts/tempo/ingress.yaml
 ```
+
+### Install Alloy
+
+We install the Helm chart twice:
+
+* alloy-logs (DaemonSet): Runs on every node. Responsible for tailing var/log/pods (Docker/Containerd logs) and Host metrics. It ensures you never miss a log line even if a node is heavily loaded.
+* alloy-data (StatefulSet): Runs as a cluster service. Responsible for receiving OTLP traces/metrics from your Rust apps and performing cluster-wide Prometheus scraping.
+
+1. `alloy-daemonset-values.yaml` (Logs & Node Metrics)
+    * **Role**: Collects logs from all pods on the node and scrapes the node's own metrics (cAdvisor/Kubelet). It sends everything to Loki/Prometheus.
+
+2. `alloy-statefulset-values.yaml` (App Metrics & OTLP Traces)
+    * **Role**: The centralized cluster service. It receives OTLP pushes from your Rust apps (traces/metrics) and scrapes pods annotated with prometheus.io/scrape.
