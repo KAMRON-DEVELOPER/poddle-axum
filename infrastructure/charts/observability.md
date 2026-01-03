@@ -68,3 +68,19 @@ kubectl create secret generic minio-credentials \
   --from-literal=S3_SECRET_KEY=... \
   -n observability
 ```
+
+### Loki setup
+
+```bash
+helm upgrade --install loki grafana/loki \
+  --values infrastructure/charts/loki/loki-values.yaml \
+  --namespace loki --create-namespace
+```
+
+### Tempo setup
+
+```bash
+helm upgrade --install tempo grafana/tempo \
+  --values infrastructure/charts/tempo/tempo-values.yaml \
+  --namespace tempo --create-namespace
+```

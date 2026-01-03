@@ -1,87 +1,62 @@
 # yaml-language-server: $schema=values.schema.json
 
+# -- Deployment mode lets you specify how to deploy Loki.
+# There are 3 options:
+# - SingleBinary: Loki is deployed as a single binary, useful for small installs typically without HA, up to a few tens of GB/day.
+# - SimpleScalable: Loki is deployed as 3 targets: read, write, and backend. Useful for medium installs easier to manage than distributed, up to a about 1TB/day.
+# - Distributed: Loki is deployed as individual microservices. The most complicated but most capable, useful for large installs, typically over 1TB/day.
+# Note: SimpleScalable and Distributed REQUIRE the use of object storage.
 deploymentMode: SingleBinary
 
-# write:
-#   replicas: 1
-#   resources:
-#     requests:
-#       cpu: 100m
-#       memory: 256Mi
-#     limits:
-#       cpu: 250m
-#       memory: 768Mi
-
-#   persistence:
-#     enabled: false
-#     size: 5Gi
-#     storageClass: localpath
-
-# read:
-#   replicas: 1
-#   resources:
-#     requests:
-#       cpu: 100m
-#       memory: 256Mi
-#     limits:
-#       cpu: 250m
-#       memory: 512Mi
-
-#   persistence:
-#     enabled: false
-#     size: 5Gi
-#     storageClass: localpath
-
-# backend:
-#   replicas: 1
-#   resources:
-#     requests:
-#       cpu: 100m
-#       memory: 256Mi
-#     limits:
-#       cpu: 300m
-#       memory: 768Mi
-
-#   persistence:
-#     enabled: false
-#     size: 5Gi
-#     storageClass: localpath
-
-lokiCanary:
-  enabled: true
-  # -- The type of the loki canary k8s rollout. This can be a DaemonSet or Deployment.
-  kind: DaemonSet
-
-loki:
-  auth_enabled: false
-
-  ui:
-    enabled: true
-
-  commonConfig:
-    replication_factor: 1
-
-  schemaConfig:
-    configs:
-      - from: 2024-01-01
-        store: tsdb
-        object_store: s3
-        schema: v13
-        index:
-          prefix: loki_index_
-          period: 24h
-
+global:
   extraEnvFrom:
     - secretRef:
         name: minio-credentials
 
+######################################################################################################################
+#
+# Base Loki Configs including kubernetes configurations and configurations for Loki itself,
+# see below for more specifics on Loki's configuration.
+#
+######################################################################################################################
+loki:
+  ######################################################################################################################
+  #
+  # Loki Configuration
+  #
+  # There are several ways to pass configuration to Loki, listing them here in order of our preference for how
+  # you should use this chart.
+  # 1. Use the templated value of loki.config below and the corresponding override sections which follow.
+  #    This allows us to set a lot of important Loki configurations and defaults and also allows us to maintain them
+  #    over time as Loki changes and evolves.
+  # 2. Use the loki.structuredConfig section.
+  #    This will completely override the templated value of loki.config, so you MUST provide the entire Loki config
+  #    including any configuration that we set in loki.config unless you explicitly are trying to change one of those
+  #    values and are not able to do so with the templated sections.
+  #    If you choose this approach the burden is on you to maintain any changes we make to the templated config.
+  # 3. Use an existing secret or configmap to provide the configuration.
+  #    This option is mostly provided for folks who have external processes which provide or modify the configuration.
+  #    When using this option you can specify a different name for loki.generatedConfigObjectName and configObjectName
+  #    if you have a process which takes the generated config and modifies it, or you can stop the chart from generating
+  #    a config entirely by setting loki.generatedConfigObjectName to
+  #
+  ######################################################################################################################
+
+  # Should authentication be enabled
+  auth_enabled: false
+
+  # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
+  commonConfig:
+    replication_factor: 1
+
+  # -- Storage config. Providing this will automatically populate all necessary storage configs in the templated config.
+  # -- In case of using thanos storage, enable use_thanos_objstore and the configuration should be done inside the object_store section.
   storage:
-    type: s3
     bucketNames:
       chunks: loki
       ruler: loki
       admin: loki
-
+    type: s3
     s3:
       endpoint: minio-external.observability.svc.cluster.local:9000
       region: us-east-1 # MinIO ignores this, but it's required
@@ -90,7 +65,39 @@ loki:
       s3ForcePathStyle: true
       insecure: true
 
-# This section configures the Single Binary deployment
+  # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
+  schemaConfig:
+    configs:
+      - from: 2024-04-01
+        store: tsdb
+        object_store: s3
+        schema: v13
+        index:
+          prefix: loki_index_
+          period: 24h
+
+######################################################################################################################
+#
+# Gateway and Ingress
+#
+# By default this chart will deploy a Nginx container to act as a gateway which handles routing of traffic
+# and can also do auth.
+#
+# If you would prefer you can optionally disable this and enable using k8s ingress to do the incoming routing.
+#
+######################################################################################################################
+gateway:
+  enabled: false
+
+######################################################################################################################
+#
+# Single Binary Deployment
+#
+# For small Loki installations up to a few 10's of GB per day, or for testing and development.
+#
+######################################################################################################################
+
+# Configuration for the single binary node(s)
 singleBinary:
   replicas: 1
 
@@ -102,10 +109,85 @@ singleBinary:
       cpu: 500m
       memory: 1Gi
 
+  # -- Environment variables from secrets or configmaps to add to the single binary pods
+  extraEnvFrom:
+    - secretRef:
+        name: minio-credentials
+
   persistence:
     enabled: true
     size: 10Gi
     storageClass: local-path
 
-gateway:
-  enabled: true
+######################################################################################################################
+#
+# Simple Scalable Deployment (SSD) Mode
+#
+# For small to medium size Loki deployments up to around 1 TB/day, this is the default mode for this helm chart
+#
+######################################################################################################################
+
+write:
+  replicas: 0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 768Mi
+
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: localpath
+
+read:
+  replicas: 0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 250m
+      memory: 512Mi
+
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: localpath
+
+backend:
+  replicas: 0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 768Mi
+
+  persistence:
+    enabled: false
+    size: 5Gi
+    storageClass: localpath
+
+######################################################################################################################
+#
+# Microservices Mode
+#
+# For large Loki deployments ingesting more than 1 TB/day
+#
+######################################################################################################################
+
+# You can use a self hosted memcached by setting enabled to false and providing addresses.
+memcached:
+  # -- Enable the built in memcached server provided by the chart
+  enabled: false
+
+resultsCache:
+  # -- Specifies whether memcached based results-cache should be enabled
+  enabled: false
+
+chunksCache:
+  enabled: false
