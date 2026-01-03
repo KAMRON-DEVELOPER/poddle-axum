@@ -4,15 +4,15 @@ tempo:
       cpu: 100m
       memory: 256Mi
     limits:
-      cpu: 300m
-      memory: 768Mi
+      cpu: 500m
+      memory: 1Gi
 
   # -- If true, Tempo will report anonymous usage data about the shape of a deployment to Grafana Labs
   reportingEnabled: false
   metricsGenerator:
     # -- If true, enables Tempo's metrics generator (https://grafana.com/docs/tempo/next/metrics-generator/)
-    enabled: false
-    remoteWriteUrl: "http://prometheus.monitoring:9090/api/v1/write"
+    enabled: true
+    remoteWriteUrl: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write"
 
   retention: 30h
 
