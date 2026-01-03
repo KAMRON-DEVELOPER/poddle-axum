@@ -50,3 +50,21 @@ kubectl get pod prometheus-server-674f658949-spg7p -n prometheus -o jsonpath='{.
 ```bash
 kubectl apply -f infrastructure/charts/prometheus-community/ingress.yaml
 ```
+
+### When creating Loki and Tempo we use Traefik's externalaa to referance host Minio instance
+
+Then `Loki` and `Tempo` s3 endpoint will be like `minio-external.observability.svc.cluster.local:9000`
+
+```bash
+kubectl create ns observability
+kubectl apply -f infrastructure/manifests/minio-external.yaml
+```
+
+Create Minio secrets to connect
+
+```bash
+kubectl create secret generic minio-credentials \
+  --from-literal=S3_ACCESS_KEY=... \
+  --from-literal=S3_SECRET_KEY=... \
+  -n observability
+```

@@ -29,7 +29,7 @@ tempo:
     trace:
       backend: s3
       s3:
-        endpoint: 192.168.31.2:9000
+        endpoint: minio-external.observability.svc.cluster.local:9000
         bucket: tempo
         access_key: ${S3_ACCESS_KEY}
         secret_key: ${S3_SECRET_KEY}
