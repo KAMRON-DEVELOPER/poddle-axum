@@ -13,6 +13,6 @@ spec:
       kind: Rule
       services:
         - name: tempo
-          port: 3100
+          port: 3200
   # tls:
   #   secretName: wildcard-poddle-uz-tls-secret

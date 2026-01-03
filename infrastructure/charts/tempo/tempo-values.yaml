@@ -1,14 +1,4 @@
 tempo:
-  auth_enabled: false
-
-  receivers:
-    otlp:
-      protocols:
-        grpc:
-          endpoint: "0.0.0.0:4317"
-        http:
-          endpoint: "0.0.0.0:4318"
-
   resources:
     requests:
       cpu: 100m
@@ -17,16 +7,28 @@ tempo:
       cpu: 300m
       memory: 768Mi
 
+  # -- If true, Tempo will report anonymous usage data about the shape of a deployment to Grafana Labs
+  reportingEnabled: false
   metricsGenerator:
+    # -- If true, enables Tempo's metrics generator (https://grafana.com/docs/tempo/next/metrics-generator/)
     enabled: false
-    remoteWriteUrl: "http://mimir-gateway.mimir.svc.cluster.local/api/v1/push"
+    remoteWriteUrl: "http://prometheus.monitoring:9090/api/v1/write"
 
-  extraEnvFrom:
-    - secretRef:
-        name: minio-credentials
+  retention: 30h
+
+  # -- The standard overrides configuration section. This can include a `defaults` object for applying to all tenants (not to be confused with the `global` property of the same name, which overrides `max_byte_per_trace` for all tenants). For an example on how to enable the metrics generator using the `overrides` object, see the 'Activate metrics generator' section below. Refer to [Standard overrides](https://grafana.com/docs/tempo/latest/configuration/#standard-overrides) for more details.
+  overrides:
+    # -- Default config values for all tenants, can be overridden by per-tenant overrides. If a tenant's specific overrides are not found in the `per_tenant_overrides` block, the values in this `default` block will be used. Configs inside this block should follow the new overrides indentation format
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
 
   storage:
     trace:
+      # tempo storage backend.
+      # Refers to: https://grafana.com/docs/tempo/latest/configuration/#storage
       backend: s3
       s3:
         endpoint: minio-external.observability.svc.cluster.local:9000
@@ -35,7 +37,31 @@ tempo:
         secret_key: ${S3_SECRET_KEY}
         insecure: true
 
+  # this configuration will listen on all ports and protocols that tempo is capable of.
+  # the receives all come from the OpenTelemetry collector.  more configuration information can
+  # be found there: https://github.com/open-telemetry/opentelemetry-collector/tree/master/receiver
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+  # -- Environment variables from secrets or configmaps to add to the ingester pods
+  extraEnvFrom:
+    - secretRef:
+        name: minio-credentials
+
+serviceMonitor:
+  enabled: false
+  interval: ""
+
 persistence:
   enabled: true
   storageClassName: local-path
   size: 10Gi
+
+metricsGenerator:
+  enabled: false
+  remoteWriteUrl: "http://mimir-gateway.mimir.svc.cluster.local/api/v1/push"
