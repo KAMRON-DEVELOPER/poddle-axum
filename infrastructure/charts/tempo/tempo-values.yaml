@@ -48,6 +48,23 @@ tempo:
         http:
           endpoint: "0.0.0.0:4318"
 
+  ## Additional container arguments
+  extraArgs:
+    - "-config.expand-env=true"
+  # -- Environment variables to add
+  # extraEnv:
+  #   - name: S3_ACCESS_KEY
+  #     value: "..."
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: minio-credentials
+  #         key: S3_ACCESS_KEY
+  #   - name: S3_SECRET_KEY
+  #     value: "..."
+  #     valueFrom:
+  #       secretKeyRef:
+  #         name: minio-credentials
+  #         key: S3_SECRET_KEY
   # -- Environment variables from secrets or configmaps to add to the ingester pods
   extraEnvFrom:
     - secretRef:
