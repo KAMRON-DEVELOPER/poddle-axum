@@ -1,0 +1,124 @@
+logging {
+	level  = "info"
+	format = "logfmt"
+}
+
+// ---------------------------------------------------------
+// 1. LOGS COLLECTION (DaemonSet)
+// ---------------------------------------------------------
+
+// Step 1: Find all pods
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+// Step 2: Filter to ONLY pods on THIS node and construct the log file path
+discovery.relabel "pod_logs" {
+	targets = discovery.kubernetes.pods.targets
+
+	// Filter: Only keep targets that are running on the same node as this Alloy agent
+	rule {
+		source_labels = ["__meta_kubernetes_pod_node_name"]
+		target_label  = "__host__"
+	}
+
+	rule {
+		source_labels = ["__host__"]
+		regex         = env("HOSTNAME")
+		action        = "keep"
+	}
+
+	// Construct the path to the log file on the host
+	// Path format: /var/log/pods/<namespace>_<pod_name>_<uid>/<container_name>/*.log
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name", "__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		target_label  = "__path__"
+		separator     = "/"
+		replacement   = "/var/log/pods/*_*_$3/$4/*.log"
+	}
+
+	// Standard Labels
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_name"]
+		target_label  = "container"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app"]
+		target_label  = "app"
+	}
+
+	// Custom PaaS Labels (matching Rust label names with hyphens)
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_project_id"]
+		target_label  = "project_id"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_deployment_id"]
+		target_label  = "deployment_id"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_managed_by"]
+		target_label  = "managed_by"
+	}
+}
+
+// Step 3: Read the files directly from disk (Efficient!)
+loki.source.file "pods" {
+	targets    = discovery.relabel.pod_logs.output
+	forward_to = [loki.process.default.receiver]
+}
+
+loki.process "default" {
+	forward_to = [loki.write.local.receiver]
+
+	stage.json {
+		expressions = {
+			level    = "level",
+			trace_id = "trace_id",
+			msg      = "message",
+		}
+	}
+
+	stage.labels {
+		values = {
+			level = "level",
+		}
+	}
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+	}
+}
+
+// ---------------------------------------------------------
+// 2. NODE METRICS
+// ---------------------------------------------------------
+prometheus.exporter.cadvisor "integrations_cadvisor" {
+	docker_only = true
+}
+
+prometheus.scrape "cadvisor" {
+	targets    = prometheus.exporter.cadvisor.integrations_cadvisor.targets
+	forward_to = [prometheus.remote_write.default.receiver]
+}
+
+prometheus.remote_write "default" {
+	endpoint {
+		url = "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write"
+	}
+}
