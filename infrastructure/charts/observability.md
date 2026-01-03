@@ -2,29 +2,39 @@
 
 ---
 
-## Chart setup
+## Prerequisites: External MinIO Service Configuration
+
+> [!IMPORTANT]
+> Before deploying the observability stack, you must configure access to the external MinIO instance running on the host machine.
+>
+> Since MinIO runs outside the Kubernetes cluster, we need to create a Service that points to the host IP address.
+
+### Understanding the Setup
+
+When you create a `Service` without selectors in Kubernetes, you must manually create an `EndpointSlice` object to define the backend IP addresses. The Service and `EndpointSlice` are implicitly bound by sharing the same name and namespace.
+
+This allows Loki and Tempo to reference MinIO using the cluster-internal DNS name:
 
 ```bash
-helm show values grafana/loki > infrastructure/charts/loki/values.yaml
-helm show values grafana/tempo > infrastructure/charts/tempo/values.yaml
-helm show values grafana/mimir-distributed > infrastructure/charts/mimir/values.yaml
+minio-external.observability.svc.cluster.local:9000
 ```
-
----
-
-## Install Promethues, Loki, Tempo, Alloy
 
 > [!NOTE]
-> When creating Loki and Tempo we use Traefik's externalaa to referance host Minio instance
+> **Why not use `ExternalName` service type?**
 >
-> Then `Loki` and `Tempo` s3 endpoint will be like `minio-external.observability.svc.cluster.local:9000`
+> The `ExternalName` service type only works with DNS hostnames, not IP addresses. Since we're connecting to `192.168.31.2`, we need to use a regular Service with manual `EndpointSlice`.
 
-### Create service for Minio with `type: ExternalName` that points to `externalName: 192.168.31.2`
+### Deploy the External Service
 
 ```bash
+# Create the observability namespace
 kubectl create ns observability
+
+# Apply the MinIO external service configuration
 kubectl apply -f infrastructure/manifests/minio-external.yaml
 ```
+
+## Install Promethues, Loki, Tempo, Alloy
 
 ### Create Minio secrets for `loki` and `tempo`, so they can connect
 

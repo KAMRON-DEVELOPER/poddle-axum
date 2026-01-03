@@ -4,8 +4,26 @@ metadata:
   name: minio-external
   namespace: observability
 spec:
-  type: ExternalName
-  externalName: 192.168.31.2
   ports:
     - port: 9000
-      targetPort: 9000
+      name: api
+---
+apiVersion: discovery.k8s.io/v1
+kind: EndpointSlice
+metadata:
+  name: minio-external-1
+  namespace: observability
+  labels:
+    kubernetes.io/service-name: minio-external
+addressType: IPv4
+ports:
+  - name: api
+    port: 9000
+    protocol: TCP
+endpoints:
+  - addresses:
+      - "192.168.31.2"
+    conditions:
+      ready: true # Endpoint is ready to receive traffic
+      serving: true # Endpoint is serving traffic
+      terminating: false # Endpoint is not terminating
