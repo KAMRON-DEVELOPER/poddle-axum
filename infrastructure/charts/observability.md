@@ -19,7 +19,7 @@ helm show values grafana/mimir-distributed > infrastructure/charts/mimir/values.
 >
 > Then `Loki` and `Tempo` s3 endpoint will be like `minio-external.observability.svc.cluster.local:9000`
 
-### Create Minio ExternalService(Traefik)
+### Create service for Minio with `type: ExternalName` that points to `externalName: 192.168.31.2`
 
 ```bash
 kubectl create ns observability
@@ -126,5 +126,5 @@ helm upgrade --install tempo grafana/tempo \
 #### We may need to create IngressRoute(Traefik) for Tempo, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/loki/ingress.yaml
+kubectl apply -f infrastructure/charts/tempo/ingress.yaml
 ```
