@@ -1,19 +1,18 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: vault-ingressroute
-  namespace: vault
+  name: prometheus-ingressroute
+  namespace: prometheus
 spec:
   entryPoints: []
     # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
     # - web
     # - websecure
   routes:
-    - match: Host(`vault.poddle.uz`)
+    - match: Host(`prometheus.poddle.uz`)
       kind: Rule
       services:
-        - name: vault-active
-          port: 8200
-          serversTransport: vault-transport
+        - name: prometheus-prometheus-server
+          port: 80
   # tls:
   #   secretName: wildcard-poddle-uz-tls-secret
