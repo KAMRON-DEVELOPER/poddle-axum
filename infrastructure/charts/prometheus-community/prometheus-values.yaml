@@ -33,9 +33,14 @@ server:
 
   retention: "30d"
 
+# Auto-generated from your scrapeConfigs values
 scrapeConfigs:
   prometheus:
-    enabled: false
+    enabled: true
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
   kubernetes-api-servers:
     enabled: false
   kubernetes-nodes:
@@ -55,9 +60,11 @@ scrapeConfigs:
   kubernetes-pods-slow:
     enabled: false
 
-serverFiles:
-  prometheus.yml:
-    scrape_configs: []
+# Use only one! serverFiles or scrapeConfigs
+# serverFiles.prometheus.yml gets merged
+# serverFiles:
+#   prometheus.yml:
+#     scrape_configs: []
 
 alertmanager:
   enabled: false
