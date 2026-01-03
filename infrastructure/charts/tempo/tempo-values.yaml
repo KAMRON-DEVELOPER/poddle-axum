@@ -61,7 +61,3 @@ persistence:
   enabled: true
   storageClassName: local-path
   size: 10Gi
-
-metricsGenerator:
-  enabled: false
-  remoteWriteUrl: "http://mimir-gateway.mimir.svc.cluster.local/api/v1/push"
