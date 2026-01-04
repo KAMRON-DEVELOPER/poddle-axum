@@ -31,7 +31,7 @@ otelcol.receiver.otlp "default" {
 // Memory Limiter - Protection against OOM
 otelcol.processor.memory_limiter "default" {
 	check_interval         = "3s"
-	limit_percentage       = 80 // 80% of 1Gi = 800Mi
+	limit_percentage       = 80 // 80% of 800Mi
 	spike_limit_percentage = 20 // Conservative for low-resource cluster
 
 	output {
@@ -235,10 +235,10 @@ prometheus.remote_write "default" {
 
 		// Queue configuration for high throughput
 		queue_config {
-			capacity             = 5000
-			max_shards           = 20
+			capacity             = 2500
+			max_shards           = 5
 			min_shards           = 1
-			max_samples_per_send = 2000
+			max_samples_per_send = 1000
 			batch_send_deadline  = "5s"
 			min_backoff          = "30ms"
 			max_backoff          = "5s"

@@ -45,7 +45,22 @@ alloy:
       memory: 256Mi
     limits:
       cpu: 500m
-      memory: 1Gi
+      memory: 800Mi
+
+  # -- Set livenessProbe for the Grafana Alloy container.
+  livenessProbe:
+    httpGet:
+      path: /-/healthy
+      port: 12345
+    initialDelaySeconds: 30
+    periodSeconds: 10
+
+  readinessProbe:
+    httpGet:
+      path: /-/ready
+      port: 12345
+    initialDelaySeconds: 10
+    periodSeconds: 5
 
 serviceAccount:
   # -- Whether to create a service account for the Grafana Alloy deployment.

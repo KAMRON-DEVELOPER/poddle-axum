@@ -101,7 +101,8 @@ loki.process "default" {
 	// You can filter {level="error"} in Loki, Improves query ergonomics
 	stage.labels {
 		values = {
-			level = "level",
+			level    = "level",
+			trace_id = "trace_id",
 		}
 	}
 
