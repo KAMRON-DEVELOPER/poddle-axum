@@ -6,7 +6,7 @@ alloy:
     # -- Create a new ConfigMap for the config file.
     create: false
     # -- Name of existing ConfigMap to use. Used when create is false.
-    name: alloy-daemonset-config
+    name: alloy-config
     # -- Key in ConfigMap to get config from.
     key: config.alloy
 
@@ -40,11 +40,17 @@ alloy:
 
   # -- Resource requests and limits to apply to the Grafana Alloy container.
   resources:
-    limits:
-      memory: 1Gi
     requests:
-      cpu: 100m
-      memory: 256Mi
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 800m
+      memory: 2Gi
+
+serviceAccount:
+  # -- Whether to create a service account for the Grafana Alloy deployment.
+  create: true
+  name: "alloy-gateway-sa"
 
 controller:
   # -- Type of controller to use for deploying Grafana Alloy in the cluster.
@@ -52,4 +58,24 @@ controller:
   type: "statefulset"
 
   # -- Number of pods to deploy. Ignored when controller.type is 'daemonset'.
-  replicas: 2
+  replicas: 1
+
+  # -- Extra pod annotations to add.
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "12345"
+    prometheus.io/path: "/metrics"
+
+  autoscaling:
+    # -- Configures the Horizontal Pod Autoscaler for the controller.
+    horizontal:
+      # -- Enables the Horizontal Pod Autoscaler for the controller.
+      enabled: true
+      # -- The lower limit for the number of replicas to which the autoscaler can scale down.
+      minReplicas: 1
+      # -- The upper limit for the number of replicas to which the autoscaler can scale up.
+      maxReplicas: 3
+      # -- Average CPU utilization across all relevant pods, a percentage of the requested value of the resource for the pods. Setting `targetCPUUtilizationPercentage` to 0 will disable CPU scaling.
+      targetCPUUtilizationPercentage: 70
+      # -- Average Memory utilization across all relevant pods, a percentage of the requested value of the resource for the pods. Setting `targetMemoryUtilizationPercentage` to 0 will disable Memory scaling.
+      targetMemoryUtilizationPercentage: 80

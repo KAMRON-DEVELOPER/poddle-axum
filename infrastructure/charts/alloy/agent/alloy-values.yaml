@@ -12,7 +12,7 @@ alloy:
 
   clustering:
     # -- Deploy Alloy in a cluster to allow for load distribution.
-    enabled: true
+    enabled: false
     # -- Name for the Alloy cluster. Used for differentiating between clusters.
     name: "alloy-agent-cluster"
 
@@ -33,22 +33,63 @@ alloy:
     # -- Mount /var/lib/docker/containers from the host into the container for log
     # collection.
     dockercontainers: true
+    # -- Extra volume mounts to add into the Grafana Alloy container. Does not
+    # affect the watch container.
+    extra:
+      - name: rootfs
+        mountPath: /host/root
+        readOnly: true
+        mountPropagation: HostToContainer
+      - name: proc
+        mountPath: /host/proc # Mounted at /host/proc in container
+        readOnly: true
+        mountPropagation: HostToContainer
+      - name: sys
+        mountPath: /host/sys # Mounted at /host/sys in container
+        readOnly: true
+        mountPropagation: HostToContainer
 
   # Security context - need root for log access
   securityContext:
-    privileged: true
+    privileged: false
     runAsUser: 0
-  runAsGroup: 0
+    runAsGroup: 0
+    runAsNonRoot: false
+    capabilities:
+      drop:
+        - ALL
 
   # -- Resource requests and limits to apply to the Grafana Alloy container.
   resources:
-    limits:
-      memory: 1Gi
     requests:
       cpu: 100m
       memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+serviceAccount:
+  # -- Whether to create a service account for the Grafana Alloy deployment.
+  create: true
+  name: "alloy-agent-sa"
 
 controller:
   # -- Type of controller to use for deploying Grafana Alloy in the cluster.
   # Must be one of 'daemonset', 'deployment', or 'statefulset'.
   type: "daemonset"
+
+  volumes:
+    # -- Extra volumes to add to the Grafana Alloy pod.
+    extra:
+      - name: rootfs
+        hostPath:
+          path: / # Host's /
+          type: Directory
+      - name: proc
+        hostPath:
+          path: /proc # Host's /proc
+          type: Directory
+      - name: sys
+        hostPath:
+          path: /sys # Host's /sys
+          type: Directory

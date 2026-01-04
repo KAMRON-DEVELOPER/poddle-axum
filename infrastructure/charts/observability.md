@@ -189,8 +189,15 @@ kubectl create configmap alloy-config \
   -n alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
 
 helm upgrade --install alloy-gateway grafana/alloy \
+  -f infrastructure/charts/alloy/gateway/alloy-values.yaml \
+  --namespace alloy-gateway --create-namespace
+
+# or
+
+helm upgrade --install alloy-gateway grafana/alloy \
   --values infrastructure/charts/alloy/gateway/alloy-values.yaml \
-  --namespace alloy-gateway
+  --set-file alloy.configMap.content=infrastructure/charts/alloy/gateway/config.alloy \
+  --namespace alloy-gateway --create-namespace
 ```
 
 ##### 2. Install Agent (DaemonSet)
@@ -204,6 +211,13 @@ kubectl create configmap alloy-config \
 helm upgrade --install alloy-agent grafana/alloy \
   --values infrastructure/charts/alloy/agent/alloy-values.yaml \
   --namespace alloy-agent
+
+# or
+
+helm upgrade --install alloy-agent grafana/alloy \
+  --values infrastructure/charts/alloy/agent/alloy-values.yaml \
+  --set-file alloy.configMap.content=infrastructure/charts/alloy/agent/config.alloy \
+  --namespace alloy-agent --create-namespace
 ```
 
 #### Grafana Alloy Architecture Overview
@@ -632,3 +646,27 @@ prometheus.scrape "apps" {
 - Verify component connections in the pipeline
 - Use `otelcol.exporter.debug` temporarily to see what data flows through
 - Check metrics endpoint: `http://pod-ip:12345/metrics`
+
+#### The following labels are included for discovered Pods
+
+- `__meta_kubernetes_namespace`: The namespace of the Pod object.
+- _*`meta_kubernetes_pod_annotation`*: Each annotation from the Pod object.
+- _*`meta_kubernetes_pod_annotationpresent`*: true for each annotation from the Pod object.
+- `__meta_kubernetes_pod_container_id`: ID of the container the target address points to. The ID is in the form type://container_id.
+- `__meta_kubernetes_pod_container_image`: The image the container is using.
+- `__meta_kubernetes_pod_container_init`: true if the container is an InitContainer.
+- `__meta_kubernetes_pod_container_name`: Name of the container the target address points to.
+- `__meta_kubernetes_pod_container_port_name`: Name of the container port.
+- `__meta_kubernetes_pod_container_port_number`: Number of the container port.
+- `__meta_kubernetes_pod_container_port_protocol`: Protocol of the container port.
+- `__meta_kubernetes_pod_controller_kind`: Object kind of the Pod controller.
+- `__meta_kubernetes_pod_controller_name`: Name of the Pod controller.
+- `__meta_kubernetes_pod_host_ip`: The current host IP of the Pod object.
+- `__meta_kubernetes_pod_ip`: The Pod IP of the Pod object.
+- _*`meta_kubernetes_pod_label`*: Each label from the Pod object.
+- _*`meta_kubernetes_pod_labelpresent`*: true for each label from the Pod object.
+- `__meta_kubernetes_pod_name`: The name of the Pod object.
+- `__meta_kubernetes_pod_node_name`: The name of the node the Pod is scheduled onto.
+- `__meta_kubernetes_pod_phase`: Set to Pending, Running, Succeeded, Failed or Unknown in the lifecycle.
+- `__meta_kubernetes_pod_ready`: Set to true or false for the Pod’s ready state.
+- `__meta_kubernetes_pod_uid`: The UID of the Pod object.
