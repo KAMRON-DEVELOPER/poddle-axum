@@ -45,7 +45,7 @@ alloy:
       memory: 256Mi
     limits:
       cpu: 500m
-      memory: 800Mi
+      memory: 1Gi
 
 serviceAccount:
   # -- Whether to create a service account for the Grafana Alloy deployment.
