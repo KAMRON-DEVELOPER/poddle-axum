@@ -41,11 +41,11 @@ alloy:
   # -- Resource requests and limits to apply to the Grafana Alloy container.
   resources:
     requests:
-      cpu: 200m
-      memory: 512Mi
+      cpu: 100m
+      memory: 256Mi
     limits:
-      cpu: 800m
-      memory: 2Gi
+      cpu: 500m
+      memory: 800Mi
 
 serviceAccount:
   # -- Whether to create a service account for the Grafana Alloy deployment.
@@ -60,17 +60,11 @@ controller:
   # -- Number of pods to deploy. Ignored when controller.type is 'daemonset'.
   replicas: 1
 
-  # -- Extra pod annotations to add.
-  podAnnotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "12345"
-    prometheus.io/path: "/metrics"
-
   autoscaling:
     # -- Configures the Horizontal Pod Autoscaler for the controller.
     horizontal:
       # -- Enables the Horizontal Pod Autoscaler for the controller.
-      enabled: true
+      enabled: false
       # -- The lower limit for the number of replicas to which the autoscaler can scale down.
       minReplicas: 1
       # -- The upper limit for the number of replicas to which the autoscaler can scale up.

@@ -28,11 +28,11 @@ otelcol.receiver.otlp "default" {
 // PROCESSORS
 // ---------------------------------------------------------
 
-// Memory Limiter - Protection against OOM
+// Protection against OOM
 otelcol.processor.memory_limiter "default" {
 	check_interval         = "3s"
-	limit_percentage       = 80 // 80% of 1Gi = 800Mi
-	spike_limit_percentage = 20 // Conservative for low-resource cluster
+	limit_percentage       = 80
+	spike_limit_percentage = 25
 
 	output {
 		metrics = [otelcol.processor.k8sattributes.default.input]
@@ -41,7 +41,7 @@ otelcol.processor.memory_limiter "default" {
 	}
 }
 
-// K8s Attributes - Enrich data with K8s metadata
+// Enrich data with K8s metadata
 otelcol.processor.k8sattributes "default" {
 	// Extract metadata from pods
 	extract {
@@ -84,21 +84,17 @@ otelcol.processor.k8sattributes "default" {
 	}
 
 	output {
-		// Metrics: transform then batch
 		metrics = [otelcol.processor.transform.default.input]
-		// Traces: {tail_sampling|spanmetrics} -> batch
+		// Send traces to Spanmetrics connector AND Batch
 		traces = [
-			// Path A: Generate Metrics from 100% of traces
 			otelcol.connector.spanmetrics.default.input,
-			// Path B: Sample traces down to 10% for storage
-			otelcol.processor.tail_sampling.default.input,
+			otelcol.processor.batch.default.input,
 		]
-		// Logs: straight to batch
-		logs = [otelcol.processor.batch.default.input]
+		traces = [otelcol.processor.tail_sampling.default.input]
 	}
 }
 
-// Transform - Convert resource → datapoint attributes for Prometheus
+// Convert resource attributes to datapoint attributes for Prometheus
 otelcol.processor.transform "default" {
 	error_mode = "ignore"
 
@@ -122,16 +118,14 @@ otelcol.processor.transform "default" {
 	}
 }
 
-// Tail Sampling - Reduce trace volume (Trace Exporter)
+// Smart trace sampling based on policies
 otelcol.processor.tail_sampling "default" {
-	// How long to wait for all spans of a trace
 	decision_wait = "10s"
-	// Max traces to keep in memory
-	num_traces = 1000
+	num_traces    = 50000
 
 	// Sample errors at 100%
 	policy {
-		name = "errors"
+		name = "sample-errors"
 		type = "status_code"
 
 		status_code {
@@ -141,7 +135,7 @@ otelcol.processor.tail_sampling "default" {
 
 	// Sample slow traces (>1s) at 100%
 	policy {
-		name = "slow"
+		name = "sample-slow-traces"
 		type = "latency"
 
 		latency {
@@ -151,7 +145,7 @@ otelcol.processor.tail_sampling "default" {
 
 	// Sample 10% of normal traces
 	policy {
-		name = "normal"
+		name = "sample-normal-traces"
 		type = "probabilistic"
 
 		probabilistic {
@@ -170,21 +164,26 @@ otelcol.processor.tail_sampling "default" {
 	// }
 
 	output {
-		// tail_sampling -> batch
-		traces = [otelcol.processor.batch.default.input]
+		traces = [
+			otelcol.connector.spanmetrics.default.input,
+			otelcol.processor.batch.default.input,
+		]
 	}
 }
 
-// Batch - Efficient sending the telemetry
+// Batch telemetry for efficient sending
 otelcol.processor.batch "default" {
 	send_batch_size     = 1000
-	send_batch_max_size = 2000
-	timeout             = "5s"
+	send_batch_max_size = 4000
+	timeout             = "1s"
 
 	output {
 		metrics = [otelcol.exporter.prometheus.default.input]
 		logs    = [otelcol.exporter.loki.default.input]
-		traces  = [otelcol.exporter.otlp.tempo.input]
+		traces  = [
+			otelcol.exporter.otlp.tempo.input,
+			otelcol.connector.spanmetrics.default.input,
+		]
 	}
 }
 
@@ -192,12 +191,12 @@ otelcol.processor.batch "default" {
 // CONNECTORS
 // ---------------------------------------------------------------------------------
 
-// Spanmetrics Connector - Generates RED metrics from Traces (Metric Exporter)
+// Generates RED metrics from Traces 
 otelcol.connector.spanmetrics "default" {
 	// Histogram buckets for latency (in milliseconds)
 	histogram {
 		explicit {
-			buckets = [10, 50, 100, 250, 500, 1000, 2500, 5000]
+			buckets = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 		}
 	}
 
@@ -219,26 +218,111 @@ otelcol.connector.spanmetrics "default" {
 	}
 }
 
+// ---------------------------------------------------------------------------------
+// SCRAPING (Clustered)
+// ---------------------------------------------------------------------------------
+
+discovery.kubernetes "pods" {
+	role = "pod"
+}
+
+discovery.relabel "app_metrics" {
+	targets = discovery.kubernetes.pods.targets
+
+	// Only scrape pods with prometheus.io/scrape=true annotation
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+		action        = "keep"
+		regex         = "true"
+	}
+
+	// Handle custom ports
+	rule {
+		source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+		action        = "replace"
+		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+		replacement   = "$1:$2"
+		target_label  = "__address__"
+	}
+
+	// Handle custom metrics path
+	rule {
+		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+		action        = "replace"
+		target_label  = "__metrics_path__"
+		regex         = "(.+)"
+	}
+
+	// Standard Kubernetes labels
+	rule {
+		source_labels = ["__meta_kubernetes_pod_node_name"]
+		target_label  = "node"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_namespace"]
+		target_label  = "namespace"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_name"]
+		target_label  = "pod"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_app"]
+		target_label  = "app"
+	}
+
+	// Custom PaaS labels (using underscore in target_label, hyphen in source)
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_project_id"]
+		target_label  = "project_id"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_deployment_id"]
+		target_label  = "deployment_id"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_label_managed_by"]
+		target_label  = "managed_by"
+	}
+}
+
+prometheus.scrape "default" {
+	targets         = discovery.relabel.app_metrics.output
+	forward_to      = [prometheus.remote_write.default.receiver]
+	scrape_interval = "15s"
+	scrape_timeout  = "10s"
+
+	// Enable clustering for distributed scraping
+	clustering {
+		enabled = true
+	}
+}
+
 // =============================================================================
 // EXPORTERS
 // =============================================================================
 
-// Metrics -> Prometheus
-// Metrics -> Prometheus
+// Metrics (OTLP + Scraped -> Prometheus)
 otelcol.exporter.prometheus "default" {
 	forward_to = [prometheus.remote_write.default.receiver]
 }
 
+// Send metrics to Prometheus
 prometheus.remote_write "default" {
 	endpoint {
 		url = "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write"
 
 		// Queue configuration for high throughput
 		queue_config {
-			capacity             = 5000
-			max_shards           = 20
+			capacity             = 10000
+			max_shards           = 50
 			min_shards           = 1
-			max_samples_per_send = 2000
+			max_samples_per_send = 5000
 			batch_send_deadline  = "5s"
 			min_backoff          = "30ms"
 			max_backoff          = "5s"
@@ -248,12 +332,12 @@ prometheus.remote_write "default" {
 		retry {
 			initial_interval = "1s"
 			max_interval     = "30s"
-			max_elapsed_time = "3m"
+			max_elapsed_time = "5m"
 		}
 	}
 }
 
-// Traces -> Tempo
+// Traces (OTLP -> Tempo)
 otelcol.exporter.otlp "tempo" {
 	client {
 		endpoint = "tempo.tempo.svc.cluster.local:4317"
@@ -268,7 +352,7 @@ otelcol.exporter.otlp "tempo" {
 		compression   = "gzip"
 
 		// Timeouts
-		timeout = "15s"
+		timeout = "30s"
 	}
 
 	// Retry configuration
@@ -282,12 +366,12 @@ otelcol.exporter.otlp "tempo" {
 	// Queue settings
 	sending_queue {
 		enabled       = true
-		num_consumers = 5
-		queue_size    = 500
+		num_consumers = 10
+		queue_size    = 1000
 	}
 }
 
-// Logs -> Loki
+// Logs (OTLP -> Loki)
 otelcol.exporter.loki "default" {
 	forward_to = [loki.write.default.receiver]
 }
