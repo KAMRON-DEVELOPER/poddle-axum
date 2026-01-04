@@ -1,0 +1,88 @@
+resources:
+  limits:
+    cpu: 100m
+    memory: 128Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+## Enable persistence using Persistent Volume Claims
+## ref: https://kubernetes.io/docs/concepts/storage/persistent-volumes/
+##
+persistence:
+  type: pvc
+  enabled: true
+  storageClassName: local-path
+  size: 2Gi
+
+# Administrator credentials when not using an existing secret (see below)
+adminUser: admin
+adminPassword: admin
+
+# Use an existing secret for the admin user.
+admin:
+  ## Name of the secret. Can be templated.
+  existingSecret: "grafana-credentials"
+  userKey: admin-user
+  passwordKey: admin-password
+
+## Configure grafana datasources
+## ref: http://docs.grafana.org/administration/provisioning/#datasources
+##
+datasources: {}
+  # datasources.yaml:
+  #   apiVersion: 1
+  #   datasources:
+  #     - name: Prometheus
+  #       type: prometheus
+  #       access: proxy
+  #       orgId: 1
+  #       url: http://prometheus-server.prometheus.svc.cluster.local:80
+  #       isDefault: true
+  #       version: 1
+  #       editable: true
+  #       jsonData:
+  #         httpMethod: POST
+  #         timeInterval: 30s
+  #     - name: Loki
+  #       type: loki
+  #       access: proxy
+  #       orgId: 1
+  #       url: http://loki.loki.svc.cluster.local:3100
+  #       version: 1
+  #       editable: true
+  #       jsonData:
+  #         maxLines: 1000
+  #     - name: Tempo
+  #       type: tempo
+  #       access: proxy
+  #       orgId: 1
+  #       url: http://tempo.tempo.svc.cluster.local:3200
+  #       basicAuth: false
+  #       version: 1
+  #       editable: true
+  #       apiVersion: 1
+  #       uid: tempo
+  #       jsonData:
+  #         httpMethod: GET
+  #         tracesToLogs:
+  #           datasourceUid: "Loki"
+  #         serviceMap:
+  #           datasourceUid: "Prometheus"
+  #         nodeGraph:
+  #           enabled: true
+  #         lokiSearch:
+  #           datasourceUid: "Loki"
+
+sidecar:
+  dashboards:
+    enabled: true
+    label: grafana_dashboard
+    labelValue: "1"
+
+  datasources:
+    enabled: true
+    # label that the configmaps with datasources are marked with (can be templated)
+    label: grafana_datasource
+    # value of label that the configmaps with datasources are set to (can be templated)
+    labelValue: "1"

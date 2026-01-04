@@ -1,0 +1,52 @@
+# prometheus-datasource.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-datasource
+  namespace: grafana
+  labels:
+    grafana_datasource: "1"
+data:
+  grafana-datasource.yaml: |-
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        orgId: 1
+        url: http://prometheus-server.prometheus.svc.cluster.local:80
+        isDefault: true
+        version: 1
+        editable: true
+        jsonData:
+          httpMethod: POST
+          timeInterval: 30s
+      - name: Loki
+        type: loki
+        access: proxy
+        orgId: 1
+        url: http://loki.loki.svc.cluster.local:3100
+        version: 1
+        editable: true
+        jsonData:
+          maxLines: 1000
+      - name: Tempo
+        type: tempo
+        access: proxy
+        orgId: 1
+        url: http://tempo.tempo.svc.cluster.local:3200
+        basicAuth: false
+        version: 1
+        editable: true
+        apiVersion: 1
+        uid: tempo
+        jsonData:
+          httpMethod: GET
+          tracesToLogs:
+            datasourceUid: "Loki"
+          serviceMap:
+            datasourceUid: "Prometheus"
+          nodeGraph:
+            enabled: true
+          lokiSearch:
+            datasourceUid: "Loki"

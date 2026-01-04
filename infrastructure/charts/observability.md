@@ -129,7 +129,7 @@ kubectl apply -f infrastructure/charts/loki/ingress.yaml
 
 ```bash
 helm upgrade --install tempo grafana/tempo \
-  --values infrastructure/charts/tempo/tempo-values.yaml \
+  --f infrastructure/charts/tempo/tempo-values.yaml \
   --namespace tempo --create-namespace
 ```
 
@@ -151,6 +151,105 @@ kubectl get all -n tempo
 
 ```bash
 kubectl apply -f infrastructure/charts/tempo/ingress.yaml
+```
+
+### Install Grafana
+
+Grafana provides visualization and dashboards for your observability stack (Prometheus, Loki, Tempo).
+
+#### 1. Create Admin Credentials Secret
+
+```bash
+kubectl create secret generic grafana-credentials \
+  --from-literal=admin-user=admin \
+  --from-literal=admin-password='admin' \
+  -n grafana
+```
+
+> **Note**: Change the default password in production environments.
+
+#### 2. Install Grafana with Helm
+
+```bash
+helm upgrade --install grafana grafana/grafana \
+  -f infrastructure/charts/grafana/grafana-values.yaml \
+  -n grafana --create-namespace
+```
+
+#### 3. Apply Datasource Configuration
+
+The datasources are managed via ConfigMap and will be automatically loaded by Grafana's sidecar:
+
+```bash
+kubectl apply -f infrastructure/charts/grafana/grafana-datasources.yaml
+```
+
+#### 4. Access Grafana
+
+```bash
+kubectl apply -f infrastructure/charts/grafana/grafana-ingress.yaml
+```
+
+Then open: <https://grafana.poddle.uz>
+
+**Login credentials:**
+
+- Username: `admin`
+- Password: `admin` (or the password you set in the secret)
+
+#### 5. Verify Datasources
+
+After logging in, navigate to **Configuration → Data Sources** to verify that Prometheus, Loki, and Tempo are connected.
+
+#### Configuration Files
+
+- `grafana-values.yaml` - Main Helm values with persistence, resources, and sidecar configuration
+- `grafana-datasources.yaml` - ConfigMap with all datasource definitions (Prometheus, Loki, Tempo)
+- `grafana-ingress.yaml` - (Optional) Ingress configuration for external access
+
+#### Managing Datasources
+
+Datasources are managed dynamically via ConfigMaps with the label `grafana_datasource: "1"`.
+
+**To add a new datasource:**
+
+1. Create a ConfigMap with the `grafana_datasource: "1"` label
+2. Apply it with `kubectl apply`
+3. Grafana will auto-detect and load it
+
+**To update an existing datasource:**
+
+```bash
+kubectl edit configmap grafana-datasource -n grafana
+# Or update the YAML file and reapply
+kubectl apply -f infrastructure/charts/grafana/grafana-datasources.yaml
+```
+
+**To remove a datasource:**
+
+```bash
+kubectl delete configmap grafana-datasource -n grafana
+```
+
+Troubleshooting
+
+**Check if datasources are loaded:**
+
+```bash
+kubectl logs -n grafana -l app.kubernetes.io/name=grafana -c grafana-sc-datasources
+```
+
+**Restart Grafana pod if needed:**
+
+```bash
+kubectl rollout restart deployment grafana -n grafana
+```
+
+**Verify pod is running:**
+
+```bash
+kubectl get pods -n grafana
+kubectl describe pod -n grafana <pod-name>
 ```
 
 ### Install Alloy
@@ -625,7 +724,7 @@ prometheus.scrape "apps" {
 
 ---
 
-#### Troubleshooting
+Troubleshooting
 
 **DaemonSet Issues:**
 
