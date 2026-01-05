@@ -219,15 +219,15 @@ otelcol.connector.spanmetrics "default" {
 	}
 
 	// Add extra dimensions to your metrics from span attributes
-	dimensions {
+	dimension {
 		name = "http.method"
 	}
 
-	dimensions {
+	dimension {
 		name = "http.status_code"
 	}
 
-	dimensions {
+	dimension {
 		name = "service.name"
 	}
 
@@ -276,14 +276,6 @@ otelcol.exporter.otlp "tempo" {
 		// Connection settings
 		balancer_name = "round_robin"
 		compression   = "gzip"
-	}
-
-	// Retry configuration
-	retry {
-		enabled          = true
-		initial_interval = "5s"
-		max_interval     = "30s"
-		max_elapsed_time = "5m"
 	}
 
 	// Queue settings
