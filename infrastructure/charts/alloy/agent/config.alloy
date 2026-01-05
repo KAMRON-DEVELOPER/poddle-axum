@@ -213,41 +213,41 @@ prometheus.scrape "cadvisor" {
 // CONTAINER METRICS (discovery.kubelet)
 // ---------------------------------------------------------
 
-discovery.kubelet "local_pods" {
-	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-}
+// discovery.kubelet "local_pods" {
+// 	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+// }
 
-discovery.relabel "app_metrics" {
-	targets = discovery.kubelet.local_pods.targets
+// discovery.relabel "app_metrics" {
+// 	targets = discovery.kubelet.local_pods.targets
 
-	// Only scrape if the pod has annotation: prometheus.io/scrape: "true"
-	rule {
-		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
-		regex         = "true"
-		action        = "keep"
-	}
+// 	// Only scrape if the pod has annotation: prometheus.io/scrape: "true"
+// 	rule {
+// 		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+// 		regex         = "true"
+// 		action        = "keep"
+// 	}
 
-	// Set the path based on annotation (default /metrics)
-	rule {
-		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
-		regex         = "(.+)"
-		target_label  = "__metrics_path__"
-		action        = "replace"
-	}
+// 	// Set the path based on annotation (default /metrics)
+// 	rule {
+// 		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+// 		regex         = "(.+)"
+// 		target_label  = "__metrics_path__"
+// 		action        = "replace"
+// 	}
 
-	// Use the declared port if specified in annotation
-	rule {
-		source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
-		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
-		replacement   = "$1:$2"
-		target_label  = "__address__"
-	}
-}
+// 	// Use the declared port if specified in annotation
+// 	rule {
+// 		source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+// 		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+// 		replacement   = "$1:$2"
+// 		target_label  = "__address__"
+// 	}
+// }
 
-prometheus.scrape "apps" {
-	targets    = discovery.relabel.app_metrics.output
-	forward_to = [prometheus.remote_write.default.receiver]
-}
+// prometheus.scrape "apps" {
+// 	targets    = discovery.relabel.app_metrics.output
+// 	forward_to = [prometheus.remote_write.default.receiver]
+// }
 
 // ---------------------------------------------------------
 // HOST/NODE METRICS
