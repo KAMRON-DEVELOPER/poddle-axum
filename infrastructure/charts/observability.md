@@ -292,7 +292,7 @@ helm upgrade --install alloy-gateway grafana/alloy \
   -f infrastructure/charts/alloy/gateway/alloy-values.yaml \
   --namespace alloy-gateway --create-namespace
 
-# or
+# or when `alloy.configMap.create: true`
 
 helm upgrade --install alloy-gateway grafana/alloy \
   --values infrastructure/charts/alloy/gateway/alloy-values.yaml \
@@ -312,7 +312,7 @@ helm upgrade --install alloy-agent grafana/alloy \
   --values infrastructure/charts/alloy/agent/alloy-values.yaml \
   --namespace alloy-agent --create-namespace
 
-# or
+# or when `alloy.configMap.create: true`
 
 helm upgrade --install alloy-agent grafana/alloy \
   --values infrastructure/charts/alloy/agent/alloy-values.yaml \
