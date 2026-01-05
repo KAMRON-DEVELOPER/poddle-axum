@@ -54,12 +54,29 @@ otelcol.processor.k8sattributes "default" {
 		]
 
 		// Extract custom PaaS labels (matching Rust backend labels)
-		labels = [
-			{tag_name = "app", key = "app", from = "pod"},
-			{tag_name = "project_id", key = "project-id", from = "pod"},
-			{tag_name = "deployment_id", key = "deployment-id", from = "pod"},
-			{tag_name = "managed_by", key = "managed-by", from = "pod"},
-		]
+		label {
+			from     = "pod"
+			key      = "app"
+			tag_name = "app"
+		}
+
+		label {
+			from     = "pod"
+			key      = "project-id"
+			tag_name = "project_id"
+		}
+
+		label {
+			from     = "pod"
+			key      = "deployment-id"
+			tag_name = "deployment_id"
+		}
+
+		label {
+			from     = "pod"
+			key      = "managed-by"
+			tag_name = "managed_by"
+		}
 	}
 
 	// Configure pod association strategies
@@ -197,7 +214,7 @@ otelcol.connector.spanmetrics "default" {
 	// Histogram buckets for latency (in milliseconds)
 	histogram {
 		explicit {
-			buckets = [10, 50, 100, 250, 500, 1000, 2500, 5000]
+			buckets = ["10ms", "50ms", "100ms", "250ms", "500ms", "1s", "2.5s", "5s"]
 		}
 	}
 
@@ -243,13 +260,6 @@ prometheus.remote_write "default" {
 			min_backoff          = "30ms"
 			max_backoff          = "5s"
 		}
-
-		// Retry configuration
-		retry {
-			initial_interval = "1s"
-			max_interval     = "30s"
-			max_elapsed_time = "3m"
-		}
 	}
 }
 
@@ -266,9 +276,6 @@ otelcol.exporter.otlp "tempo" {
 		// Connection settings
 		balancer_name = "round_robin"
 		compression   = "gzip"
-
-		// Timeouts
-		timeout = "15s"
 	}
 
 	// Retry configuration
@@ -296,12 +303,9 @@ loki.write "default" {
 	endpoint {
 		url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
 
-		// Retry configuration
-		retry {
-			initial_interval = "1s"
-			max_interval     = "30s"
-			max_elapsed_time = "5m"
-		}
+		batch_size = "1MiB"
+
+		batch_wait = "5s"
 	}
 
 	// External labels for all logs
