@@ -22,7 +22,7 @@ alloy:
 
   # Extra environment variables
   extraEnv:
-    - name: HOSTNAME
+    - name: NODE_NAME
       valueFrom:
         fieldRef:
           fieldPath: spec.nodeName

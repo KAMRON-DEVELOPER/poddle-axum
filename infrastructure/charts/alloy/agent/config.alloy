@@ -12,7 +12,7 @@ discovery.kubernetes "pods" {
 
 	selectors {
 		role  = "pod"
-		field = "spec.nodeName=" + coalesce(env("HOSTNAME"), constants.hostname)
+		field = "spec.nodeName=" + coalesce(env("NODE_NAME"), constants.hostname)
 	}
 }
 
@@ -153,7 +153,7 @@ discovery.relabel "cadvisor" {
 	// Keep only the current node
 	rule {
 		source_labels = ["__meta_kubernetes_node_name"]
-		regex         = env("HOSTNAME")
+		regex         = env("NODE_NAME")
 		action        = "keep"
 	}
 
