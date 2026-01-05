@@ -16,7 +16,7 @@ discovery.kubernetes "pods" {
 	}
 }
 
-discovery.relabel "pod_logs" {
+discovery.relabel "pod_log_paths" {
 	targets = discovery.kubernetes.pods.targets
 
 	// Construct the path to the log file on the host
