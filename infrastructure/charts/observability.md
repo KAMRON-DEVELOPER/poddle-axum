@@ -2,6 +2,22 @@
 
 ---
 
+## Setup `kube-state-metrics`
+
+```bash
+helm show values prometheus-community/kube-state-metrics > infrastructure/charts/kube-state-metrics/values.yaml
+
+helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics --namespace kube-system
+
+# or
+
+helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics \
+  -f infrastructure/charts/kube-state-metrics/ksm-values.yaml \
+  --namespace kube-system
+```
+
+---
+
 ## Prerequisites: External MinIO Service Configuration
 
 > [!IMPORTANT]
