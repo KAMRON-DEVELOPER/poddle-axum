@@ -155,14 +155,14 @@ kubectl apply -f infrastructure/charts/tempo/ingress.yaml
 
 ### Install Grafana
 
-Grafana provides visualization and dashboards for your observability stack (Prometheus, Loki, Tempo).
+Grafana provides visualization and dashboards for your observability stack (Prometheus, Mimir, Loki, Tempo).
 
 #### 1. Create Admin Credentials Secret
 
 ```bash
 kubectl create secret generic grafana-credentials \
   --from-literal=admin-user=admin \
-  --from-literal=admin-password='admin' \
+  --from-literal=admin-password='1213' \
   -n grafana
 ```
 
