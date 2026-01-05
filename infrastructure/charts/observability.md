@@ -87,7 +87,7 @@ kubectl get pod prometheus-server-674f658949-spg7p -n prometheus -o jsonpath='{.
 #### We may need to create IngressRoute(Traefik) for Prometheus, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/prometheus-community/ingress.yaml
+kubectl apply -f infrastructure/charts/prometheus-community/prometheus-ingress.yaml
 ```
 
 ### Install Loki
@@ -122,7 +122,7 @@ kubectl get pod loki-0 -n loki -o jsonpath='{.spec.containers[*].name}'
 #### We may need to create IngressRoute(Traefik) for Loki, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/loki/ingress.yaml
+kubectl apply -f infrastructure/charts/loki/loki-ingress.yaml
 ```
 
 ### Install Tempo
@@ -150,7 +150,7 @@ kubectl get all -n tempo
 #### We may need to create IngressRoute(Traefik) for Tempo, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/tempo/ingress.yaml
+kubectl apply -f infrastructure/charts/tempo/tempo-ingress.yaml
 ```
 
 ### Install Grafana
