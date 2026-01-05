@@ -310,7 +310,7 @@ kubectl create configmap alloy-config \
 
 helm upgrade --install alloy-agent grafana/alloy \
   --values infrastructure/charts/alloy/agent/alloy-values.yaml \
-  --namespace alloy-agent
+  --namespace alloy-agent --create-namespace
 
 # or
 
