@@ -160,6 +160,7 @@ Grafana provides visualization and dashboards for your observability stack (Prom
 #### 1. Create Admin Credentials Secret
 
 ```bash
+kubectl create ns grafana
 kubectl create secret generic grafana-credentials \
   --from-literal=admin-user=admin \
   --from-literal=admin-password='1213' \

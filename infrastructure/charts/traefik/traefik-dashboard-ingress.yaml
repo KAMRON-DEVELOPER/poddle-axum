@@ -1,56 +1,58 @@
-apiVersion: traefik.io/v1alpha1
-kind: Middleware
-metadata:
-  name: dashboard-auth
-  namespace: traefik
-spec:
-  basicAuth:
-    secret: traefik-dashboard-auth
----
+# apiVersion: traefik.io/v1alpha1
+# kind: Middleware
+# metadata:
+#   name: dashboard-auth
+#   namespace: traefik
+# spec:
+#   basicAuth:
+#     secret: traefik-dashboard-auth
+# ---
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: traefik-dashboard
+  name: traefik-dashboard-ingressroute
   namespace: traefik
 spec:
-  entryPoints:
-    - websecure
+  entryPoints: []
+    # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
+    # - web
+    # - websecure
   routes:
     - match: Host(`traefik.poddle.uz`)
       kind: Rule
       services:
         - name: api@internal
           kind: TraefikService
-      middlewares:
-        - name: dashboard-auth
-  tls:
-    secretName: wildcard-poddle-uz-tls
----
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: traefik-dashboard
-  namespace: traefik
-  annotations:
-    # cert-manager.io/cluster-issuer: "vault-k8s-ci"
-    traefik.ingress.kubernetes.io/router.entrypoints: websecure
-    traefik.ingress.kubernetes.io/router.tls: "true"
-    traefik.ingress.kubernetes.io/router.middlewares: traefik-dashboard-auth@kubernetescrd
-spec:
-  ingressClassName: traefik
-  tls:
-    - hosts:
-        - traefik.poddle.uz
-      # secretName: traefik-dashboard-tls
-      secretName: wildcard-poddle-uz-tls
-  rules:
-    - host: traefik.poddle.uz
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: api@internal
-                port:
-                  name: traefik
+  #     middlewares:
+  #       - name: dashboard-auth
+  # tls:
+  #   secretName: wildcard-poddle-uz-tls
+# ---
+# apiVersion: networking.k8s.io/v1
+# kind: Ingress
+# metadata:
+#   name: traefik-dashboard
+#   namespace: traefik
+#   annotations:
+#     # cert-manager.io/cluster-issuer: "vault-k8s-ci"
+#     traefik.ingress.kubernetes.io/router.entrypoints: websecure
+#     traefik.ingress.kubernetes.io/router.tls: "true"
+#     traefik.ingress.kubernetes.io/router.middlewares: traefik-dashboard-auth@kubernetescrd
+# spec:
+#   ingressClassName: traefik
+#   tls:
+#     - hosts:
+#         - traefik.poddle.uz
+#       # secretName: traefik-dashboard-tls
+#       secretName: wildcard-poddle-uz-tls
+#   rules:
+#     - host: traefik.poddle.uz
+#       http:
+#         paths:
+#           - path: /
+#             pathType: Prefix
+#             backend:
+#               service:
+#                 name: api@internal
+#                 port:
+#                   name: traefik
