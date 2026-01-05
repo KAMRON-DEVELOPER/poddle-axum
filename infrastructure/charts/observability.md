@@ -300,6 +300,12 @@ helm upgrade --install alloy-gateway grafana/alloy \
   --namespace alloy-gateway --create-namespace
 ```
 
+Expose
+
+```bash
+kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingress.yaml
+```
+
 ##### 2. Install Agent (DaemonSet)
 
 ```bash
@@ -318,6 +324,12 @@ helm upgrade --install alloy-agent grafana/alloy \
   --values infrastructure/charts/alloy/agent/alloy-values.yaml \
   --set-file alloy.configMap.content=infrastructure/charts/alloy/agent/config.alloy \
   --namespace alloy-agent --create-namespace
+```
+
+Expose
+
+```bash
+kubectl apply -f infrastructure/charts/alloy/agent/alloy-ingress.yaml
 ```
 
 #### Grafana Alloy Architecture Overview
