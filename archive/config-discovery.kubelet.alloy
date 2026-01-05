@@ -19,6 +19,17 @@ discovery.kubernetes "pods" {
 discovery.relabel "pod_logs" {
 	targets = discovery.kubernetes.pods.targets
 
+	// rule {
+	// 	source_labels = ["__meta_kubernetes_pod_node_name"]
+	// 	target_label  = "__host__"
+	// }
+
+	// rule {
+	// 	source_labels = ["__host__"]
+	// 	regex         = env("HOSTNAME")
+	// 	action        = "keep"
+	// }
+
 	// Construct the path to the log file on the host
 	// Path format: /var/log/pods/<namespace>_<pod_name>_<uid>/<container_name>/*.log
 	rule {
@@ -197,6 +208,46 @@ prometheus.scrape "cadvisor" {
 
 	forward_to = [prometheus.remote_write.default.receiver]
 }
+
+// ---------------------------------------------------------
+// CONTAINER METRICS (discovery.kubelet)
+// ---------------------------------------------------------
+
+// discovery.kubelet "local_pods" {
+// 	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+// }
+
+// discovery.relabel "app_metrics" {
+// 	targets = discovery.kubelet.local_pods.targets
+
+// 	// Only scrape if the pod has annotation: prometheus.io/scrape: "true"
+// 	rule {
+// 		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_scrape"]
+// 		regex         = "true"
+// 		action        = "keep"
+// 	}
+
+// 	// Set the path based on annotation (default /metrics)
+// 	rule {
+// 		source_labels = ["__meta_kubernetes_pod_annotation_prometheus_io_path"]
+// 		regex         = "(.+)"
+// 		target_label  = "__metrics_path__"
+// 		action        = "replace"
+// 	}
+
+// 	// Use the declared port if specified in annotation
+// 	rule {
+// 		source_labels = ["__address__", "__meta_kubernetes_pod_annotation_prometheus_io_port"]
+// 		regex         = "([^:]+)(?::\\d+)?;(\\d+)"
+// 		replacement   = "$1:$2"
+// 		target_label  = "__address__"
+// 	}
+// }
+
+// prometheus.scrape "apps" {
+// 	targets    = discovery.relabel.app_metrics.output
+// 	forward_to = [prometheus.remote_write.default.receiver]
+// }
 
 // ---------------------------------------------------------
 // HOST/NODE METRICS
