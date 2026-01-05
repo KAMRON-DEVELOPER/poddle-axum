@@ -236,9 +236,70 @@ otelcol.connector.spanmetrics "default" {
 	}
 }
 
-// =============================================================================
+// ---------------------------------------------------------------------------------
+// KUBE-STATE-METRICS (Cluster Level)
+// ---------------------------------------------------------------------------------
+
+// Discover the kube-state-metrics service
+discovery.kubernetes "kube_state_metrics" {
+	role       = "service"
+	namespaces = ["kube-system"]
+
+	selectors {
+		role  = "service"
+		label = "app.kubernetes.io/name=kube-state-metrics"
+	}
+}
+
+discovery.relabel "kube_state_metrics" {
+	targets = discovery.kubernetes.kube - state - metrics.targets
+
+	// Find the kube-state-metrics service
+	rule {
+		source_labels = ["__meta_kubernetes_service_label_app_kubernetes_io_name"]
+		regex         = "kube-state-metrics"
+		action        = "keep"
+	}
+
+	// Keep only kube-state-metrics service
+	rule {
+		source_labels = ["__meta_kubernetes_service_name"]
+		regex         = "kube-state-metrics"
+		action        = "keep"
+	}
+
+	// Use the service name as the job label
+	rule {
+		source_labels = ["__meta_kubernetes_service_name"]
+		target_label  = "job"
+	}
+
+	// Use the service port
+	rule {
+		source_labels = ["__meta_kubernetes_service_port_name"]
+		regex         = "http"
+		action        = "keep"
+	}
+
+	// Set job label
+	rule {
+		replacement  = "kube-state-metrics"
+		target_label = "job"
+	}
+}
+
+prometheus.scrape "kube_state_metrics" {
+	targets  = discovery.kubernetes.kube_state_metrics.targets
+	job_name = "kube-state-metrics"
+	scheme   = "http"
+
+	forward_to = [prometheus.remote_write.default.receiver]
+	forward_to = [otelcol.receiver.otlp.default.metrics]
+}
+
+// ---------------------------------------------------------------------------------
 // EXPORTERS
-// =============================================================================
+// ---------------------------------------------------------------------------------
 
 // Metrics -> Prometheus
 // Metrics -> Prometheus

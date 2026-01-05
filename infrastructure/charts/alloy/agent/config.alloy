@@ -191,8 +191,14 @@ prometheus.scrape "cadvisor" {
 	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
 	tls_config {
-		ca_file              = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
-		insecure_skip_verify = false
+		ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+		// K3s certs often don't validate against the Pod CA perfectly
+		// Disabling verification is safe for internal cluster scraping
+
+		// K3s generates self-signed certificates for its Kubelets.
+		// Alloy cannot verify them against a public CA, so it refuses to scrape, resulting in zero metrics.
+		insecure_skip_verify = true
 	}
 
 	forward_to = [prometheus.remote_write.default.receiver]
