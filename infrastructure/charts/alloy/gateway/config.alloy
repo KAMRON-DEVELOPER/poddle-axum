@@ -252,7 +252,7 @@ discovery.kubernetes "kube_state_metrics" {
 }
 
 discovery.relabel "kube_state_metrics" {
-	targets = discovery.kubernetes.kube - state - metrics.targets
+	targets = discovery.kubernetes.kube_state_metrics
 
 	// Find the kube-state-metrics service
 	rule {
