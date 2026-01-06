@@ -255,8 +255,11 @@ otelcol.connector.spanmetrics "default" {
 
 // Discover the kube-state-metrics service
 discovery.kubernetes "kube_state_metrics" {
-	role       = "service"
-	namespaces = ["kube-system"]
+	role = "service"
+
+	namespaces {
+		names = ["kube-system"]
+	}
 
 	selectors {
 		role  = "service"
