@@ -542,7 +542,7 @@ prometheus.scrape "cadvisor" {
 
 The `server_name` field controls hostname verification during TLS handshake.
 
-#### Option A: Use Node Hostname (Recommended)
+##### Option A: Use Node Hostname (Recommended)
 
 ```hcl
 tls_config {
@@ -558,7 +558,7 @@ tls_config {
 - TLS library validates certificate against `server_name = "k3s-agent-1"`
 - Certificate SAN includes `DNS:k3s-agent-1` → ✅ Match!
 
-#### Option B: Omit `server_name` (Simplest)
+##### Option B: Omit `server_name` (Simplest)
 
 ```hcl
 tls_config {
@@ -579,7 +579,7 @@ tls_config {
 - Simpler configuration
 - Still fully secure with proper CA validation
 
-#### Why All Two Options Work
+##### Why All Two Options Work
 
 K3s kubelet certificates include **both** DNS names and IP addresses in SANs:
 
@@ -693,43 +693,6 @@ level=error component=prometheus.scrape.cadvisor msg="scrape failed" err="connec
 → RBAC permissions issue or kubelet not accessible
 
 ---
-
-### Summary: Configuration Validation Checklist
-
-✅ **Certificate Chain:**
-
-- [ ] Kubelet certificates signed by `k3s-server-ca@<timestamp>`
-- [ ] Each node has correct subject (CN=node-name)
-
-✅ **Subject Alternative Names:**
-
-- [ ] Each certificate includes node hostname (DNS)
-- [ ] Each certificate includes node IP address (IP)
-- [ ] Both `localhost` and `127.0.0.1` are present
-
-✅ **CA File:**
-
-- [ ] Using `/host/root/var/lib/rancher/k3s/agent/server-ca.crt`
-- [ ] NOT using `client-ca.crt`
-- [ ] File exists on all nodes
-
-✅ **TLS Config:**
-
-- [ ] `ca_file` points to `server-ca.crt`
-- [ ] `server_name` is either `env("NODE_NAME")` or omitted
-- [ ] `insecure_skip_verify = false`
-
-✅ **Connectivity:**
-
-- [ ] Bearer token file exists in pod
-- [ ] RBAC permissions allow access to nodes and metrics
-- [ ] Kubelet is accessible on port 10250
-
-✅ **Metrics:**
-
-- [ ] No errors in Alloy logs
-- [ ] `container_*` metrics appear in Prometheus
-- [ ] Metrics have correct labels (namespace, pod, container, node)
 
 #### 2. Install Gateway (StatefulSet)
 
