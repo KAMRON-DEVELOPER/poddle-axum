@@ -5,24 +5,21 @@ kind: ClusterRole
 metadata:
   name: alloy-agent-role
 rules:
-  # For pod discovery and log collection
+  # For pod discovery (logs) and node discovery (cadvisor target creation)
   - apiGroups: [""]
     resources:
       - nodes
-      - nodes/proxy
       - pods
-      - endpoints
-      - services
     verbs: ["get", "list", "watch"]
 
-  # For kubelet metrics scraping
+  # For kubelet metrics scraping stats lookup
   - apiGroups: [""]
     resources:
       - nodes/metrics
       - nodes/stats
     verbs: ["get"]
 
-  # Non-resource URLs for kubelet
+  # Non-resource URLs for kubelet scraping
   - nonResourceURLs:
       - /metrics
       - /metrics/cadvisor
@@ -44,12 +41,13 @@ subjects:
 
 ---
 # RBAC for Alloy Gateway (StatefulSet)
+# This section was already correct based on your gateway/config.alloy
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
   name: alloy-gateway-role
 rules:
-  # For K8s attributes processor
+  # For K8s attributes processor (Metadata enrichment)
   - apiGroups: [""]
     resources:
       - pods
@@ -57,14 +55,14 @@ rules:
       - nodes
     verbs: ["get", "list", "watch"]
 
-  # For kube-state-metrics discovery
+  # For kube-state-metrics discovery (role="service")
   - apiGroups: [""]
     resources:
       - services
       - endpoints
     verbs: ["get", "list", "watch"]
 
-  # For discovering deployments/statefulsets
+  # For discovering deployments/statefulsets owner references
   - apiGroups: ["apps"]
     resources:
       - deployments
