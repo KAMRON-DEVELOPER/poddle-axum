@@ -20,30 +20,58 @@ discovery.relabel "pod_logs" {
 	targets = discovery.kubernetes.pods.targets
 
 	// Construct the path to the log file on the host
-	// Source: namespace/pod_name/uid/container_name
-	// Target: /var/log/pods/namespace_pod_name_uid/container_name/*.log
 	// Path format: /var/log/pods/<namespace>_<pod_name>_<uid>/<container_name>/*.log
 	rule {
-		source_labels = [
-			"__meta_kubernetes_namespace",
-			"__meta_kubernetes_pod_name",
-			"__meta_kubernetes_pod_uid",
-			"__meta_kubernetes_pod_container_name",
-		]
-		separator = "/"
-		// Capture: (namespace) / (pod_name) / (uid) / (container)
-		regex = "([^/]+)/([^/]+)/([^/]+)/([^/]+)"
-		// K8s standard path: /var/log/pods/<ns>_<name>_<uid>/<container>/*.log
-		replacement  = "/var/log/pods/$1_$2_$3/$4/*.log"
-		target_label = "__path__"
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name", "__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		target_label  = "__path__"
+		separator     = "/"
+		replacement   = "/var/log/pods/*_*_$3/$4/*.log"
 	}
 
-	// Assign Job Label
+	// NEW
+	// Label creation - "__path__" field from "__meta_kubernetes_pod_uid" and "__meta_kubernetes_pod_container_name"
+	// Concatenate values __meta_kubernetes_pod_uid/__meta_kubernetes_pod_container_name.log
+	rule {
+		source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		action        = "replace"
+		target_label  = "__path__"
+		separator     = "/"
+		replacement   = "/var/log/pods/*$1/*.log"
+	}
+
+	// Label creation -  "container_runtime" field from "__meta_kubernetes_pod_container_id"
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_id"]
+		action        = "replace"
+		target_label  = "tmp_container_runtime"
+		regex         = "^(\\S+):\\/\\/.+$"
+		replacement   = "$1"
+	}
+	// NEW
+
+	// NEW
 	rule {
 		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name"]
 		separator     = "/"
 		target_label  = "job"
 	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		separator     = "/"
+		action        = "replace"
+		replacement   = "/var/log/pods/*$1/*.log" // Tailor this pattern to accurately reflect K8s log path structure
+		target_label  = "__path__"
+	}
+
+	rule {
+		action        = "replace"
+		source_labels = ["__meta_kubernetes_pod_container_id"]
+		regex         = "^(\\w+):\\/\\/.+$"
+		replacement   = "$1"
+		target_label  = "tmp_container_runtime"
+	}
+	// NEW
 
 	// Standard Labels
 	rule {
@@ -83,10 +111,11 @@ discovery.relabel "pod_logs" {
 	}
 }
 
-// Expand the wildcards (*.log) into actual file paths
+// NEW
 local.file_match "pod_logs" {
 	path_targets = discovery.relabel.pod_logs.output
 }
+// NEW
 
 // Read the files directly from disk (Efficient!)
 loki.source.file "pods" {
@@ -102,7 +131,7 @@ loki.process "default" {
 		drop_counter_reason = "too old"
 	}
 
-	// Tag everything as containerd (since K3s uses containerd)
+	// Tag everything as containerd (since Poddle is on K3s/Cilium)
 	stage.static_labels {
 		values = {
 			tmp_container_runtime = "containerd",
@@ -136,6 +165,18 @@ loki.process "default" {
 			values = {
 				flags  = "", // Incorporates 'flags' derived from CRI parsing as a label
 				stream = "", // Incorporates 'stream' (stdout/stderr) from CRI parsing as a label
+			}
+		}
+	}
+
+	stage.match {
+		selector = "{tmp_container_runtime=\"docker\"}"
+
+		stage.docker { } // The Docker stage is adept at parsing logs formatted in Docker's JSON structure
+
+		stage.labels {
+			values = {
+				stream = "", // Incorporates 'stream' (stdout/stderr) from Docker parsing as a label
 			}
 		}
 	}
@@ -206,12 +247,16 @@ prometheus.scrape "cadvisor" {
 	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
 	tls_config {
-		// Point to the K3s CA via the host mount
-		ca_file              = "/host/root/var/lib/rancher/k3s/agent/server-ca.crt"
-		server_name          = env("NODE_NAME")
-		insecure_skip_verify = false
-		// K3s generates self-signed certificates for kubelets
-		// Using bearer token auth is sufficient, no client certs needed
+		ca_file   = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+		cert_file = "/path/to/your/client.crt"
+		key_file  = "/path/to/your/client.key"
+
+		// K3s certs often don't validate against the Pod CA perfectly
+		// Disabling verification is safe for internal cluster scraping
+
+		// K3s generates self-signed certificates for its Kubelets.
+		// Alloy cannot verify them against a public CA, so it refuses to scrape, resulting in zero metrics.
+		insecure_skip_verify = true
 	}
 
 	forward_to = [prometheus.remote_write.default.receiver]

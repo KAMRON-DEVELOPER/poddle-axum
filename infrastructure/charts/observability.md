@@ -296,33 +296,13 @@ labels.insert("deployment-id".to_string(), deployment_id.to_string());
 labels.insert("managed-by".to_string(), "poddle".to_string());
 ```
 
-##### 1. Install Gateway (StatefulSet)
+#### Apply minimal RBAC for agent and gateway
 
 ```bash
-kubectl create namespace alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
-kubectl create configmap alloy-config \
-  --from-file=config.alloy=infrastructure/charts/alloy/gateway/config.alloy \
-  -n alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
-
-helm upgrade --install alloy-gateway grafana/alloy \
-  -f infrastructure/charts/alloy/gateway/alloy-values.yaml \
-  --namespace alloy-gateway --create-namespace
-
-# or when `alloy.configMap.create: true`
-
-helm upgrade --install alloy-gateway grafana/alloy \
-  --values infrastructure/charts/alloy/gateway/alloy-values.yaml \
-  --set-file alloy.configMap.content=infrastructure/charts/alloy/gateway/config.alloy \
-  --namespace alloy-gateway --create-namespace
+kubectl apply -f infrastructure/charts/alloy/rbac.yaml
 ```
 
-Expose
-
-```bash
-kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingress.yaml
-```
-
-##### 2. Install Agent (DaemonSet)
+#### 1. Install Agent (DaemonSet)
 
 ```bash
 kubectl create namespace alloy-agent --dry-run=client -o yaml | kubectl apply -f -
@@ -348,7 +328,436 @@ Expose
 kubectl apply -f infrastructure/charts/alloy/agent/alloy-ingress.yaml
 ```
 
-#### Grafana Alloy Architecture Overview
+##### Verifying Kubelet TLS for `prometheus.scrape "cadvisor"`
+
+This section documents how to verify that Grafana Alloy can securely scrape kubelet cAdvisor metrics over HTTPS with full TLS verification enabled (`insecure_skip_verify = false`).
+
+##### Goal
+
+Ensure that:
+
+- Alloy connects to kubelet using the node's internal IP
+- `insecure_skip_verify = false` works without errors
+- The kubelet certificate is trusted, valid, and matches the target
+- `server_name` configuration is correct (or can be omitted)
+
+---
+
+##### Step 1: Confirm Kubelet Certificates Are Signed by K3s Server CA
+
+From your local machine, verify all kubelets are using certificates signed by `k3s-server-ca`:
+
+```bash
+# Get node IPs
+kubectl get nodes -o wide
+
+# Check each node's kubelet certificate
+openssl s_client -connect <NODE_IP>:10250 -showcerts </dev/null 2>/dev/null \
+  | openssl x509 -noout -issuer -subject
+```
+
+**Expected Output:**
+
+```bash
+# For k3s-server (192.168.31.4):
+issuer=CN=k3s-server-ca@1766981001
+subject=CN=k3s-server
+
+# For k3s-agent-1 (192.168.31.5):
+issuer=CN=k3s-server-ca@1766981001
+subject=CN=k3s-agent-1
+
+# For k3s-agent-2 (192.168.31.6):
+issuer=CN=k3s-server-ca@1766981001
+subject=CN=k3s-agent-2
+```
+
+**✅ What This Confirms:**
+
+- All kubelet certificates are signed by `k3s-server-ca`
+- This proves that `/var/lib/rancher/k3s/agent/server-ca.crt` is the correct CA file
+- NOT `client-ca.crt` (which is for verifying client certificates)
+
+---
+
+##### Step 2: Verify Subject Alternative Names (SANs)
+
+TLS verification succeeds only if the address Alloy connects to matches a SAN in the certificate. Check what SANs are present:
+
+```bash
+# Check SAN for each node
+openssl s_client -connect <NODE_IP>:10250 </dev/null 2>/dev/null \
+  | openssl x509 -noout -text \
+  | grep -A2 "Subject Alternative Name"
+```
+
+**Expected Output:**
+
+```bash
+# For k3s-server (192.168.31.4):
+X509v3 Subject Alternative Name:
+    DNS:k3s-server, DNS:localhost, IP Address:127.0.0.1, IP Address:192.168.31.4
+
+# For k3s-agent-1 (192.168.31.5):
+X509v3 Subject Alternative Name:
+    DNS:k3s-agent-1, DNS:localhost, IP Address:127.0.0.1, IP Address:192.168.31.5
+
+# For k3s-agent-2 (192.168.31.6):
+X509v3 Subject Alternative Name:
+    DNS:k3s-agent-2, DNS:localhost, IP Address:127.0.0.1, IP Address:192.168.31.6
+```
+
+**✅ What This Confirms:**
+
+Each kubelet certificate includes:
+
+- **DNS names:** Node hostname (e.g., `k3s-agent-1`) and `localhost`
+- **IP addresses:** `127.0.0.1` and the node's actual IP (e.g., `192.168.31.5`)
+
+This means TLS verification will succeed when connecting via:
+
+- ✅ Node hostname (DNS match)
+- ✅ Node IP address (IP match)
+- ✅ Localhost (for local connections)
+
+---
+
+##### Step 3: Verify CA File Exists on Nodes
+
+SSH to a node and confirm the CA file exists:
+
+```bash
+# SSH to any node
+ssh kamronbek@192.168.31.x
+
+# Check server-ca.crt exists
+sudo ls -la /var/lib/rancher/k3s/agent/server-ca.crt
+
+# Expected output: 
+# -rw------- 1 root root 570 Jan  6 04:13 /var/lib/rancher/k3s/agent/server-ca.crt
+```
+
+**Also verify the kubelet's server certificate:**
+
+```bash
+# Check serving-kubelet.crt (the cert kubelet presents)
+sudo ls -la /var/lib/rancher/k3s/agent/serving-kubelet.crt
+
+# Expected output:
+# -rw------- 1 root root 1201 Jan  6 04:13 /var/lib/rancher/k3s/agent/serving-kubelet.crt
+```
+
+**✅ What This Confirms:**
+
+- The CA file exists at the path Alloy will use
+- The kubelet has a valid server certificate
+
+---
+
+##### Step 4: Validate Alloy's TLS Configuration
+
+Ensure /host/root is mounted to alloy container:
+
+```yaml
+alloy:
+  mounts:
+    # -- Mount /var/log from the host into the container for log collection.
+    varlog: true
+    # -- Mount /var/lib/docker/containers from the host into the container for log
+    # collection.
+    dockercontainers: true
+    # -- Extra volume mounts to add into the Grafana Alloy container. Does not
+    # affect the watch container.
+    extra:
+      - name: rootfs
+        mountPath: /host/root
+        readOnly: true
+        mountPropagation: HostToContainer
+      - name: proc
+        mountPath: /host/proc # Mounted at /host/proc in container
+        readOnly: true
+        mountPropagation: HostToContainer
+      - name: sys
+        mountPath: /host/sys # Mounted at /host/sys in container
+        readOnly: true
+        mountPropagation: HostToContainer
+
+controller:
+  # -- Type of controller to use for deploying Grafana Alloy in the cluster.
+  # Must be one of 'daemonset', 'deployment', or 'statefulset'.
+  type: "daemonset"
+
+  volumes:
+    # -- Extra volumes to add to the Grafana Alloy pod.
+    extra:
+      - name: rootfs
+        hostPath:
+          path: / # Host's /
+          type: Directory
+      - name: proc
+        hostPath:
+          path: /proc # Host's /proc
+          type: Directory
+      - name: sys
+        hostPath:
+          path: /sys # Host's /sys
+          type: Directory
+```
+
+Ensure Alloy uses the correct CA file:
+
+```alloy
+prometheus.scrape "cadvisor" {
+    targets           = discovery.relabel.cadvisor.output
+    job_name          = "cadvisor"
+    scheme            = "https"
+    bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+
+    tls_config {
+        ca_file              = "/host/root/var/lib/rancher/k3s/agent/server-ca.crt"
+        server_name          = env("NODE_NAME")  // Optional if IP included in the SAN
+        insecure_skip_verify = false
+    }
+
+    forward_to = [prometheus.remote_write.default.receiver]
+}
+```
+
+**Key Configuration Points:**
+
+| Field | Value | Reason |
+| ------- | ------- | -------- |
+| `ca_file` | `/host/root/var/lib/rancher/k3s/agent/server-ca.crt` | Kubelet's server cert is signed by this CA |
+| `server_name` | `env("NODE_NAME")` | Validates against DNS name in certificate SAN |
+| `insecure_skip_verify` | `false` | Full TLS verification enabled |
+
+**❌ Common Mistakes:**
+
+- Using `client-ca.crt` instead of `server-ca.crt` → Certificate verification fails
+- Using service account CA with `insecure_skip_verify = false` → Verification fails
+
+---
+
+##### Step 5: Understanding `server_name` Configuration
+
+The `server_name` field controls hostname verification during TLS handshake.
+
+#### Option A: Use Node Hostname (Recommended)
+
+```hcl
+tls_config {
+    ca_file     = "/host/root/var/lib/rancher/k3s/agent/server-ca.crt"
+    server_name = env("NODE_NAME")  // e.g., "k3s-agent-1"
+    insecure_skip_verify = false
+}
+```
+
+**How It Works:**
+
+- Alloy connects to kubelet via IP (e.g., `192.168.31.5:10250`)
+- TLS library validates certificate against `server_name = "k3s-agent-1"`
+- Certificate SAN includes `DNS:k3s-agent-1` → ✅ Match!
+
+#### Option B: Omit `server_name` (Simplest)
+
+```hcl
+tls_config {
+    ca_file     = "/host/root/var/lib/rancher/k3s/agent/server-ca.crt"
+    // server_name is omitted
+    insecure_skip_verify = false
+}
+```
+
+**How It Works:**
+
+- Alloy connects via IP (e.g., `192.168.31.5:10250`)
+- TLS library auto-validates against the IP address
+- Certificate SAN includes `IP Address:192.168.31.5` → ✅ Match!
+
+**Pros:**
+
+- Simpler configuration
+- Still fully secure with proper CA validation
+
+#### Why All Two Options Work
+
+K3s kubelet certificates include **both** DNS names and IP addresses in SANs:
+
+```bash
+DNS:k3s-agent-1, DNS:localhost, IP Address:127.0.0.1, IP Address:192.168.31.5
+```
+
+So TLS validation succeeds whether you:
+
+- Connect by hostname → Matches `DNS:k3s-agent-1`
+- Connect by IP → Matches `IP Address:192.168.31.5`
+
+---
+
+##### Step 6: Test TLS Connection from Alloy Pod
+
+Once Alloy is deployed, verify the connection from inside the pod:
+
+```bash
+# Get Alloy agent pod name
+kubectl get pods -n alloy-agent
+
+# Exec into the pod
+kubectl exec -it -n alloy-agent <pod-name> -- sh
+
+# Test 1: Connection with skip verify (should always work)
+curl -k \
+  -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+  https://$(hostname):10250/metrics/cadvisor 2>&1 | head -20
+```
+
+**Expected Output:**
+
+```bash
+# HELP container_cpu_usage_seconds_total ...
+# TYPE container_cpu_usage_seconds_total counter
+container_cpu_usage_seconds_total{...} 123.45
+```
+
+```bash
+# Test 2: Connection with CA verification (should also work)
+curl --cacert /host/root/var/lib/rancher/k3s/agent/server-ca.crt \
+  -H "Authorization: Bearer $(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+  https://$(hostname):10250/metrics/cadvisor 2>&1 | head -20
+```
+
+**Expected Output:**
+
+```bash
+# HELP container_cpu_usage_seconds_total ...
+# TYPE container_cpu_usage_seconds_total counter
+container_cpu_usage_seconds_total{...} 123.45
+```
+
+**❌ If you see:**
+
+```bash
+SSL certificate problem: unable to get local issuer certificate
+```
+
+→ Wrong CA file or CA file path incorrect
+
+**✅ If you see metrics:** TLS configuration is correct!
+
+---
+
+##### Step 7: Verify Metrics Are Flowing
+
+Check that container metrics are being scraped and stored:
+
+```bash
+# Port-forward to Prometheus
+kubectl port-forward -n prometheus svc/prometheus-server 9090:80
+
+# Open browser: http://localhost:9090
+# Run query:
+container_cpu_usage_seconds_total{job="cadvisor"}
+```
+
+**Expected:**
+
+- Many time series with labels: `namespace`, `pod`, `container`, `node`
+- Metrics updating in real-time
+
+**If no metrics appear:**
+
+1. Check Alloy agent logs:
+
+```bash
+kubectl logs -n alloy-agent -l app.kubernetes.io/name=alloy | grep -i "cadvisor\|error"
+```
+
+1. Look for errors:
+
+```bash
+level=error component=prometheus.scrape.cadvisor msg="scrape failed" err="x509: certificate signed by unknown authority"
+```
+
+→ Wrong CA file (using `client-ca.crt` instead of `server-ca.crt`)
+
+```bash
+level=error component=prometheus.scrape.cadvisor msg="scrape failed" err="x509: certificate is valid for k3s-agent-1, not <wrong-name>"
+```
+
+→ Wrong `server_name` value
+
+```bash
+level=error component=prometheus.scrape.cadvisor msg="scrape failed" err="connection refused"
+```
+
+→ RBAC permissions issue or kubelet not accessible
+
+---
+
+### Summary: Configuration Validation Checklist
+
+✅ **Certificate Chain:**
+
+- [ ] Kubelet certificates signed by `k3s-server-ca@<timestamp>`
+- [ ] Each node has correct subject (CN=node-name)
+
+✅ **Subject Alternative Names:**
+
+- [ ] Each certificate includes node hostname (DNS)
+- [ ] Each certificate includes node IP address (IP)
+- [ ] Both `localhost` and `127.0.0.1` are present
+
+✅ **CA File:**
+
+- [ ] Using `/host/root/var/lib/rancher/k3s/agent/server-ca.crt`
+- [ ] NOT using `client-ca.crt`
+- [ ] File exists on all nodes
+
+✅ **TLS Config:**
+
+- [ ] `ca_file` points to `server-ca.crt`
+- [ ] `server_name` is either `env("NODE_NAME")` or omitted
+- [ ] `insecure_skip_verify = false`
+
+✅ **Connectivity:**
+
+- [ ] Bearer token file exists in pod
+- [ ] RBAC permissions allow access to nodes and metrics
+- [ ] Kubelet is accessible on port 10250
+
+✅ **Metrics:**
+
+- [ ] No errors in Alloy logs
+- [ ] `container_*` metrics appear in Prometheus
+- [ ] Metrics have correct labels (namespace, pod, container, node)
+
+#### 2. Install Gateway (StatefulSet)
+
+```bash
+kubectl create namespace alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap alloy-config \
+  --from-file=config.alloy=infrastructure/charts/alloy/gateway/config.alloy \
+  -n alloy-gateway --dry-run=client -o yaml | kubectl apply -f -
+
+helm upgrade --install alloy-gateway grafana/alloy \
+  -f infrastructure/charts/alloy/gateway/alloy-values.yaml \
+  --namespace alloy-gateway --create-namespace
+
+# or when `alloy.configMap.create: true`
+
+helm upgrade --install alloy-gateway grafana/alloy \
+  --values infrastructure/charts/alloy/gateway/alloy-values.yaml \
+  --set-file alloy.configMap.content=infrastructure/charts/alloy/gateway/config.alloy \
+  --namespace alloy-gateway --create-namespace
+```
+
+Expose
+
+```bash
+kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingress.yaml
+```
+
+### Grafana Alloy Architecture Overview
 
 This document explains the architecture of our observability stack using Grafana Alloy in a Kubernetes environment. We deploy Alloy in two distinct patterns: **DaemonSet** and **StatefulSet**, each serving specific purposes based on the physical constraints and logical requirements of different telemetry signals.
 

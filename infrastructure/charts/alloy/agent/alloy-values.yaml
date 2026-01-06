@@ -83,6 +83,10 @@ alloy:
     initialDelaySeconds: 10
     periodSeconds: 5
 
+rbac:
+  # -- Whether to create RBAC resources for Alloy.
+  create: false
+
 serviceAccount:
   # -- Whether to create a service account for the Grafana Alloy deployment.
   create: true
