@@ -16,7 +16,7 @@ discovery.kubernetes "pods" {
 	}
 }
 
-discovery.relabel "local_pod_log_paths" {
+discovery.relabel "pod_logs" {
 	targets = discovery.kubernetes.pods.targets
 
 	// Construct the path to the log file on the host
@@ -27,6 +27,51 @@ discovery.relabel "local_pod_log_paths" {
 		separator     = "/"
 		replacement   = "/var/log/pods/*_*_$3/$4/*.log"
 	}
+
+	// NEW
+	// Label creation - "__path__" field from "__meta_kubernetes_pod_uid" and "__meta_kubernetes_pod_container_name"
+	// Concatenate values __meta_kubernetes_pod_uid/__meta_kubernetes_pod_container_name.log
+	rule {
+		source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		action        = "replace"
+		target_label  = "__path__"
+		separator     = "/"
+		replacement   = "/var/log/pods/*$1/*.log"
+	}
+
+	// Label creation -  "container_runtime" field from "__meta_kubernetes_pod_container_id"
+	rule {
+		source_labels = ["__meta_kubernetes_pod_container_id"]
+		action        = "replace"
+		target_label  = "tmp_container_runtime"
+		regex         = "^(\\S+):\\/\\/.+$"
+		replacement   = "$1"
+	}
+	// NEW
+
+	// NEW
+	rule {
+		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name"]
+		separator     = "/"
+		target_label  = "job"
+	}
+
+	rule {
+		source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
+		separator     = "/"
+		action        = "replace"
+		replacement   = "/var/log/pods/*$1/*.log" // Tailor this pattern to accurately reflect K8s log path structure
+		target_label  = "__path__"
+	}
+
+	rule {
+		action        = "replace"
+		source_labels = ["__meta_kubernetes_pod_container_id"]
+		regex         = "^(\\w+):\\/\\/.+$"
+		replacement   = "$1"
+		target_label  = "tmp_container_runtime"
+	}
+	// NEW
 
 	// Standard Labels
 	rule {
@@ -66,14 +111,25 @@ discovery.relabel "local_pod_log_paths" {
 	}
 }
 
+// NEW
+local.file_match "pod_logs" {
+	path_targets = discovery.relabel.pod_logs.output
+}
+// NEW
+
 // Read the files directly from disk (Efficient!)
 loki.source.file "pods" {
-	targets    = discovery.relabel.local_pod_log_paths.output
+	targets    = local.file_match.pod_logs.targets
 	forward_to = [loki.process.default.receiver]
 }
 
 loki.process "default" {
 	forward_to = [loki.write.default.receiver]
+
+	stage.drop {
+		older_than          = "1h"
+		drop_counter_reason = "too old"
+	}
 
 	// Tag everything as containerd (since Poddle is on K3s/Cilium)
 	stage.static_labels {
@@ -103,12 +159,12 @@ loki.process "default" {
 	stage.match {
 		selector = "{tmp_container_runtime=\"containerd\"}"
 
-		stage.cri { }
+		stage.cri { } // The CRI stage is designed to parse logs originating from containerd or CRI-O runtimes
 
 		stage.labels {
 			values = {
-				flags  = "",
-				stream = "",
+				flags  = "", // Incorporates 'flags' derived from CRI parsing as a label
+				stream = "", // Incorporates 'stream' (stdout/stderr) from CRI parsing as a label
 			}
 		}
 	}
@@ -116,11 +172,11 @@ loki.process "default" {
 	stage.match {
 		selector = "{tmp_container_runtime=\"docker\"}"
 
-		stage.docker { }
+		stage.docker { } // The Docker stage is adept at parsing logs formatted in Docker's JSON structure
 
 		stage.labels {
 			values = {
-				stream = "",
+				stream = "", // Incorporates 'stream' (stdout/stderr) from Docker parsing as a label
 			}
 		}
 	}
@@ -191,7 +247,9 @@ prometheus.scrape "cadvisor" {
 	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
 	tls_config {
-		ca_file = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+		ca_file   = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+		cert_file = "/path/to/your/client.crt"
+		key_file  = "/path/to/your/client.key"
 
 		// K3s certs often don't validate against the Pod CA perfectly
 		// Disabling verification is safe for internal cluster scraping
