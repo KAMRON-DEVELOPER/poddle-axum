@@ -44,8 +44,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let config = Config::init().await?;
 
-    let filter =
-        EnvFilter::new("users_api=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
+    let filter = EnvFilter::new(format!(
+        "{}=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
+        env!("CARGO_CRATE_NAME")
+    ));
     let timer = LocalTime::new(format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second]"
     ));
@@ -59,6 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .with_timer(timer),
             // .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW),
         )
+        .json()
         .init();
 
     // let rustls_config = build_rustls_config(&config)?;
