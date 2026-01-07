@@ -32,6 +32,7 @@ k8s-openapi.workspace = true
 vaultrs.workspace = true
 vaultrs-login.workspace = true
 futures.workspace = true
+dotenvy.workspace = true
 regex.workspace = true
 redis-macros.workspace = true
 bcrypt = "0.17.1"

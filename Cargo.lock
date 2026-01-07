@@ -4112,6 +4112,7 @@ dependencies = [
  "axum-extra",
  "bcrypt",
  "chrono",
+ "dotenvy",
  "futures",
  "jsonwebtoken",
  "k8s-openapi",

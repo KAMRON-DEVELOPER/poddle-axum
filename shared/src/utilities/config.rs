@@ -514,7 +514,7 @@ where
 
     // Env var
     if let Some(env_key) = env_name
-        && let Ok(val) = std::env::var(env_key)
+        && let Ok(val) = dotenvy::var(env_key)
     {
         if let Ok(parsed) = T::from_str(val.trim()) {
             return Ok(Some(parsed));
