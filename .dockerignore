@@ -1,0 +1,9 @@
+.git
+.gitignore
+.env
+.env.*
+**/.env
+target 
+archive
+infrastructure
+migrations

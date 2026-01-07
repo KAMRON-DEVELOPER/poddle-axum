@@ -40,17 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    match dotenvy::from_filename(".env.production") {
-        Ok(path) => {
-            info!("Loaded .env file from {}", path.display());
-        }
-        Err(dotenvy::Error::Io(ref err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            println!(".env file not found, continuing without it");
-        }
-        Err(e) => {
-            println!("Couldn't load .env file: {}", e);
-        }
-    }
+    shared::utilities::load_service_env();
 
     let config = Config::init().await?;
 
