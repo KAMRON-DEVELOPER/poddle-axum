@@ -1,9 +1,15 @@
 .git
 .gitignore
 .env
-.env.*
 **/.env
-target 
+.env.*
+target
+node_modules
 archive
 infrastructure
 migrations
+*.md
+!README.md
+.vscode
+.idea
+*.log
