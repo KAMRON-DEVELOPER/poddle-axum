@@ -1,3 +1,5 @@
+use opentelemetry_sdk::Resource;
+
 pub mod implementations;
 pub mod models;
 pub mod schemas;
