@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    match dotenvy::dotenv() {
+    match dotenvy::from_filename(".env.production") {
         Ok(path) => {
             info!("Loaded .env file from {}", path.display());
         }
