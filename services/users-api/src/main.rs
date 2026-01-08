@@ -48,19 +48,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "{}=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
         env!("CARGO_CRATE_NAME")
     ));
+
     let timer = LocalTime::new(format_description!(
         "[year]-[month]-[day] [hour]:[minute]:[second]"
     ));
+
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_target(false)
+        .with_file(true)
+        .with_line_number(true)
+        .with_timer(timer);
+
     tracing_subscriber::registry()
         .with(filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(false)
-                .with_file(true)
-                .with_line_number(true)
-                .with_timer(timer),
-            // .with_span_events(tracing_subscriber::fmt::format::FmtSpan::NEW),
-        )
+        .with(fmt_layer)
         .json()
         .init();
 
