@@ -7,13 +7,13 @@ use opentelemetry_sdk::{
 };
 use opentelemetry_semantic_conventions::{
     SCHEMA_URL,
-    attribute::{SERVICE_NAME, SERVICE_VERSION},
+    attribute::{DEPLOYMENT_ENVIRONMENT_NAME, SERVICE_NAME, SERVICE_VERSION},
 };
 use tracing::Level;
 use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::utilities::config::Config;
+use crate::utilities::config::{Config, get_config_value};
 
 pub struct OtelGuard {
     pub tracer_provider: SdkTracerProvider,
@@ -34,11 +34,11 @@ impl Drop for OtelGuard {
 // Create a Resource that captures information about the entity for which telemetry is recorded.
 fn get_resource() -> Resource {
     Resource::builder()
-        .with_service_name(env!("CARGO_PKG_NAME"))
         .with_schema_url(
             [
-                KeyValue::new(SERVICE_NAME, env!("CARGO_CRATE_NAME")),
+                KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
                 KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+                KeyValue::new(DEPLOYMENT_ENVIRONMENT_NAME, "production"),
             ],
             SCHEMA_URL,
         )
@@ -46,11 +46,11 @@ fn get_resource() -> Resource {
 }
 
 // Construct TracerProvider for OpenTelemetryLayer
-fn init_tracer_provider(config: &Config) -> SdkTracerProvider {
+fn init_tracer_provider(otel_exporter_otlp_endpoint: String) -> SdkTracerProvider {
     // Initialize OTLP Trace exporter using gRPC (Tonic)
     let trace_exporter = SpanExporter::builder()
         .with_tonic()
-        .with_endpoint("endpoint")
+        .with_endpoint(otel_exporter_otlp_endpoint)
         .build()
         .expect("Failed to create trace exporter");
 
@@ -69,11 +69,11 @@ fn init_tracer_provider(config: &Config) -> SdkTracerProvider {
 }
 
 // Construct MeterProvider for MetricsLayer
-fn init_meter_provider(config: &Config) -> SdkMeterProvider {
+fn init_metric_provider(otel_exporter_otlp_endpoint: String) -> SdkMeterProvider {
     // Initialize OTLP Metric exporter using gRPC (Tonic)
     let metric_exporter = opentelemetry_otlp::MetricExporter::builder()
         .with_tonic()
-        .with_endpoint(config.opt)
+        .with_endpoint(otel_exporter_otlp_endpoint)
         .build()
         .expect("Failed to create metric exporter");
 
@@ -100,9 +100,24 @@ fn init_meter_provider(config: &Config) -> SdkMeterProvider {
 }
 
 // Initialize tracing-subscriber and return OtelGuard for opentelemetry-related termination processing
-pub fn init_observability(config: &Config) -> Result<OtelGuard, Box<dyn std::error::Error>> {
-    let tracer_provider = init_tracer_provider(config);
-    let metric_provider = init_meter_provider(config);
+pub async fn init_observability() -> Result<OtelGuard, Box<dyn std::error::Error>> {
+    let otel_exporter_otlp_endpoint = get_config_value(
+        "OTEL_EXPORTER_OTLP_ENDPOINT",
+        Some("OTEL_EXPORTER_OTLP_ENDPOINT"),
+        None,
+        Some("https://alloy-gateway.poddle.uz:4317".to_string()),
+    )
+    .await?;
+    // let otel_service_name = get_config_value(
+    //     "OTEL_SERVICE_NAME",
+    //     Some("OTEL_SERVICE_NAME"),
+    //     None,
+    //     format!("{}", env!("CARGO_CRATE_NAME")).into(),
+    // )
+    // .await?;
+
+    let tracer_provider = init_tracer_provider(otel_exporter_otlp_endpoint.clone());
+    let metric_provider = init_metric_provider(otel_exporter_otlp_endpoint);
 
     let tracer = tracer_provider.tracer("tracing-otel-subscriber");
 

@@ -100,6 +100,11 @@ pub struct Config {
     pub client_cert_path: Option<PathBuf>,
     pub client_key: Option<String>,
     pub client_key_path: Option<PathBuf>,
+
+    // OBSERVABILITY
+    pub otel_exporter_otlp_endpoint: String,
+    pub otel_service_name: String,
+    pub environment: String,
 }
 
 impl Config {
@@ -415,6 +420,28 @@ impl Config {
         let pg_ssl_mode =
             get_config_value("ssl_mode", Some("SSL_MODE"), None, Some(PgSslMode::Disable)).await?;
 
+        let otel_exporter_otlp_endpoint = get_config_value(
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            Some("OTEL_EXPORTER_OTLP_ENDPOINT"),
+            None,
+            Some("https://alloy-gateway.poddle.uz:4317".to_string()),
+        )
+        .await?;
+        let otel_service_name = get_config_value(
+            "OTEL_SERVICE_NAME",
+            Some("OTEL_SERVICE_NAME"),
+            None,
+            format!("{}", env!("CARGO_CRATE_NAME")).into(),
+        )
+        .await?;
+        let environment = get_config_value(
+            "ENVIRONMENT",
+            Some("ENVIRONMENT"),
+            None,
+            Some(String::from("development")),
+        )
+        .await?;
+
         let config = Config {
             k8s_in_cluster,
             k8s_config_path,
@@ -476,6 +503,10 @@ impl Config {
             client_key_path: Some(client_key_path),
             client_key,
             pg_ssl_mode,
+
+            otel_exporter_otlp_endpoint,
+            otel_service_name,
+            environment,
         };
 
         Ok(config)

@@ -115,8 +115,10 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "grpc-tonic",
     "gzip-tonic",
 ] }
-# Semantic conventions for consistent attribute naming
-opentelemetry-semantic-conventions = "0.31.0"
+# Semantic conventions for consistent attribute naming 
+opentelemetry-semantic-conventions = { version = "0.31.0", features = [
+    "semconv_experimental",
+] }
 # The tracing ecosystem for instrumentation
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = [
