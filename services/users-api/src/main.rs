@@ -40,9 +40,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    shared::utilities::load_service_env();
-
+    shared::utilities::load_service_env::load_service_env();
     let config = Config::init().await?;
+    shared::utilities::observability::init_observability(&config);
 
     let filter = EnvFilter::new(format!(
         "{}=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",

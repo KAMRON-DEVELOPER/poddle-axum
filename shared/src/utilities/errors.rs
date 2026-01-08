@@ -205,7 +205,7 @@ pub enum AppError {
 }
 
 impl IntoResponse for AppError {
-    pub fn kind(&self) -> ErrorKind {}
+    // pub fn kind(&self) -> ErrorKind {}
 
     fn into_response(self) -> Response {
         let (status, error_message) = match self {

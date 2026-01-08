@@ -106,12 +106,18 @@ kcr_secrets_hashicorp_com = "2.20250929.104855"
 k8s-crds-cert-manager = "1.19.1"
 k8s-crds-traefik = "3.6.0"
 # observability
+# Core OpenTelemetry APIs and SDK
 opentelemetry = "0.31.0"
-opentelemetry_sdk = "0.31.0"
-opentelemetry-otlp = "0.31.0"
+opentelemetry_sdk = { version = "0.31.0", features = ["rt-tokio", "logs"] }
+# OTLP exporter for sending data to collectors
+opentelemetry-otlp = { version = "0.31.0", features = [
+    "tonic",
+    "grpc-tonic",
+    "gzip-tonic",
+] }
+# Semantic conventions for consistent attribute naming
 opentelemetry-semantic-conventions = "0.31.0"
-axum-tracing-opentelemetry = "0.32.2"
-tracing-opentelemetry = "0.32.0"
+# The tracing ecosystem for instrumentation
 tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = [
     "env-filter",
@@ -120,4 +126,5 @@ tracing-subscriber = { version = "0.3.20", features = [
     "std",
     "time",
 ] }
-log = "0.4.29"
+# Integration between the tracing crate and the opentelemetry crate
+tracing-opentelemetry = "0.32.0"

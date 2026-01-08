@@ -1,106 +1,129 @@
-use std::env;
+use opentelemetry::{KeyValue, global, trace::TracerProvider as _};
+use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+use opentelemetry_sdk::{
+    Resource,
+    metrics::{PeriodicReader, SdkMeterProvider},
+    trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
+};
+use opentelemetry_semantic_conventions::{
+    SCHEMA_URL,
+    attribute::{SERVICE_NAME, SERVICE_VERSION},
+};
+use tracing::Level;
+use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use opentelemetry_sdk::Resource;
+use crate::utilities::config::Config;
 
-pub struct ObservabilityConfig {
-    pub service_name: String,
-    pub service_version: String,
-    pub otlp_endpoint: String,
-    pub environment: String,
-    pub log_level: String,
+pub struct OtelGuard {
+    pub tracer_provider: SdkTracerProvider,
+    pub metric_provider: SdkMeterProvider,
 }
 
-impl ObservabilityConfig {
-    pub fn from_env(service_name: &str) -> Result<Self, std::env::VarError> {
-        Ok(Self {
-            service_name: service_name.to_string(),
-            service_version: env::var("SERVICE_VERSION").unwrap_or_else(|_| "0.1.0".to_string()),
-            otlp_endpoint: env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-                .unwrap_or_else(|_| "http://localhost:4317".to_string()),
-            environment: env::var("ENVIRONMENT").unwrap_or_else(|_| "development".to_string()),
-            log_level: env::var("RUST_LOG")
-                .unwrap_or_else(|_| format!("{}=debug,shared=debug", service_name)),
-        })
+impl Drop for OtelGuard {
+    fn drop(&mut self) {
+        if let Err(err) = self.tracer_provider.shutdown() {
+            eprintln!("{err:?}");
+        }
+        if let Err(err) = self.metric_provider.shutdown() {
+            eprintln!("{err:?}");
+        }
     }
 }
 
-pub fn init_observability(config: ObservabilityConfig) -> Result<(), Box<dyn std::error::Error>> {
-    // Create resource with service metadata
-    let resource = Resource::new(vec![
-        KeyValue::new("service.name", config.service_name.clone()),
-        KeyValue::new("service.version", config.service_version),
-        KeyValue::new("deployment.environment", config.environment),
-    ]);
-
-    // Configure OpenTelemetry tracer
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(
-            opentelemetry_otlp::new_exporter()
-                .tonic()
-                .with_endpoint(&config.otlp_endpoint),
+// Create a Resource that captures information about the entity for which telemetry is recorded.
+fn get_resource() -> Resource {
+    Resource::builder()
+        .with_service_name(env!("CARGO_PKG_NAME"))
+        .with_schema_url(
+            [
+                KeyValue::new(SERVICE_NAME, env!("CARGO_CRATE_NAME")),
+                KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+            ],
+            SCHEMA_URL,
         )
-        .with_trace_config(
-            trace::Config::default()
-                .with_sampler(Sampler::ParentBased(Box::new(Sampler::TraceIdRatioBased(
-                    1.0,
-                ))))
-                .with_id_generator(RandomIdGenerator::default())
-                .with_resource(resource),
-        )
-        .install_batch(opentelemetry_sdk::runtime::Tokio)?;
+        .build()
+}
 
-    // Create telemetry layer
-    let telemetry_layer =
-        tracing_opentelemetry::layer().with_tracer(tracer.tracer(config.service_name.clone()));
+// Construct TracerProvider for OpenTelemetryLayer
+fn init_tracer_provider(config: &Config) -> SdkTracerProvider {
+    // Initialize OTLP Trace exporter using gRPC (Tonic)
+    let trace_exporter = SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint("endpoint")
+        .build()
+        .expect("Failed to create trace exporter");
 
-    // Environment filter for logs
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level));
+    // Create a tracer provider with the exporter
+    let tracer_provider = SdkTracerProvider::builder()
+        .with_id_generator(RandomIdGenerator::default())
+        .with_batch_exporter(trace_exporter)
+        .with_sampler(Sampler::AlwaysOn)
+        .with_resource(get_resource())
+        .build();
 
-    // Console formatting layer (for local development)
-    let fmt_layer = tracing_subscriber::fmt::layer()
-        .with_target(false)
-        .with_file(true)
-        .with_line_number(true)
-        .with_filter(env_filter);
+    // Set it as the global provider
+    global::set_tracer_provider(tracer_provider.clone());
 
-    // Initialize subscriber with multiple layers
+    tracer_provider
+}
+
+// Construct MeterProvider for MetricsLayer
+fn init_meter_provider(config: &Config) -> SdkMeterProvider {
+    // Initialize OTLP Metric exporter using gRPC (Tonic)
+    let metric_exporter = opentelemetry_otlp::MetricExporter::builder()
+        .with_tonic()
+        .with_endpoint(config.opt)
+        .build()
+        .expect("Failed to create metric exporter");
+
+    let reader = PeriodicReader::builder(metric_exporter)
+        .with_interval(std::time::Duration::from_secs(30))
+        .build();
+
+    // let metric_provider = MeterProviderBuilder::default()
+    //     .with_periodic_exporter(metric_exporter)
+    //     .with_resource(get_resource())
+    //     .with_reader(reader)
+    //     .build();
+
+    // Create a metric provider with the OTLP Metric exporter
+    let metric_provider = SdkMeterProvider::builder()
+        // .with_periodic_exporter(metric_exporter)
+        .with_resource(get_resource())
+        .with_reader(reader)
+        .build();
+
+    global::set_meter_provider(metric_provider.clone());
+
+    metric_provider
+}
+
+// Initialize tracing-subscriber and return OtelGuard for opentelemetry-related termination processing
+pub fn init_observability(config: &Config) -> Result<OtelGuard, Box<dyn std::error::Error>> {
+    let tracer_provider = init_tracer_provider(config);
+    let metric_provider = init_meter_provider(config);
+
+    let tracer = tracer_provider.tracer("tracing-otel-subscriber");
+
     tracing_subscriber::registry()
-        .with(telemetry_layer)
-        .with(fmt_layer)
+        // The global level filter prevents the exporter network stack
+        // from reentering the globally installed OpenTelemetryLayer with
+        // its own spans while exporting, as the libraries should not use
+        // tracing levels below DEBUG. If the OpenTelemetry layer needs to
+        // trace spans and events with higher verbosity levels, consider using
+        // per-layer filtering to target the telemetry layer specifically,
+        // e.g. by target matching.
+        .with(tracing_subscriber::filter::LevelFilter::from_level(
+            Level::INFO,
+        ))
+        .with(tracing_subscriber::fmt::layer())
+        .with(MetricsLayer::new(metric_provider.clone()))
+        .with(OpenTelemetryLayer::new(tracer))
         .init();
 
-    Ok(())
-}
-
-pub fn shutdown_observability() {
-    global::shutdown_tracer_provider();
-}
-
-// Instrumentation helper macros
-#[macro_export]
-macro_rules! trace_error {
-    ($err:expr) => {{
-        let error = &$err;
-        tracing::error!(
-            error = %error,
-            error_type = std::any::type_name_of_val(error),
-            "Error occurred"
-        );
-        error
-    }};
-}
-
-pub trait ErrorTracing {
-    fn trace_err(self) -> Self;
-}
-
-impl<T, E: std::fmt::Display> ErrorTracing for Result<T, E> {
-    fn trace_err(self) -> Self {
-        if let Err(ref e) = self {
-            tracing::error!(error = %e, "Operation failed");
-        }
-        self
-    }
+    Ok(OtelGuard {
+        tracer_provider,
+        metric_provider,
+    })
 }
