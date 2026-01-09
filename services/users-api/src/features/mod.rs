@@ -11,7 +11,7 @@ use axum::{
     routing::{get, post},
 };
 
-pub fn routes() -> Router<AppState> {
+pub fn get_routes() -> Router<AppState> {
     Router::new()
         .route(
             "/api/v1/profile",

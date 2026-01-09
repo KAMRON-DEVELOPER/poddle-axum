@@ -50,3 +50,4 @@ opentelemetry-semantic-conventions.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 tracing-opentelemetry.workspace = true
+time.workspace = true

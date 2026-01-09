@@ -3,8 +3,6 @@ use tracing::{info, warn};
 
 pub fn load_service_env() -> () {
     // CARGO_MANIFEST_DIR is baked at COMPILE time.
-    // In Dev: It points to "services/users-api.
-    // In Prod: It points to a path that likely doesn't exist in the container.
     let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
 
     let env = std::env::var("APP_ENV").unwrap_or_else(|_| "development".into());

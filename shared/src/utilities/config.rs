@@ -5,15 +5,19 @@ use std::{
 };
 
 use sqlx::postgres::PgSslMode;
+use std::net::SocketAddr;
 use tokio::fs;
-use tracing::{Level, warn};
+use tracing::{Level, info, warn};
 
 use crate::utilities::errors::AppError;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub server_address: String,
+    pub server_address: SocketAddr,
     pub frontend_endpoint: String,
+
+    pub base_dir: PathBuf,
+    pub tracing_level: Level,
 
     pub domain: String,
     pub traefik_namespace: String,
@@ -39,9 +43,6 @@ pub struct Config {
     pub vault_skip_tls_verify: bool,
 
     pub prometheus_url: String,
-
-    pub base_dir: PathBuf,
-    pub tracing_level: Level,
 
     // DATABASE
     pub pg_ssl_mode: PgSslMode,
@@ -103,12 +104,41 @@ pub struct Config {
 
     // OBSERVABILITY
     pub otel_exporter_otlp_endpoint: String,
-    pub otel_service_name: String,
+    pub cargo_pkg_name: String,
+    pub cargo_pkg_version: String,
     pub environment: String,
 }
 
 impl Config {
     pub async fn init() -> Result<Self, AppError> {
+        let socket_addr: SocketAddr = "0.0.0.0:8000"
+            .parse()
+            .expect("Invalid default socket address");
+        let server_address = get_config_value(
+            "SERVER_ADDRES",
+            Some("SERVER_ADDRES"),
+            None,
+            Some(socket_addr),
+        )
+        .await?;
+
+        let frontend_endpoint = get_config_value(
+            "FRONTEND_ENDPOINT",
+            Some("FRONTEND_ENDPOINT"),
+            None,
+            Some("http://localhost:5173".to_string()),
+        )
+        .await?;
+
+        let base_dir = find_project_root().unwrap_or_else(|| PathBuf::from("."));
+        let tracing_level = get_config_value(
+            "TRACING_LEVEL",
+            Some("TRACING_LEVEL"),
+            None,
+            Some(Level::DEBUG),
+        )
+        .await?;
+
         let k8s_config_path =
             get_optional_config_value("K8S_KUBECONFIG", Some("K8S_KUBECONFIG"), None).await?;
         let k8s_in_cluster =
@@ -214,34 +244,6 @@ impl Config {
             Some("WILDCARD_CERTIFICATE_SECRET_NAME"),
             None,
             None,
-        )
-        .await?;
-
-        let server_addres = get_config_value(
-            "SERVER_ADDRES",
-            Some("SERVER_ADDRES"),
-            None,
-            Some("0.0.0.0:8001".to_string()),
-        )
-        .await?;
-
-        let frontend_endpoint = get_config_value(
-            "FRONTEND_ENDPOINT",
-            Some("FRONTEND_ENDPOINT"),
-            None,
-            Some("http://localhost:5173".to_string()),
-        )
-        .await?;
-
-        let base_dir = find_project_root().unwrap_or_else(|| PathBuf::from("."));
-
-        let debug = get_config_value("DEBUG", Some("DEBUG"), None, Some(false)).await?;
-
-        let tracing_level = get_config_value(
-            "TRACING_LEVEL",
-            Some("TRACING_LEVEL"),
-            None,
-            Some(Level::DEBUG),
         )
         .await?;
 
@@ -427,11 +429,18 @@ impl Config {
             Some("https://alloy-gateway.poddle.uz:4317".to_string()),
         )
         .await?;
-        let otel_service_name = get_config_value(
+        let cargo_pkg_name = get_config_value(
             "OTEL_SERVICE_NAME",
             Some("OTEL_SERVICE_NAME"),
             None,
-            format!("{}", env!("CARGO_CRATE_NAME")).into(),
+            format!("{}", env!("CARGO_PKG_NAME")).into(),
+        )
+        .await?;
+        let cargo_pkg_version = get_config_value(
+            "OTEL_SERVICE_VERSION",
+            Some("OTEL_SERVICE_VERSION"),
+            None,
+            format!("{}", env!("CARGO_PKG_VERSION")).into(),
         )
         .await?;
         let environment = get_config_value(
@@ -443,6 +452,10 @@ impl Config {
         .await?;
 
         let config = Config {
+            server_address,
+            frontend_endpoint,
+            base_dir,
+            tracing_level,
             k8s_in_cluster,
             k8s_config_path,
             k8s_sa_token,
@@ -461,10 +474,6 @@ impl Config {
             ingress_class_name,
             wildcard_certificate_name,
             wildcard_certificate_secret_name,
-            server_address: server_addres,
-            frontend_endpoint,
-            base_dir,
-            tracing_level,
             prometheus_url,
             database_url,
             redis_url,
@@ -505,7 +514,8 @@ impl Config {
             pg_ssl_mode,
 
             otel_exporter_otlp_endpoint,
-            otel_service_name,
+            cargo_pkg_name,
+            cargo_pkg_version,
             environment,
         };
 
