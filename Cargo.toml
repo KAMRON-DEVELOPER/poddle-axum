@@ -7,10 +7,17 @@ members = [
     "services/compute-api",
     "services/compute-provisioner",
     "services/compute-syncer",
-    "services/ai-orchestrator",
+    "services/ai-orchestrator", "crates/factory",
 ]
 
 resolver = "2"
+
+# [features]
+# default = []
+# postgres = ["sqlx"]
+# redis = ["redis"]
+# k8s = ["kube", "kube-client", "k8s-openapi"]
+# vault = ["vaultrs", "vaultrs-login"]
 
 [workspace.dependencies]
 rustls = { version = "0.23.32", features = ["std", "log", "logging", "ring"] }

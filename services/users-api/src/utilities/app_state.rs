@@ -1,23 +1,25 @@
-use crate::services::{
-    build_oauth::{
-        GithubOAuthClient, GoogleOAuthClient, build_github_oauth_client, build_google_oauth_client,
+use crate::{
+    config::Config,
+    services::{
+        build_oauth::{
+            GithubOAuthClient, GoogleOAuthClient, build_github_oauth_client,
+            build_google_oauth_client,
+        },
+        build_s3::{build_gcs, build_s3},
     },
-    build_s3::{build_gcs, build_s3},
 };
 use axum::extract::FromRef;
 use axum_extra::extract::cookie::Key;
+use factory::factories::{amqp::Amqp, kafka::Kafka, postgres::Postgres, redis::Redis};
 use object_store::{aws::AmazonS3, gcp::GoogleCloudStorage};
 use reqwest::Client;
 use rustls::ClientConfig;
-use shared::{
-    services::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
-    utilities::{config::Config, errors::AppError},
-};
+use shared::utilities::errors::AppError;
 
 #[derive(Clone)]
 pub struct AppState {
     pub rustls_config: Option<ClientConfig>,
-    pub database: Database,
+    pub database: Postgres,
     pub redis: Redis,
     pub amqp: Amqp,
     pub kafka: Kafka,
@@ -30,13 +32,46 @@ pub struct AppState {
     pub gcs: GoogleCloudStorage,
 }
 
+impl AppState {
+    pub async fn init(config: &Config) -> Result<Self, AppError> {
+        // let rustls_config = build_rustls_config(&config)?;
+        let database = Postgres::new(&config).await?;
+        let redis = Redis::new(&config).await?;
+        let amqp = Amqp::new(&config).await?;
+        let kafka = Kafka::new(&config, "users-service-group")?;
+        let key = Key::from(config.cookie_key.as_bytes());
+        let google_oauth_client = build_google_oauth_client(&config)?;
+        let github_oauth_client = build_github_oauth_client(&config)?;
+        let http_client = reqwest::ClientBuilder::new()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?;
+        let s3 = build_s3(&config)?;
+        let gcs = build_gcs(&config)?;
+
+        Ok(Self {
+            rustls_config: None,
+            database,
+            redis,
+            amqp,
+            kafka,
+            config: config.clone(),
+            key,
+            google_oauth_client,
+            github_oauth_client,
+            http_client,
+            s3,
+            gcs,
+        })
+    }
+}
+
 impl FromRef<AppState> for Option<ClientConfig> {
     fn from_ref(state: &AppState) -> Self {
         state.rustls_config.clone()
     }
 }
 
-impl FromRef<AppState> for Database {
+impl FromRef<AppState> for Postgres {
     fn from_ref(state: &AppState) -> Self {
         state.database.clone()
     }
@@ -99,38 +134,5 @@ impl FromRef<AppState> for AmazonS3 {
 impl FromRef<AppState> for GoogleCloudStorage {
     fn from_ref(state: &AppState) -> Self {
         state.gcs.clone()
-    }
-}
-
-impl AppState {
-    pub async fn new(config: &Config) -> Result<Self, AppError> {
-        // let rustls_config = build_rustls_config(&config)?;
-        let database = Database::new(&config).await?;
-        let redis = Redis::new(&config).await?;
-        let amqp = Amqp::new(&config).await?;
-        let kafka = Kafka::new(&config, "users-service-group")?;
-        let key = Key::from(config.cookie_key.as_bytes());
-        let google_oauth_client = build_google_oauth_client(&config)?;
-        let github_oauth_client = build_github_oauth_client(&config)?;
-        let http_client = reqwest::ClientBuilder::new()
-            .redirect(reqwest::redirect::Policy::none())
-            .build()?;
-        let s3 = build_s3(&config)?;
-        let gcs = build_gcs(&config)?;
-
-        Ok(Self {
-            rustls_config: None,
-            database,
-            redis,
-            amqp,
-            kafka,
-            config: config.clone(),
-            key,
-            google_oauth_client,
-            github_oauth_client,
-            http_client,
-            s3,
-            gcs,
-        })
     }
 }

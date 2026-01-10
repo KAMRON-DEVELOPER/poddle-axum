@@ -6,7 +6,7 @@ use std::net::SocketAddr;
 use crate::services::{consumer::start_consumer, vault_service::VaultService};
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
-    services::{amqp::Amqp, database::Database, kubernetes::Kubernetes, redis::Redis},
+    servicesservices::{amqp::Amqp, database::Database, kubernetes::Kubernetes, redis::Redis},
     utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;

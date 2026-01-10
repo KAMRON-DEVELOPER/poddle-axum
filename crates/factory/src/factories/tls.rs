@@ -9,7 +9,13 @@ use rustls::{
 };
 use rustls_pemfile::{Item, read_one};
 
-use crate::utilities::{config::Config, errors::AppError};
+use shared::utilities::{config::Config, errors::AppError};
+
+pub trait TlsConfig {
+    fn ca(&self) -> String;
+    fn client_cert(&self) -> String;
+    fn client_key(&self) -> String;
+}
 
 /// Build TLS client config from Config.
 pub fn build_rustls_config(config: &Config) -> Result<ClientConfig, AppError> {

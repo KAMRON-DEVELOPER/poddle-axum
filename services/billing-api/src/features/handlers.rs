@@ -1,7 +1,7 @@
 use axum::{Json, extract::State, response::IntoResponse};
 use shared::{
     schemas::ListResponse,
-    services::database::Database,
+    servicesservices::database::Database,
     utilities::{errors::AppError, jwt::Claims},
 };
 

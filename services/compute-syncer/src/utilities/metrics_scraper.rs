@@ -2,7 +2,7 @@ use chrono::Utc;
 use prometheus_http_query::Client as PrometheusClient;
 use serde_json::json;
 use shared::schemas::{DeploymentMetrics, MetricSnapshot};
-use shared::services::redis::Redis;
+use shared::servicesservices::redis::Redis;
 use shared::utilities::cache_keys::CacheKeys;
 use shared::utilities::channel_names::ChannelNames;
 use shared::utilities::config::Config;

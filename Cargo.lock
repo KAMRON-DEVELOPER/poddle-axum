@@ -1404,6 +1404,33 @@ dependencies = [
 ]
 
 [[package]]
+name = "factory"
+version = "0.1.0"
+dependencies = [
+ "kube",
+ "lapin",
+ "opentelemetry",
+ "opentelemetry-otlp",
+ "opentelemetry-semantic-conventions",
+ "opentelemetry_sdk",
+ "rdkafka",
+ "redis",
+ "reqwest",
+ "rustls",
+ "rustls-pemfile",
+ "serde",
+ "serde_json",
+ "shared",
+ "sqlx",
+ "time",
+ "tokio-rustls",
+ "tonic",
+ "tracing",
+ "tracing-opentelemetry",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "fastrand"
 version = "2.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5131,6 +5158,7 @@ checksum = "daf8dba3b7eb870caf1ddeed7bc9d2a049f3cfdfae7cb521b087cc33ae4c49da"
 name = "users-api"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
  "axum-core",
  "axum-extra",
@@ -5138,6 +5166,7 @@ dependencies = [
  "chrono",
  "cookie",
  "dotenvy",
+ "factory",
  "infer",
  "lapin",
  "oauth2",

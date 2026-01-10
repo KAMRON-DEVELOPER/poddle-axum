@@ -10,7 +10,7 @@ use futures::Stream;
 use std::convert::Infallible;
 use tokio_stream::StreamExt;
 
-use shared::{services::redis::Redis, utilities::channel_names::ChannelNames};
+use shared::{servicesservices::redis::Redis, utilities::channel_names::ChannelNames};
 use tracing::error;
 use uuid::Uuid;
 

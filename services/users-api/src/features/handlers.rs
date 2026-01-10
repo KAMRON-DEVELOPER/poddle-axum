@@ -12,7 +12,7 @@ use crate::{
 use bcrypt::{DEFAULT_COST, hash};
 use serde_json::{Value, json};
 use shared::{
-    services::{database::Database, zepto::ZeptoMail},
+    servicesservices::{database::Database, zepto::ZeptoMail},
     utilities::{
         config::Config,
         errors::AppError,

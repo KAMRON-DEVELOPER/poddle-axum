@@ -5,8 +5,7 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::producer::FutureProducer;
 use tracing::info;
 
-use crate::utilities::config::Config;
-use crate::utilities::errors::AppError;
+use shared::utilities::{config::Config, errors::AppError};
 
 #[derive(Clone)]
 pub struct Kafka {

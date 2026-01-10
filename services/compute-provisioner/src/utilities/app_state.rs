@@ -2,7 +2,7 @@ use axum::extract::FromRef;
 use reqwest::Client;
 use rustls::ClientConfig;
 use shared::{
-    services::{
+    servicesservices::{
         amqp::Amqp, database::Database, kafka::Kafka, kubernetes::Kubernetes, redis::Redis,
     },
     utilities::config::Config,

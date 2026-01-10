@@ -7,7 +7,7 @@ use axum::{
 };
 use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
 use serde_json::json;
-use shared::{schemas::PodMetrics, services::redis::Redis, utilities::errors::AppError};
+use shared::{schemas::PodMetrics, servicesservices::redis::Redis, utilities::errors::AppError};
 use tokio::time::{self, Duration};
 use uuid::Uuid;
 

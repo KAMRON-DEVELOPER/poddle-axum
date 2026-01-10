@@ -12,7 +12,7 @@ use crate::{
 };
 use axum::{extract::DefaultBodyLimit, http};
 use shared::{
-    services::{database::Database, kubernetes::Kubernetes, redis::Redis},
+    servicesservices::{database::Database, kubernetes::Kubernetes, redis::Redis},
     utilities::{config::Config, errors::AppError},
 };
 use time::macros::format_description;

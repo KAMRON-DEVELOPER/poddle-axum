@@ -1,19 +1,19 @@
 use std::net::SocketAddr;
 
+use super::config::Config;
 use axum::{
     Router,
     extract::{ConnectInfo, DefaultBodyLimit},
     http::{HeaderName, HeaderValue, Method, StatusCode, header},
     response::IntoResponse,
 };
-use shared::utilities::config::Config;
 use shared::utilities::errors::AppError;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{features, utilities::app_state::AppState};
 
 pub async fn app(config: &Config) -> Result<Router, AppError> {
-    let app_state = AppState::new(&config).await?;
+    let app_state = AppState::init(&config).await?;
 
     let cors = CorsLayer::new()
         .allow_origin([

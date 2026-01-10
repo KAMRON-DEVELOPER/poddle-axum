@@ -1,8 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
+use shared::utilities::errors::AppError;
 use tracing::debug;
-
-use crate::utilities::{config::Config, errors::AppError};
 
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
@@ -93,7 +92,7 @@ impl ZeptoMail {
         to_email: String,
         name: String,
         link: String,
-        config: &Config,
+        email_service_api_key: String,
     ) -> Result<(), AppError> {
         debug!("Sending email 1");
         let payload = Payload {
@@ -115,14 +114,12 @@ impl ZeptoMail {
 
         debug!("Sending email to '{}' with email '{}'", name, to_email);
 
-        let api_key = config.email_service_api_key.clone();
-
         let res = self
             .client
             .post(&self.api_url)
             .header("accept", "application/json")
             .header("content-type", "application/json")
-            .header("authorization", api_key)
+            .header("authorization", email_service_api_key)
             .json(&payload)
             .send()
             .await

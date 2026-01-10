@@ -16,12 +16,12 @@ use shared::{
         DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ProjectPageQuery,
         UpdateDeploymentMessage, UpdateDeploymentRequest, UpdateProjectRequest,
     },
-    services::{amqp::Amqp, redis::Redis},
+    servicesservices::{amqp::Amqp, redis::Redis},
     utilities::config::Config,
 };
 use shared::{
     schemas::{ListResponse, Pagination},
-    services::database::Database,
+    servicesservices::database::Database,
     utilities::{errors::AppError, jwt::Claims},
 };
 use tracing::{debug, info, instrument};

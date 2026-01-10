@@ -1,0 +1,27 @@
+[package]
+name = "factory"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+shared = { path = "../../shared" }
+rustls.workspace = true
+lapin.workspace = true
+redis.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+rustls-pemfile.workspace = true
+tokio-rustls.workspace = true
+reqwest.workspace = true
+tonic.workspace = true
+rdkafka.workspace = true
+kube.workspace = true
+time.workspace = true
+opentelemetry.workspace = true
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+opentelemetry-semantic-conventions.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+tracing-opentelemetry.workspace = true

@@ -11,7 +11,7 @@ use axum::{
     response::IntoResponse,
 };
 use shared::{
-    services::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
+    servicesservices::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
     utilities::config::Config,
 };
 use time::macros::format_description;

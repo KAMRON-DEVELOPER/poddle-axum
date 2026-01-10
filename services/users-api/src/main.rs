@@ -1,12 +1,15 @@
 pub mod app;
+pub mod config;
 pub mod features;
 pub mod services;
 pub mod utilities;
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::result::Result::Ok;
 
-use shared::utilities::config::Config;
+use config::Config;
+use factory::factories::observability::Observability;
 
 use tokio::signal;
 use tracing::info;
@@ -17,16 +20,33 @@ async fn main() -> anyhow::Result<()> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    shared::utilities::load_service_env::load_service_env();
-    let config = Config::init().await?;
-    shared::utilities::observability::init_observability(&config);
+    // These are baked at COMPILE time
+    let cargo_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // let cargo_crate_name = env!("CARGO_CRATE_NAME");
+    let cargo_pkg_name = env!("CARGO_PKG_NAME");
+    let cargo_pkg_version = env!("CARGO_PKG_VERSION").into();
+
+    let env_path = cargo_manifest_dir.join(".env");
+
+    // Load service-specific .env
+    dotenvy::from_path(env_path).ok();
+    // Load workspace root .env as fallback
+    dotenvy::dotenv().ok();
+
+    let config = Config::init(cargo_manifest_dir).await?;
+    let _guard = Observability::init(
+        &config.otel_exporter_otlp_endpoint,
+        cargo_pkg_name.clone(),
+        cargo_pkg_version,
+    )
+    .await;
 
     let app = app::app(&config).await?;
     let listener = tokio::net::TcpListener::bind(config.server_address).await?;
 
     info!(
         "🚀 {} service running at {:#?}",
-        config.cargo_pkg_name, config.server_address
+        cargo_pkg_name, config.server_address
     );
     axum::serve(
         listener,

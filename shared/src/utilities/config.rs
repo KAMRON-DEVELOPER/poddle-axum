@@ -104,9 +104,6 @@ pub struct Config {
 
     // OBSERVABILITY
     pub otel_exporter_otlp_endpoint: String,
-    pub cargo_pkg_name: String,
-    pub cargo_pkg_version: String,
-    pub environment: String,
 }
 
 impl Config {
@@ -120,7 +117,7 @@ impl Config {
             None,
             Some(socket_addr),
         )
-        .await?;
+        .await;
 
         let frontend_endpoint = get_config_value(
             "FRONTEND_ENDPOINT",
@@ -128,7 +125,7 @@ impl Config {
             None,
             Some("http://localhost:5173".to_string()),
         )
-        .await?;
+        .await;
 
         let base_dir = find_project_root().unwrap_or_else(|| PathBuf::from("."));
         let tracing_level = get_config_value(
@@ -137,12 +134,12 @@ impl Config {
             None,
             Some(Level::DEBUG),
         )
-        .await?;
+        .await;
 
         let k8s_config_path =
-            get_optional_config_value("K8S_KUBECONFIG", Some("K8S_KUBECONFIG"), None).await?;
+            get_optional_config_value("K8S_KUBECONFIG", Some("K8S_KUBECONFIG"), None).await;
         let k8s_in_cluster =
-            get_config_value("K8S_IN_CLUSTER", Some("K8S_IN_CLUSTER"), None, Some(false)).await?;
+            get_config_value("K8S_IN_CLUSTER", Some("K8S_IN_CLUSTER"), None, Some(false)).await;
         let k8s_sa_token = get_config_value(
             "K8S_SA_TOKEN",
             Some("K8S_SA_TOKEN"),
@@ -151,7 +148,7 @@ impl Config {
             )),
             None,
         )
-        .await?;
+        .await;
 
         let label_selector = get_config_value(
             "LABEL_SELECTOR",
@@ -159,23 +156,23 @@ impl Config {
             None,
             Some("managed-by=poddle".to_string()),
         )
-        .await?;
+        .await;
         let scrape_interval_seconds = get_config_value(
             "SCRAPE_INTERVAL_SECONDS",
             Some("SCRAPE_INTERVAL_SECONDS"),
             None,
             Some(15),
         )
-        .await?;
+        .await;
         let metric_snapshots_to_keep = get_config_value(
             "METRIC_SNAPSHOTS_TO_KEEP",
             Some("METRIC_SNAPSHOTS_TO_KEEP"),
             None,
             Some(240),
         )
-        .await?;
+        .await;
         let cache_ttl_seconds =
-            get_config_value("CACHE_TTL_SECS", Some("CACHE_TTL_SECONDS"), None, Some(90)).await?;
+            get_config_value("CACHE_TTL_SECS", Some("CACHE_TTL_SECONDS"), None, Some(90)).await;
 
         let vault_address = get_config_value(
             "VAULT_ADDR",
@@ -183,35 +180,35 @@ impl Config {
             None,
             Some("http://vault.poddle.uz:8200".to_string()),
         )
-        .await?;
+        .await;
         let vault_auth_mount = get_config_value(
             "VAULT_AUTH_MOUNT",
             Some("VAULT_AUTH_MOUNT"),
             None,
             Some("kubernetes".to_string()),
         )
-        .await?;
+        .await;
         let vault_auth_role = get_config_value(
             "VAULT_AUTH_ROLE",
             Some("VAULT_AUTH_ROLE"),
             None,
             Some("vso".to_string()),
         )
-        .await?;
+        .await;
         let vault_kv_mount = get_config_value(
             "VAULT_KV_MOUNT",
             Some("VAULT_KV_MOUNT"),
             None,
             Some("kvv2".to_string()),
         )
-        .await?;
+        .await;
         let vault_skip_tls_verify = get_config_value(
             "VAULT_SKIP_TLS_VERIFY",
             Some("VAULT_SKIP_TLS_VERIFY"),
             None,
             Some(true),
         )
-        .await?;
+        .await;
 
         let domain = get_config_value(
             "DOMAIN",
@@ -219,33 +216,32 @@ impl Config {
             None,
             Some("poddle.uz".to_string()),
         )
-        .await?;
+        .await;
         let traefik_namespace =
-            get_config_value("TRAEFIK_NAMESPACE", Some("TRAEFIK_NAMESPACE"), None, None).await?;
+            get_config_value("TRAEFIK_NAMESPACE", Some("TRAEFIK_NAMESPACE"), None, None).await;
         let cluster_issuer_name = get_config_value(
             "CLUSTER_ISSUER_NAME",
             Some("CLUSTER_ISSUER_NAME"),
             None,
             None,
         )
-        .await?;
+        .await;
         let ingress_class_name =
-            get_optional_config_value("INGRESS_CLASS_NAME", Some("INGRESS_CLASS_NAME"), None)
-                .await?;
+            get_optional_config_value("INGRESS_CLASS_NAME", Some("INGRESS_CLASS_NAME"), None).await;
         let wildcard_certificate_name = get_config_value(
             "WILDCARD_CERTIFICATE_NAME",
             Some("WILDCARD_CERTIFICATE_NAME"),
             None,
             None,
         )
-        .await?;
+        .await;
         let wildcard_certificate_secret_name = get_config_value(
             "WILDCARD_CERTIFICATE_SECRET_NAME",
             Some("WILDCARD_CERTIFICATE_SECRET_NAME"),
             None,
             None,
         )
-        .await?;
+        .await;
 
         let prometheus_url = get_config_value(
             "PROMETHEUS_URL",
@@ -253,7 +249,7 @@ impl Config {
             None,
             Some("http://prometheus:9090".to_string()),
         )
-        .await?;
+        .await;
 
         let database_url = get_config_value(
             "DATABASE_URL",
@@ -261,7 +257,7 @@ impl Config {
             None,
             Some("postgresql://postgres:password@localhost:5432/pinespot_db".to_string()),
         )
-        .await?;
+        .await;
 
         let redis_url = get_config_value(
             "REDIS_URL",
@@ -269,19 +265,19 @@ impl Config {
             None,
             Some("redis://localhost:6379/0".to_string()),
         )
-        .await?;
+        .await;
         let redis_host = get_config_value(
             "REDIS_HOST",
             Some("REDIS_HOST"),
             None,
             Some("localhost".to_string()),
         )
-        .await?;
-        let redis_port = get_config_value("REDIS_PORT", None, None, Some(6379)).await?;
+        .await;
+        let redis_port = get_config_value("REDIS_PORT", None, None, Some(6379)).await;
         let redis_username =
-            get_optional_config_value("REDIS_USERNAME", Some("REDIS_USERNAME"), None).await?;
+            get_optional_config_value("REDIS_USERNAME", Some("REDIS_USERNAME"), None).await;
         let redis_password =
-            get_optional_config_value("REDIS_PASSWORD", Some("REDIS_PASSWORD"), None).await?;
+            get_optional_config_value("REDIS_PASSWORD", Some("REDIS_PASSWORD"), None).await;
 
         let amqp_addr = get_config_value(
             "AMQP_ADDR",
@@ -289,7 +285,7 @@ impl Config {
             None,
             Some("amqp://localhost:5672".to_string()),
         )
-        .await?;
+        .await;
 
         let kafka_bootstrap_servers = get_config_value(
             "KAFKA_BOOTSTRAP_SERVERS",
@@ -297,17 +293,17 @@ impl Config {
             None,
             Some("localhost:9092".to_string()),
         )
-        .await?;
+        .await;
 
         let gcs_bucket_name =
-            get_optional_config_value("GCS_BUCKET_NAME", Some("GCS_BUCKET_NAME"), None).await?;
+            get_optional_config_value("GCS_BUCKET_NAME", Some("GCS_BUCKET_NAME"), None).await;
         let gcp_service_account_path = base_dir.join("certs/service-account.json");
         let gcp_service_account = get_optional_config_value(
             "service_account.json",
             Some("SERVICE_ACCOUNT"),
             Some(&gcp_service_account_path),
         )
-        .await?;
+        .await;
 
         let google_oauth_client_id = get_config_value(
             "GOOGLE_OAUTH_CLIENT_ID",
@@ -315,21 +311,21 @@ impl Config {
             None,
             None,
         )
-        .await?;
+        .await;
         let google_oauth_client_secret = get_config_value(
             "GOOGLE_OAUTH_CLIENT_SECRET",
             Some("GOOGLE_OAUTH_CLIENT_SECRET"),
             None,
             None,
         )
-        .await?;
+        .await;
         let google_oauth_redirect_url = get_config_value(
             "GOOGLE_OAUTH_REDIRECT_URL",
             Some("GOOGLE_OAUTH_REDIRECT_URL"),
             None,
             None,
         )
-        .await?;
+        .await;
 
         let github_oauth_client_id = get_config_value(
             "GITHUB_OAUTH_CLIENT_ID",
@@ -337,64 +333,63 @@ impl Config {
             None,
             None,
         )
-        .await?;
+        .await;
         let github_oauth_client_secret = get_config_value(
             "GITHUB_OAUTH_CLIENT_SECRET",
             Some("GITHUB_OAUTH_CLIENT_SECRET"),
             None,
             None,
         )
-        .await?;
+        .await;
         let github_oauth_redirect_url = get_config_value(
             "GITHUB_OAUTH_REDIRECT_URL",
             Some("GITHUB_OAUTH_REDIRECT_URL"),
             None,
             None,
         )
-        .await?;
+        .await;
 
-        let cookie_key = get_config_value("COOKIE_KEY", Some("COOKIE_KEY"), None, None).await?;
+        let cookie_key = get_config_value("COOKIE_KEY", Some("COOKIE_KEY"), None, None).await;
         let cookie_secure =
-            get_config_value("COOKIE_SECURE", Some("COOKIE_SECURE"), None, None).await?;
+            get_config_value("COOKIE_SECURE", Some("COOKIE_SECURE"), None, None).await;
 
         let s3_access_key_id =
-            get_optional_config_value("S3_ACCESS_KEY_ID", Some("S3_ACCESS_KEY_ID"), None).await?;
+            get_optional_config_value("S3_ACCESS_KEY_ID", Some("S3_ACCESS_KEY_ID"), None).await;
         let s3_secret_key =
-            get_optional_config_value("S3_SECRET_KEY", Some("S3_SECRET_KEY"), None).await?;
-        let s3_endpoint =
-            get_optional_config_value("S3_ENDPOINT", Some("S3_ENDPOINT"), None).await?;
-        let s3_region = get_optional_config_value("S3_REGION", Some("S3_REGION"), None).await?;
+            get_optional_config_value("S3_SECRET_KEY", Some("S3_SECRET_KEY"), None).await;
+        let s3_endpoint = get_optional_config_value("S3_ENDPOINT", Some("S3_ENDPOINT"), None).await;
+        let s3_region = get_optional_config_value("S3_REGION", Some("S3_REGION"), None).await;
         let s3_bucket_name =
-            get_optional_config_value("S3_BUCKET_NAME", Some("S3_BUCKET_NAME"), None).await?;
-        let jwt_secret_key = get_config_value("SECRET_KEY", Some("SECRET_KEY"), None, None).await?;
+            get_optional_config_value("S3_BUCKET_NAME", Some("S3_BUCKET_NAME"), None).await;
+        let jwt_secret_key = get_config_value("SECRET_KEY", Some("SECRET_KEY"), None, None).await;
         let access_token_expire_in_minute = get_config_value(
             "ACCESS_TOKEN_EXPIRE_IN_MINUTE",
             Some("ACCESS_TOKEN_EXPIRE_IN_MINUTE"),
             None,
             None,
         )
-        .await?;
+        .await;
         let refresh_token_expire_in_days = get_config_value(
             "REFRESH_TOKEN_EXPIRE_IN_DAYS",
             Some("REFRESH_TOKEN_EXPIRE_IN_DAYS"),
             None,
             None,
         )
-        .await?;
+        .await;
         let email_verification_token_expire_in_hours = get_config_value(
             "EMAIL_VERIFICATION_TOKEN_EXPIRE_IN_HOURS",
             Some("EMAIL_VERIFICATION_TOKEN_EXPIRE_IN_HOURS"),
             None,
             None,
         )
-        .await?;
+        .await;
         let refresh_token_renewal_threshold_days = get_config_value(
             "REFRESH_TOKEN_RENEWAL_THRESHOLD_DAYS",
             Some("REFRESH_TOKEN_RENEWAL_THRESHOLD_DAYS"),
             None,
             None,
         )
-        .await?;
+        .await;
 
         let email_service_api_key = get_config_value(
             "EMAIL_SERVICE_API_KEY",
@@ -402,25 +397,25 @@ impl Config {
             None,
             None,
         )
-        .await?;
+        .await;
 
         // TLS certs: Docker secrets → fallback path
         let ca_path = base_dir.join("certs/ca/ca.pem");
-        let ca = get_optional_config_value("ca.pem", Some("CA"), Some(&ca_path)).await?;
+        let ca = get_optional_config_value("ca.pem", Some("CA"), Some(&ca_path)).await;
         let client_cert_path = base_dir.join("certs/client/client-cert.pem");
         let client_cert = get_optional_config_value(
             "client-cert.pem",
             Some("CLIENT_CERT"),
             Some(&client_cert_path),
         )
-        .await?;
+        .await;
         let client_key_path = base_dir.join("certs/client/client-key.pem");
         let client_key =
             get_optional_config_value("client-key.pem", Some("CLIENT_KEY"), Some(&client_key_path))
-                .await?;
+                .await;
 
         let pg_ssl_mode =
-            get_config_value("ssl_mode", Some("SSL_MODE"), None, Some(PgSslMode::Disable)).await?;
+            get_config_value("ssl_mode", Some("SSL_MODE"), None, Some(PgSslMode::Disable)).await;
 
         let otel_exporter_otlp_endpoint = get_config_value(
             "OTEL_EXPORTER_OTLP_ENDPOINT",
@@ -428,28 +423,28 @@ impl Config {
             None,
             Some("https://alloy-gateway.poddle.uz:4317".to_string()),
         )
-        .await?;
+        .await;
         let cargo_pkg_name = get_config_value(
             "OTEL_SERVICE_NAME",
             Some("OTEL_SERVICE_NAME"),
             None,
             format!("{}", env!("CARGO_PKG_NAME")).into(),
         )
-        .await?;
+        .await;
         let cargo_pkg_version = get_config_value(
             "OTEL_SERVICE_VERSION",
             Some("OTEL_SERVICE_VERSION"),
             None,
             format!("{}", env!("CARGO_PKG_VERSION")).into(),
         )
-        .await?;
+        .await;
         let environment = get_config_value(
             "ENVIRONMENT",
             Some("ENVIRONMENT"),
             None,
             Some(String::from("development")),
         )
-        .await?;
+        .await;
 
         let config = Config {
             server_address,
@@ -512,11 +507,7 @@ impl Config {
             client_key_path: Some(client_key_path),
             client_key,
             pg_ssl_mode,
-
             otel_exporter_otlp_endpoint,
-            cargo_pkg_name,
-            cargo_pkg_version,
-            environment,
         };
 
         Ok(config)
@@ -539,7 +530,7 @@ pub async fn get_optional_config_value<T>(
     secret_name: &str,
     env_name: Option<&str>,
     fallback_path: Option<&PathBuf>,
-) -> Result<Option<T>, AppError>
+) -> Option<T>
 where
     T: FromStr,
 {
@@ -548,7 +539,7 @@ where
     if docker_secret.exists() {
         if let Ok(content) = fs::read_to_string(&docker_secret).await {
             if let Ok(parsed) = T::from_str(content.trim()) {
-                return Ok(Some(parsed));
+                Some(parsed);
             }
         }
     }
@@ -558,7 +549,7 @@ where
         && let Ok(val) = dotenvy::var(env_key)
     {
         if let Ok(parsed) = T::from_str(val.trim()) {
-            return Ok(Some(parsed));
+            return Some(parsed);
         }
     }
 
@@ -568,12 +559,12 @@ where
     {
         if let Ok(content) = fs::read_to_string(path).await {
             if let Ok(parsed) = T::from_str(content.trim()) {
-                return Ok(Some(parsed));
+                return Some(parsed);
             }
         }
     }
 
-    Ok(None)
+    None
 }
 
 pub async fn get_config_value<T>(
@@ -581,17 +572,14 @@ pub async fn get_config_value<T>(
     env_name: Option<&str>,
     fallback_path: Option<&PathBuf>,
     fallback: Option<T>,
-) -> Result<T, AppError>
+) -> T
 where
     T: FromStr + Clone,
 {
-    if let Some(value) =
-        get_optional_config_value::<T>(secret_name, env_name, fallback_path).await?
+    if let Some(value) = get_optional_config_value::<T>(secret_name, env_name, fallback_path).await
     {
-        return Ok(value);
+        return value;
     }
 
-    fallback.ok_or_else(|| {
-        AppError::EnvironmentVariableNotSetError(env_name.unwrap_or(secret_name).to_string())
-    })
+    fallback.expect(format!("Environment variable {} not set", secret_name).as_str())
 }

@@ -10,7 +10,7 @@ use lapin::{
 };
 use shared::{
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
-    services::{amqp::Amqp, redis::Redis},
+    servicesservices::{amqp::Amqp, redis::Redis},
     utilities::errors::AppError,
 };
 use sqlx::{Pool, Postgres};

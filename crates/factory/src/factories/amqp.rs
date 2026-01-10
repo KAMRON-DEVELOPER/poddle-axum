@@ -8,7 +8,14 @@ use lapin::{
 use serde::Serialize;
 use tracing::info;
 
-use crate::utilities::{config::Config, errors::AppError};
+use shared::utilities::{config::Config, errors::AppError};
+
+use crate::factories::tls::TlsConfig;
+
+pub trait AmqpConfig {
+    fn uri(&self) -> String;
+    fn tls_config(&self) -> impl TlsConfig;
+}
 
 #[derive(Clone)]
 pub struct Amqp {
@@ -18,6 +25,7 @@ pub struct Amqp {
 impl Amqp {
     pub async fn new(config: &Config) -> Result<Self, AppError> {
         let uri = config.amqp_addr.clone();
+
         let options = ConnectionProperties::default();
         let mut tlsconfig = OwnedTLSConfig::default();
 

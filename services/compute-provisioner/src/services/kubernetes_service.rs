@@ -41,7 +41,7 @@ use shared::models::ResourceSpec;
 use shared::schemas::CreateDeploymentMessage;
 use shared::schemas::DeleteDeploymentMessage;
 use shared::schemas::UpdateDeploymentMessage;
-use shared::services::redis::Redis;
+use shared::servicesservices::redis::Redis;
 use shared::utilities::channel_names::ChannelNames;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
