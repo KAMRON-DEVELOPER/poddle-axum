@@ -1,5 +1,7 @@
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
+use bcrypt::BcryptError;
 use serde_json::json;
+use thiserror::Error;
 
 pub enum ErrorKind {
     Internal,
@@ -8,6 +10,116 @@ pub enum ErrorKind {
     Vault,
     Auth,
     Validation,
+}
+
+#[derive(Error, Clone, Debug, PartialEq)]
+pub enum CreateUserError {
+    #[error("invalid email address: {0}")]
+    InvalidEmail(String),
+    #[error("invalid password: {reason}")]
+    InvalidPassword { reason: String },
+    #[error("failed to hash password: {0}")]
+    PasswordHashError(#[from] BcryptError),
+    #[error("user with email address {email} already exists")]
+    UserAlreadyExists { email: String },
+}
+
+pub enum AppError2 {
+    Fatal(FatalError),
+    Infra(InfraError),
+    Domain(DomainError),
+}
+
+#[derive(Error, Debug)]
+pub enum FatalError {}
+
+#[derive(Error, Debug)]
+pub enum InfraError {
+    #[error("database error")]
+    Database(#[from] sqlx::Error),
+
+    #[error("redis error")]
+    Redis(#[from] redis::RedisError),
+}
+
+#[derive(Error, Debug)]
+pub enum DomainError {
+    #[error("Database query error: {0}")]
+    SqlxError(#[from] sqlx::Error),
+
+    // Error for invalid user input (400)
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
+    // Error for unuthorized requests (401)
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    // Error for suthorized but now allowed (403)
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
+    // Error for invalid uesr input (400)
+    #[error("Validation error, {0}")]
+    ValidationError(String),
+
+    // Error for invalid uesr input (400)
+    #[error("Unexpected server error")]
+    Unexpected,
+}
+
+#[derive(Error, Debug)]
+pub enum DomainError {
+    #[error("user not found")]
+    UserNotFound,
+
+    #[error("invalid credentials")]
+    InvalidCredentials,
+
+    #[error("validation failed: {0}")]
+    Validation(String),
+}
+
+pub enum ApiError {
+    Domain(DomainError),
+    Infra(InfraError),
+}
+
+impl IntoResponse for ApiError {
+    fn into_response(self) -> Response {
+        match self {
+            ApiError::Domain(DomainError::UserNotFound) => {
+                (StatusCode::NOT_FOUND, "user not found").into_response()
+            }
+
+            ApiError::Infra(_) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal error").into_response()
+            }
+        }
+    }
+}
+
+impl IntoResponse for DomainError {
+    fn into_response(self) -> Response {
+        let (status, error_message) = match self {
+            DomainError::SqlxError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            DomainError::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
+            DomainError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            DomainError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            DomainError::ValidationError(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            DomainError::Unexpected => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Unexpected server error".into(),
+            ),
+        };
+
+        let body = Json(json!({"error": {
+            "kind": self.to_string(),
+            "message": error_message,
+        }}));
+
+        (status, body).into_response()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]

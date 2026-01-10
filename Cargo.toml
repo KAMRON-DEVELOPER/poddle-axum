@@ -14,6 +14,8 @@ resolver = "2"
 
 [workspace.dependencies]
 rustls = { version = "0.23.32", features = ["std", "log", "logging", "ring"] }
+anyhow = "1.0.100"
+thiserror = "2.0.16"
 tokio = { version = "1.47.1", features = ["full"] }
 axum = { version = "0.8.4", features = ["macros", "multipart", "ws"] }
 axum-core = "0.5.2"
