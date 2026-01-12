@@ -551,6 +551,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "utility",
  "uuid",
  "validator",
 ]
@@ -817,6 +818,7 @@ dependencies = [
  "base64",
  "chrono",
  "dotenvy",
+ "factory",
  "futures",
  "k8s-openapi",
  "kcr_cert_manager_io",
@@ -5168,6 +5170,7 @@ dependencies = [
  "dotenvy",
  "factory",
  "infer",
+ "jsonwebtoken",
  "lapin",
  "oauth2",
  "object_store",
@@ -5181,6 +5184,7 @@ dependencies = [
  "shared",
  "sqlx",
  "sqlx-core",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tokio-rustls",
@@ -5188,8 +5192,21 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "users-core",
+ "utility",
  "uuid",
  "validator",
+]
+
+[[package]]
+name = "users-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "jsonwebtoken",
+ "serde",
+ "thiserror 2.0.17",
+ "uuid",
 ]
 
 [[package]]
@@ -5203,6 +5220,13 @@ name = "utf8_iter"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
+
+[[package]]
+name = "utility"
+version = "0.1.0"
+dependencies = [
+ "tokio",
+]
 
 [[package]]
 name = "uuid"

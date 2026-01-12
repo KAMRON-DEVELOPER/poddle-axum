@@ -1,233 +1,170 @@
-use std::{
-    fs::File,
-    io::{BufReader, Cursor},
-};
-
 use rustls::{
     ClientConfig, RootCertStore,
     pki_types::{CertificateDer, PrivateKeyDer},
 };
 use rustls_pemfile::{Item, read_one};
-
-use shared::utilities::{config::Config, errors::AppError};
+use std::io::BufRead;
+use std::path::PathBuf;
+use std::{
+    fs::File,
+    io::{BufReader, Cursor},
+};
 
 pub trait TlsConfig {
-    fn ca(&self) -> String;
-    fn client_cert(&self) -> String;
-    fn client_key(&self) -> String;
+    fn ca(&self) -> Option<String>;
+    fn ca_path(&self) -> Option<PathBuf>;
+    fn client_cert(&self) -> Option<String>;
+    fn client_cert_path(&self) -> Option<PathBuf>;
+    fn client_key(&self) -> Option<String>;
+    fn client_key_path(&self) -> Option<PathBuf>;
+}
+
+pub struct Tls {
+    pub ca: Option<String>,
+    pub ca_path: Option<PathBuf>,
+    pub client_cert: Option<String>,
+    pub client_cert_path: Option<PathBuf>,
+    pub client_key: Option<String>,
+    pub client_key_path: Option<PathBuf>,
+}
+
+impl TlsConfig for Tls {
+    fn ca(&self) -> Option<String> {
+        self.ca.clone()
+    }
+    fn ca_path(&self) -> Option<PathBuf> {
+        self.ca_path.clone()
+    }
+    fn client_cert(&self) -> Option<String> {
+        self.client_cert.clone()
+    }
+    fn client_cert_path(&self) -> Option<PathBuf> {
+        self.ca_path.clone()
+    }
+    fn client_key(&self) -> Option<String> {
+        self.client_key.clone()
+    }
+    fn client_key_path(&self) -> Option<PathBuf> {
+        self.client_key_path.clone()
+    }
 }
 
 /// Build TLS client config from Config.
-pub fn build_rustls_config(config: &Config) -> Result<ClientConfig, AppError> {
-    let ca: Option<String> = config.ca.clone();
-    let ca_path: Option<std::path::PathBuf> = config.ca_path.clone();
-    let client_cert: Option<String> = config.client_cert.clone();
-    let client_cert_path: Option<std::path::PathBuf> = config.client_cert_path.clone();
-    let client_key: Option<String> = config.client_key.clone();
-    let client_key_path: Option<std::path::PathBuf> = config.client_key_path.clone();
+pub fn build_rustls_config<T: TlsConfig>(config: &T) -> ClientConfig {
+    let ca = config.ca();
+    let ca_path = config.ca_path();
+    let client_cert = config.client_cert();
+    let client_cert_path = config.client_cert_path();
+    let client_key = config.client_key();
+    let client_key_path = config.client_key_path();
 
     if ca.is_none() && ca_path.is_none() {
-        return Err(AppError::MissingTlsCaError);
+        panic!("Missing Tls Ca");
     }
     if client_cert.is_none() && client_cert_path.is_none() {
-        return Err(AppError::MissingTlsCertError);
+        panic!("Missing Tls Cert");
     }
     if client_key.is_none() && client_key_path.is_none() {
-        return Err(AppError::MissingTlsKeyError);
+        panic!("Missing Tls Key");
     }
 
     // --- 1. Load Root CA ---
     let mut root_store: RootCertStore = RootCertStore::empty();
 
-    {
-        // Prefer in-memory string if present
-        if let Some(ca_str) = ca {
-            let mut reader = Cursor::new(ca_str.as_bytes());
+    // Root CA
+    let ca_cert = with_reader(config.ca(), config.ca_path(), "TLS CA", |reader| {
+        read_single_cert(reader)
+    });
 
-            match read_one(&mut reader) {
-                Ok(Some(Item::X509Certificate(cert))) => {
-                    root_store.add(cert)?;
-                }
-                Ok(Some(_)) => {
-                    return Err(AppError::IncompatibleCaCertTypeError(
-                        "Unsupported PEM type for CA cert".to_string(),
-                    ));
-                }
-                Ok(None) => {
-                    return Err(AppError::InvalidCaCertError(
-                        "No certificate found in PEM".to_string(),
-                    ));
-                }
-                Err(e) => {
-                    return Err(AppError::InvalidCaCertError(format!(
-                        "Failed to read PEM: {e}"
-                    )));
-                }
-            }
+    root_store.add(ca_cert).unwrap_or_else(|_| {
+        panic!("Couldn't add root CA to store");
+    });
 
-            // let cert = CertificateDer::from_pem_slice(ca_str.as_bytes())?;
-            // let cert = CertificateDer::from_pem_slice(ca_str.as_bytes())
-            //     .map_err(|e| AppError::InvalidCaCertError(e.to_string()))?;
-            // root_store.add(cert);
-        }
-        // Fallback to filesystem
-        else if let Some(path) = ca_path {
-            let file = File::open(path)?;
-            let mut reader = BufReader::new(file);
+    // Client cert chain
+    let client_certs = with_reader(
+        config.client_cert(),
+        config.client_cert_path(),
+        "TLS client certificate",
+        |reader| read_cert_chain(reader),
+    );
 
-            match read_one(&mut reader) {
-                Ok(Some(Item::X509Certificate(cert))) => {
-                    root_store.add(cert)?;
-                }
-                Ok(Some(_)) => {
-                    return Err(AppError::IncompatibleCaCertTypeError(
-                        "Unsupported PEM type for CA cert".to_string(),
-                    ));
-                }
-                Ok(None) => {
-                    return Err(AppError::InvalidCaCertError(
-                        "No certificate found in PEM".to_string(),
-                    ));
-                }
-                Err(e) => {
-                    return Err(AppError::InvalidCaCertError(format!(
-                        "Failed to read PEM: {e}"
-                    )));
-                }
-            }
-
-            // for cert in rustls_pemfile::certs(&mut reader) {
-            //     let cert = cert?;
-            //     root_store.add(cert)?;
-            // }
-        }
-    }
-
-    // --- 2. Load Client Certificate Chain ---
-    let client_certs: Vec<CertificateDer> = {
-        // Prefer in-memory string if present
-        if let Some(cert_str) = client_cert {
-            let mut reader = Cursor::new(cert_str.as_bytes());
-
-            let mut certs = Vec::new();
-            loop {
-                match read_one(&mut reader) {
-                    Ok(Some(Item::X509Certificate(cert))) => {
-                        certs.push(cert);
-                    }
-                    Ok(Some(_)) => {
-                        return Err(AppError::IncompatibleCaCertTypeError(
-                            "Unsupported PEM type in client certificate".to_string(),
-                        ));
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        return Err(AppError::InvalidCaCertError(format!(
-                            "Failed to read client cert PEM: {e}"
-                        )));
-                    }
-                }
-            }
-
-            if certs.is_empty() {
-                return Err(AppError::InvalidCaCertError(
-                    "No client certificates found in PEM".to_string(),
-                ));
-            }
-            certs
-        }
-        // Fallback to filesystem
-        else if let Some(cert_path) = client_cert_path {
-            let file = File::open(cert_path)?;
-            let mut reader = BufReader::new(file);
-
-            let mut certs = Vec::new();
-            loop {
-                match read_one(&mut reader) {
-                    Ok(Some(Item::X509Certificate(cert))) => {
-                        certs.push(cert);
-                    }
-                    Ok(Some(_)) => {
-                        return Err(AppError::IncompatibleCaCertTypeError(
-                            "Unsupported PEM type in client certificate file".to_string(),
-                        ));
-                    }
-                    Ok(None) => break,
-                    Err(e) => {
-                        return Err(AppError::InvalidCaCertError(format!(
-                            "Failed to read client cert PEM file: {e}"
-                        )));
-                    }
-                }
-            }
-
-            if certs.is_empty() {
-                return Err(AppError::InvalidCaCertError(
-                    "No client certificates found in file".to_string(),
-                ));
-            }
-            certs
-        } else {
-            return Err(AppError::MissingTlsCertError); // Missing client cert
-        }
-    };
-
-    // --- 3. Load Client Private Key ---
-    let client_key: PrivateKeyDer = {
-        if let Some(key_str) = client_key {
-            let mut reader = Cursor::new(key_str.as_bytes());
-            match read_one(&mut reader) {
-                Ok(Some(Item::Pkcs8Key(key))) => PrivateKeyDer::Pkcs8(key),
-                Ok(Some(Item::Pkcs1Key(key))) => PrivateKeyDer::Pkcs1(key),
-                Ok(Some(Item::Sec1Key(key))) => PrivateKeyDer::Sec1(key),
-                Ok(Some(_)) => {
-                    return Err(AppError::IncompatibleClientCertTypeError(
-                        "Unsupported PEM type in client key".to_string(),
-                    ));
-                }
-                Ok(None) => {
-                    return Err(AppError::InvalidClientCertError(
-                        "No private key found in PEM".to_string(),
-                    ));
-                }
-                Err(e) => {
-                    return Err(AppError::InvalidClientCertError(format!(
-                        "Failed to read client key PEM: {e}"
-                    )));
-                }
-            }
-        } else if let Some(key_path) = client_key_path {
-            let file = File::open(key_path)?;
-            let mut reader = BufReader::new(file);
-            match read_one(&mut reader) {
-                Ok(Some(Item::Pkcs8Key(key))) => PrivateKeyDer::Pkcs8(key),
-                Ok(Some(Item::Pkcs1Key(key))) => PrivateKeyDer::Pkcs1(key),
-                Ok(Some(Item::Sec1Key(key))) => PrivateKeyDer::Sec1(key),
-                Ok(Some(_)) => {
-                    return Err(AppError::IncompatibleClientCertTypeError(
-                        "Unsupported PEM type in client key file".to_string(),
-                    ));
-                }
-                Ok(None) => {
-                    return Err(AppError::InvalidClientCertError(
-                        "No private key found in PEM file".to_string(),
-                    ));
-                }
-                Err(e) => {
-                    return Err(AppError::InvalidClientCertError(format!(
-                        "Failed to read client key PEM file: {e}"
-                    )));
-                }
-            }
-        } else {
-            return Err(AppError::MissingTlsKeyError); // Missing client key
-        }
-    };
+    // Client key
+    let client_key = with_reader(
+        config.client_key(),
+        config.client_key_path(),
+        "TLS client key",
+        |reader| read_private_key(reader),
+    );
 
     // --- 4. Build ClientConfig ---
     let client_config = ClientConfig::builder()
         .with_root_certificates(root_store)
-        .with_client_auth_cert(client_certs, client_key)?;
+        .with_client_auth_cert(client_certs, client_key)
+        .unwrap_or_else(|e| {
+            panic!(
+                "Couldn't set client authentication certificate chain, {}",
+                e
+            )
+        });
 
-    Ok(client_config)
+    client_config
+}
+
+fn with_reader<T>(
+    data: Option<String>,
+    path: Option<PathBuf>,
+    context: &str,
+    f: impl FnOnce(&mut dyn BufRead) -> T,
+) -> T {
+    if let Some(data) = data {
+        let mut reader = Cursor::new(data.as_bytes());
+        f(&mut reader)
+    } else if let Some(path) = path {
+        let display = path.clone();
+        let file = File::open(&path)
+            .unwrap_or_else(|e| panic!("Couldn't open {} {:?}: {}", context, display, e));
+        let mut reader = BufReader::new(file);
+        f(&mut reader)
+    } else {
+        panic!("Missing {}", context);
+    }
+}
+
+fn read_single_cert(reader: &mut dyn BufRead) -> CertificateDer<'static> {
+    match read_one(reader) {
+        Ok(Some(Item::X509Certificate(cert))) => cert,
+        Ok(Some(_)) => panic!("Unsupported PEM type for certificate"),
+        Ok(None) => panic!("No certificate found in PEM"),
+        Err(e) => panic!("Failed to read certificate PEM: {}", e),
+    }
+}
+
+fn read_cert_chain(reader: &mut dyn BufRead) -> Vec<CertificateDer<'static>> {
+    let mut certs = Vec::new();
+
+    loop {
+        match read_one(reader) {
+            Ok(Some(Item::X509Certificate(cert))) => certs.push(cert),
+            Ok(Some(_)) => panic!("Unsupported PEM type in certificate chain"),
+            Ok(None) => break,
+            Err(e) => panic!("Failed to read certificate PEM: {}", e),
+        }
+    }
+
+    if certs.is_empty() {
+        panic!("No certificates found in PEM");
+    }
+
+    certs
+}
+
+fn read_private_key(reader: &mut dyn BufRead) -> PrivateKeyDer<'static> {
+    match read_one(reader) {
+        Ok(Some(Item::Pkcs8Key(key))) => PrivateKeyDer::Pkcs8(key),
+        Ok(Some(Item::Pkcs1Key(key))) => PrivateKeyDer::Pkcs1(key),
+        Ok(Some(Item::Sec1Key(key))) => PrivateKeyDer::Sec1(key),
+        Ok(Some(_)) => panic!("Unsupported PEM type for private key"),
+        Ok(None) => panic!("No private key found in PEM"),
+        Err(e) => panic!("Failed to read private key PEM: {}", e),
+    }
 }

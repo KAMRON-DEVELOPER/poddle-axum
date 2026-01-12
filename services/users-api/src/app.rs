@@ -7,7 +7,7 @@ use axum::{
     http::{HeaderName, HeaderValue, Method, StatusCode, header},
     response::IntoResponse,
 };
-use shared::utilities::errors::AppError;
+use crate::error::AppError;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{features, utilities::app_state::AppState};

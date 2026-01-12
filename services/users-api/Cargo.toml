@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 shared = { path = "../../shared" }
 factory = { path = "../../crates/factory" }
+utility = { path = "../../crates/utility" }
+users-core = { path = "../../crates/users-core" }
 rustls.workspace = true
 tokio.workspace = true
 axum.workspace = true
@@ -36,3 +38,5 @@ cookie = "0.18.1"
 infer = "0.19.0"
 oauth2 = "5.0.0"
 object_store = { version = "0.12.4", features = ["gcp", "aws"] }
+thiserror.workspace = true
+jsonwebtoken.workspace = true

@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 shared = { path = "../../shared" }
+utility = {path = "../../crates/utility"}
 rustls.workspace = true
 axum.workspace = true
 chrono.workspace = true

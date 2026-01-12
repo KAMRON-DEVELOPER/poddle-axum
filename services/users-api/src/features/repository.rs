@@ -1,4 +1,4 @@
-use shared::utilities::errors::AppError;
+use crate::error::AppError;
 use sqlx::PgPool;
 use uuid::Uuid;
 

@@ -7,7 +7,9 @@ members = [
     "services/compute-api",
     "services/compute-provisioner",
     "services/compute-syncer",
-    "services/ai-orchestrator", "crates/factory",
+    "services/ai-orchestrator",
+    "crates/factory",
+    "crates/utility", "crates/users-core",
 ]
 
 resolver = "2"
@@ -139,3 +141,4 @@ tracing-subscriber = { version = "0.3.20", features = [
 ] }
 # Integration between the tracing crate and the opentelemetry crate
 tracing-opentelemetry = "0.32.0"
+jsonwebtoken = "9.3.1"

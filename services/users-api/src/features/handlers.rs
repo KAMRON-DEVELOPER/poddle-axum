@@ -1,4 +1,6 @@
 use crate::{
+    config::Config,
+    error::AppError,
     features::{
         models::{OAuthUser, Provider, User, UserRole, UserStatus},
         repository::create_session,
@@ -10,16 +12,10 @@ use crate::{
     services::build_oauth::{GithubOAuthClient, GoogleOAuthClient},
 };
 use bcrypt::{DEFAULT_COST, hash};
+use factory::factories::{database::Database, zepto::ZeptoMail};
 use serde_json::{Value, json};
-use shared::{
-    servicesservices::{database::Database, zepto::ZeptoMail},
-    utilities::{
-        config::Config,
-        errors::AppError,
-        jwt::{Claims, TokenType, create_token, verify_token},
-    },
-};
 use std::net::SocketAddr;
+use users_core::jwt::{TokenType, create_token};
 
 use axum::{
     Json,
@@ -353,7 +349,7 @@ pub async fn continue_with_email_handler(
             user.email.clone(),
             user.username.clone(),
             verification_link,
-            &config,
+            config.email_service_api_key,
         )
         .await
     {

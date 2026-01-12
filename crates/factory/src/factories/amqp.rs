@@ -1,20 +1,16 @@
 use std::sync::Arc;
 
 use lapin::{
-    BasicProperties, Channel, Connection, ConnectionProperties,
-    options::BasicPublishOptions,
-    tcp::{OwnedIdentity, OwnedTLSConfig},
+    BasicProperties, Channel, Connection, ConnectionProperties, options::BasicPublishOptions,
+    tcp::OwnedTLSConfig,
 };
 use serde::Serialize;
+use shared::utilities::errors::AppError;
 use tracing::info;
-
-use shared::utilities::{config::Config, errors::AppError};
-
-use crate::factories::tls::TlsConfig;
 
 pub trait AmqpConfig {
     fn uri(&self) -> String;
-    fn tls_config(&self) -> impl TlsConfig;
+    fn tls_config(&self) -> OwnedTLSConfig;
 }
 
 #[derive(Clone)]
@@ -23,33 +19,27 @@ pub struct Amqp {
 }
 
 impl Amqp {
-    pub async fn new(config: &Config) -> Result<Self, AppError> {
-        let uri = config.amqp_addr.clone();
+    pub async fn new<T: AmqpConfig>(cfg: &T) -> Self {
+        let uri = cfg.uri();
+        let config = cfg.tls_config();
 
         let options = ConnectionProperties::default();
-        let mut tlsconfig = OwnedTLSConfig::default();
 
-        if let (Some(ca), Some(client_cert), Some(client_key)) =
-            (&config.ca, &config.client_cert, &config.client_key)
-        {
-            info!("🔐 AMQP SSL/TLS enabled");
-            tlsconfig.cert_chain = Some(ca.to_string());
-            tlsconfig.identity = Some(OwnedIdentity::PKCS8 {
-                pem: client_cert.clone().into_bytes(),
-                key: client_key.clone().into_bytes(),
-            });
-        }
-
-        let connection = Connection::connect_with_config(&uri, options, tlsconfig).await?;
+        let connection = Connection::connect_with_config(&uri, options, config)
+            .await
+            .expect(format!("Failed to connect to RabbitMQ at {}", uri).as_str());
         info!("✅ RabbitMQ connection established.");
 
-        Ok(Self {
+        Self {
             connection: Arc::new(connection),
-        })
+        }
     }
 
-    pub async fn channel(&self) -> Result<Channel, AppError> {
-        Ok(self.connection.create_channel().await?)
+    pub async fn channel(&self) -> Channel {
+        self.connection
+            .create_channel()
+            .await
+            .expect("Couldn't create channel")
     }
 
     pub async fn basic_publish<T: Serialize>(
@@ -58,7 +48,7 @@ impl Amqp {
         routing_key: &str,
         message: &T,
     ) -> Result<(), AppError> {
-        let channel = self.channel().await?;
+        let channel = self.channel().await;
 
         let payload = serde_json::to_vec(message)?;
 
@@ -88,7 +78,7 @@ impl Amqp {
         message: &T,
         properties: BasicProperties,
     ) -> Result<(), AppError> {
-        let channel = self.channel().await?;
+        let channel = self.channel().await;
 
         let payload = serde_json::to_vec(message)?;
 

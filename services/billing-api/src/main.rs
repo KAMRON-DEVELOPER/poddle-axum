@@ -14,8 +14,7 @@ use shared::{
     servicesservices::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis},
     utilities::config::Config,
 };
-use time::macros::format_description;
-use tokio::signal;
+use time::macros::format_description; 
 use tower_http::{
     cors::CorsLayer,
     trace::{DefaultOnResponse, TraceLayer},
@@ -24,7 +23,7 @@ use tracing::info;
 use tracing_subscriber::{
     EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
-
+use utility::shutdown_signal;
 use crate::utilities::app_state::AppState;
 
 #[tokio::main]
@@ -155,26 +154,3 @@ async fn not_found_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl I
     (StatusCode::NOT_FOUND, "nothing to see here")
 }
 
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
-}

@@ -1,5 +1,6 @@
+use crate::error::AppError;
 use bcrypt::verify;
-use shared::{servicesservices::database::Database, utilities::errors::AppError};
+use factory::factories::database::Database;
 use validator::Validate;
 
 use crate::features::{

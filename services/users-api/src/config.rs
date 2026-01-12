@@ -1,6 +1,8 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use factory::factories::{postgres::PostgresConfig, redis::RedisConfig};
+use factory::factories::tls::Tls;
+use factory::factories::{amqp::AmqpConfig, database::DatabaseConfig, redis::RedisConfig};
+use lapin::tcp::{OwnedIdentity, OwnedTLSConfig};
 use redis::{
     ClientTlsConfig, ConnectionAddr, ConnectionInfo, IntoConnectionInfo, ProtocolVersion,
     RedisConnectionInfo, TlsCertificates,
@@ -9,8 +11,9 @@ use shared::utilities::{
     config::{get_config_value, get_optional_config_value},
     errors::AppError,
 };
-use sqlx::postgres::{PgConnectOptions, PgSslMode};
-use tracing::Level;
+use sqlx::postgres::PgSslMode;
+use tracing::{Level, info};
+use users_core::jwt::JwtConfig;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -20,7 +23,7 @@ pub struct Config {
     pub tracing_level: Level,
 
     // POSTGRES
-    pub postgres_url: String,
+    pub database_url: String,
     pub postgres_pool_size: Option<u32>,
     pub pg_ssl_mode: PgSslMode,
 
@@ -120,7 +123,7 @@ impl Config {
         .await;
 
         let postgres_pool_size =
-            get_optional_config_value("DATABASE_URL", Some("DATABASE_URL"), None).await;
+            get_optional_config_value("DATABASE_POOL_SIZE", Some("DATABASE_POOL_SIZE"), None).await;
 
         let pg_ssl_mode =
             get_config_value("ssl_mode", Some("SSL_MODE"), None, Some(PgSslMode::Disable)).await;
@@ -280,7 +283,7 @@ impl Config {
             server_address,
             frontend_endpoint,
             tracing_level,
-            postgres_url,
+            database_url: postgres_url,
             postgres_pool_size,
             redis_url,
             redis_host,
@@ -326,50 +329,32 @@ impl Config {
 }
 
 // Map your local config to the Factory's needs
-impl PostgresConfig for Config {
-    fn pg_connect_options(&self) -> sqlx::postgres::PgConnectOptions {
-        let mut options: PgConnectOptions =
-            self.postgres_url.parse().expect("Invalid Postgres URL");
+impl DatabaseConfig for Config {
+    type Tls = Tls;
 
-        options = options.ssl_mode(self.pg_ssl_mode);
-
-        // if let Some(ca_path) = self.ca_path {
-        //     if ca_path.exists() {
-        //         options = options.ssl_root_cert(ca_path);
-        //     }
-        // }
-        if let Some(ca) = &self.ca {
-            options = options.ssl_root_cert_from_pem(ca.as_bytes().to_owned());
-        }
-
-        // if let Some(client_cert_path) = self.client_cert_path {
-        //     if client_cert_path.exists() {
-        //         options = options.ssl_client_cert(client_cert_path);
-        //     }
-        // }
-        if let Some(client_cert) = &self.client_cert {
-            options = options.ssl_client_cert_from_pem(client_cert.as_bytes());
-        }
-
-        // if let Some(client_key_path) = self.client_key_path {
-        //     if client_key_path.exists() {
-        //         options = options.ssl_client_key(client_key_path);
-        //     }
-        // }
-        if let Some(client_key) = &self.client_key {
-            options = options.ssl_client_key_from_pem(client_key.as_bytes());
-        }
-
-        options
+    fn database_url(&self) -> String {
+        self.database_url.clone()
     }
-
     fn max_connections(&self) -> u32 {
         self.postgres_pool_size.unwrap_or_default()
+    }
+    fn pg_ssl_mode(&self) -> PgSslMode {
+        self.pg_ssl_mode
+    }
+    fn tls_config(&self) -> Self::Tls {
+        Tls {
+            ca: self.ca.clone(),
+            ca_path: self.ca_path.clone(),
+            client_cert: self.client_cert.clone(),
+            client_cert_path: self.client_cert_path.clone(),
+            client_key: self.client_key.clone(),
+            client_key_path: self.client_key_path.clone(),
+        }
     }
 }
 
 impl RedisConfig for Config {
-    fn connection_info(&self) -> impl redis::IntoConnectionInfo {
+    fn connection_info(&self) -> impl IntoConnectionInfo {
         // Prefer explicit host/port
         if let Some(host) = &self.redis_host
             && let Some(port) = self.redis_port
@@ -412,7 +397,7 @@ impl RedisConfig for Config {
         conn_info
     }
 
-    fn tls_certificates(&self) -> Option<redis::TlsCertificates> {
+    fn tls_certificates(&self) -> Option<TlsCertificates> {
         if let Some(ca) = &self.ca
             && let Some(client_cert) = &self.client_cert
             && let Some(client_key) = &self.client_key
@@ -435,5 +420,48 @@ impl RedisConfig for Config {
         }
 
         None
+    }
+}
+
+impl AmqpConfig for Config {
+    fn uri(&self) -> String {
+        self.amqp_addr.clone()
+    }
+
+    fn tls_config(&self) -> OwnedTLSConfig {
+        let mut config = OwnedTLSConfig::default();
+
+        if let (Some(ca), Some(client_cert), Some(client_key)) = (
+            self.ca.clone(),
+            self.client_cert.clone(),
+            self.client_key.clone(),
+        ) {
+            info!("🔐 AMQP SSL/TLS enabled");
+            config.cert_chain = Some(ca.to_string());
+            config.identity = Some(OwnedIdentity::PKCS8 {
+                pem: client_cert.clone().into_bytes(),
+                key: client_key.clone().into_bytes(),
+            });
+        }
+
+        config
+    }
+}
+
+impl JwtConfig for Config {
+    fn jwt_secret(&self) -> &str {
+        &self.jwt_secret_key
+    }
+
+    fn access_token_expire_in_minute(&self) -> i64 {
+        self.access_token_expire_in_minute
+    }
+
+    fn refresh_token_expire_in_days(&self) -> i64 {
+        self.refresh_token_expire_in_days
+    }
+
+    fn email_verification_token_expire_in_hours(&self) -> i64 {
+        self.email_verification_token_expire_in_hours
     }
 }

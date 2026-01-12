@@ -39,7 +39,7 @@ bcrypt = "0.17.1"
 url = { version = "2.5.7", features = ["serde"] }
 anyhow.workspace = true
 thiserror.workspace = true
-jsonwebtoken = "9.3.1"
+jsonwebtoken.workspace = true
 object_store = { version = "0.12.4", features = ["gcp", "aws"] }
 oauth2 = "5.0.0"
 prometheus-http-query = "0.8.3"
