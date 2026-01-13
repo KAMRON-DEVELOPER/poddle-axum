@@ -13,10 +13,9 @@ use axum_extra::{
     headers::{Authorization, authorization::Bearer},
 };
 
+// Option A: State itself implements JwtConfig
 // impl<S> FromRequestParts<S> for Claims
 // where
-//     // This allows any State that contains a type implementing JwtConfig
-//     // to use this extractor automatically.
 //     S: Send + Sync + JwtConfig,
 // {
 //     type Rejection = JwtError;
@@ -25,11 +24,6 @@ use axum_extra::{
 //             .extract::<TypedHeader<Authorization<Bearer>>>()
 //             .await
 //             .map_err(|_| JwtError::Invalid)?;
-
-//         // Get the config from the generic state
-//         // let config = Box::<dyn JwtConfig>::from_ref(state);
-
-//         // let claims = verify_token(&*config, bearer.token())?;
 
 //         // Since S implements JwtConfig, we pass 'state' directly to verify_token
 //         let claims = verify_token(state, bearer.token())?;
@@ -42,6 +36,7 @@ use axum_extra::{
 //     }
 // }
 
+// Option B: State can produce a JwtConfig via FromRef
 impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,
