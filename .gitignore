@@ -1,6 +1,7 @@
 target
 .env
 .env.*
+certs
 
 # FastEmbed cache
 .fastembed_cache/
