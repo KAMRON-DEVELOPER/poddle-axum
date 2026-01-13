@@ -1,7 +1,7 @@
 pub mod app;
-pub mod claims_extractor;
 pub mod config;
 pub mod error;
+pub mod error_implementations;
 pub mod features;
 pub mod services;
 pub mod utilities;
@@ -13,8 +13,8 @@ use std::result::Result::Ok;
 use config::Config;
 use factory::factories::observability::Observability;
 
-use tokio::signal;
 use tracing::info;
+use utility::shutdown_signal;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -60,26 +60,3 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
-}

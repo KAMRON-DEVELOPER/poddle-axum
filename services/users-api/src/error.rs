@@ -3,7 +3,6 @@ use axum::http::StatusCode;
 use axum_core::response::{IntoResponse, Response};
 use serde_json::json;
 use thiserror::Error;
-use users_core::error::JwtError;
 
 #[derive(Error, Debug)]
 pub enum AppError {
@@ -30,6 +29,19 @@ pub enum AppError {
 
     #[error("Serde json error")]
     SerdejsonError(#[from] serde_json::Error),
+
+    #[error("External service error")]
+    ExternalServiceError {
+        service: String,
+        code: String,
+        message: String,
+    },
+    #[error("Service unavailable error")]
+    ServiceUnavailable(String),
+    #[error("Internal server error")]
+    InternalServerError(String),
+    #[error("Object storage error: {0}")]
+    ObjectStorageError(#[from] object_store::Error),
 
     #[error("Token creation error")]
     TokenCreationError,
@@ -99,17 +111,6 @@ pub enum AppError {
     BcryptError(#[from] bcrypt::BcryptError),
 }
 
-impl From<JwtError> for AppError {
-    fn from(e: JwtError) -> Self {
-        match e {
-            JwtError::Creation => AppError::TokenCreationError,
-            JwtError::Invalid => AppError::InvalidTokenError,
-            JwtError::Expired => AppError::ExpiredTokenError,
-            JwtError::WrongType => AppError::WrongTokenTypeError,
-        }
-    }
-}
-
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, error_message) = match self {
@@ -125,6 +126,23 @@ impl IntoResponse for AppError {
 
             Self::FromRequestPartsError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             Self::SerdejsonError(e) => (StatusCode::UNPROCESSABLE_ENTITY, e.to_string()),
+            Self::ExternalServiceError {
+                service,
+                code,
+                message,
+            } => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!(
+                    "Service error: service-{}, code-{}, message-{}",
+                    service, code, message
+                ),
+            ),
+            Self::ServiceUnavailable(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
+            Self::InternalServerError(msg) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal server error: {}", msg),
+            ),
+            Self::ObjectStorageError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
 
             Self::InvalidTokenError => (
                 StatusCode::INTERNAL_SERVER_ERROR,

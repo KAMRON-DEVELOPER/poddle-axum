@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use crate::{
     config::Config,
     services::{
@@ -14,9 +15,9 @@ use factory::factories::{amqp::Amqp, database::Database, kafka::Kafka, redis::Re
 use object_store::{aws::AmazonS3, gcp::GoogleCloudStorage};
 use reqwest::Client;
 use rustls::ClientConfig;
-use crate::error::AppError;
+use users_core::jwt::JwtConfig;
 
-#[derive(Clone)]
+#[derive(FromRef, Clone)]
 pub struct AppState {
     pub rustls_config: Option<ClientConfig>,
     pub database: Database,
@@ -44,7 +45,8 @@ impl AppState {
         let github_oauth_client = build_github_oauth_client(config);
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
-            .build().unwrap_or_else(|e| {panic!("Couldn't construct http client: {}", e)});
+            .build()
+            .unwrap_or_else(|e| panic!("Couldn't construct http client: {}", e));
         let s3 = build_s3(config);
         let gcs = build_gcs(config);
 
@@ -65,74 +67,92 @@ impl AppState {
     }
 }
 
-impl FromRef<AppState> for Option<ClientConfig> {
-    fn from_ref(state: &AppState) -> Self {
-        state.rustls_config.clone()
+impl JwtConfig for AppState {
+    fn jwt_secret(&self) -> &str {
+        self.config.jwt_secret_key.as_str()
+    }
+
+    fn access_token_expire_in_minute(&self) -> i64 {
+        self.config.access_token_expire_in_minute
+    }
+
+    fn refresh_token_expire_in_days(&self) -> i64 {
+        self.config.refresh_token_expire_in_days
+    }
+
+    fn email_verification_token_expire_in_hours(&self) -> i64 {
+        self.config.email_verification_token_expire_in_hours
     }
 }
 
-impl FromRef<AppState> for Database {
-    fn from_ref(state: &AppState) -> Self {
-        state.database.clone()
-    }
-}
+// impl FromRef<AppState> for Option<ClientConfig> {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.rustls_config.clone()
+//     }
+// }
 
-impl FromRef<AppState> for Redis {
-    fn from_ref(state: &AppState) -> Self {
-        state.redis.clone()
-    }
-}
+// impl FromRef<AppState> for Database {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.database.clone()
+//     }
+// }
 
-impl FromRef<AppState> for Amqp {
-    fn from_ref(state: &AppState) -> Self {
-        state.amqp.clone()
-    }
-}
+// impl FromRef<AppState> for Redis {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.redis.clone()
+//     }
+// }
 
-impl FromRef<AppState> for Option<Kafka> {
-    fn from_ref(state: &AppState) -> Self {
-        state.kafka.clone()
-    }
-}
+// impl FromRef<AppState> for Amqp {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.amqp.clone()
+//     }
+// }
 
-impl FromRef<AppState> for Config {
-    fn from_ref(state: &AppState) -> Self {
-        state.config.clone()
-    }
-}
+// impl FromRef<AppState> for Option<Kafka> {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.kafka.clone()
+//     }
+// }
 
-impl FromRef<AppState> for Key {
-    fn from_ref(state: &AppState) -> Self {
-        state.key.clone()
-    }
-}
+// impl FromRef<AppState> for Config {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.config.clone()
+//     }
+// }
 
-impl FromRef<AppState> for GoogleOAuthClient {
-    fn from_ref(state: &AppState) -> Self {
-        state.google_oauth_client.clone()
-    }
-}
+// impl FromRef<AppState> for Key {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.key.clone()
+//     }
+// }
 
-impl FromRef<AppState> for GithubOAuthClient {
-    fn from_ref(state: &AppState) -> Self {
-        state.github_oauth_client.clone()
-    }
-}
+// impl FromRef<AppState> for GoogleOAuthClient {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.google_oauth_client.clone()
+//     }
+// }
 
-impl FromRef<AppState> for Client {
-    fn from_ref(state: &AppState) -> Self {
-        state.http_client.clone()
-    }
-}
+// impl FromRef<AppState> for GithubOAuthClient {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.github_oauth_client.clone()
+//     }
+// }
 
-impl FromRef<AppState> for AmazonS3 {
-    fn from_ref(state: &AppState) -> Self {
-        state.s3.clone()
-    }
-}
+// impl FromRef<AppState> for Client {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.http_client.clone()
+//     }
+// }
 
-impl FromRef<AppState> for GoogleCloudStorage {
-    fn from_ref(state: &AppState) -> Self {
-        state.gcs.clone()
-    }
-}
+// impl FromRef<AppState> for AmazonS3 {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.s3.clone()
+//     }
+// }
+
+// impl FromRef<AppState> for GoogleCloudStorage {
+//     fn from_ref(state: &AppState) -> Self {
+//         state.gcs.clone()
+//     }
+// }

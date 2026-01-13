@@ -805,6 +805,7 @@ dependencies = [
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "utility",
  "uuid",
  "validator",
 ]
@@ -1424,6 +1425,7 @@ dependencies = [
  "serde_json",
  "shared",
  "sqlx",
+ "thiserror 2.0.17",
  "time",
  "tokio-rustls",
  "tonic",
@@ -5202,9 +5204,12 @@ dependencies = [
 name = "users-core"
 version = "0.1.0"
 dependencies = [
+ "axum",
+ "axum-extra",
  "chrono",
  "jsonwebtoken",
  "serde",
+ "serde_json",
  "thiserror 2.0.17",
  "uuid",
 ]

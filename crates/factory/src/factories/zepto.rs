@@ -1,7 +1,8 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use shared::utilities::errors::AppError;
-use tracing::debug;
+use tracing::{debug, error};
+
+use crate::error::ZeptoError;
 
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
@@ -51,7 +52,7 @@ pub struct ZeptoErrorDetail {
 }
 
 #[derive(Deserialize, Debug)]
-pub struct ZeptoError {
+pub struct ZeptoApiError {
     pub code: String,
     pub message: String,
     pub request_id: String,
@@ -63,7 +64,7 @@ pub struct ZeptoError {
 #[serde(untagged)]
 pub enum ZeptoApiResponse {
     Success(ZeptoResponse),
-    Failure { error: ZeptoError },
+    Failure { error: ZeptoApiError },
 }
 
 // ---------------------------------- ZeptoMail ----------------------------------
@@ -89,11 +90,11 @@ impl ZeptoMail {
 
     pub async fn send_email_verification_link(
         &self,
-        to_email: String,
-        name: String,
-        link: String,
-        email_service_api_key: String,
-    ) -> Result<(), AppError> {
+        to_email: &str,
+        name: &str,
+        link: &str,
+        email_service_api_key: &str,
+    ) -> Result<(), ZeptoError> {
         debug!("Sending email 1");
         let payload = Payload {
             template_alias: "poddle-email-verification-link-key-alias".to_string(),
@@ -104,7 +105,7 @@ impl ZeptoMail {
             to: vec![Recipient {
                 email_address: EmailAddress {
                     address: to_email.to_string(),
-                    name: name.clone(),
+                    name: name.to_string(),
                 },
             }],
             merge_info: serde_json::json!({
@@ -122,30 +123,21 @@ impl ZeptoMail {
             .header("authorization", email_service_api_key)
             .json(&payload)
             .send()
-            .await
-            .map_err(|e| AppError::ZeptoServiceError(format!("ZeptoMail request failed: {}", e)))?;
+            .await?;
 
         let _ = res.status();
         let text = res.text().await?;
 
-        match serde_json::from_str::<ZeptoApiResponse>(&text) {
-            Ok(ZeptoApiResponse::Success(body)) => {
+        let api_response = serde_json::from_str::<ZeptoApiResponse>(&text)?;
+
+        match api_response {
+            ZeptoApiResponse::Success(body) => {
                 debug!("Zepto success: {:?}", body);
                 Ok(())
             }
-            Ok(ZeptoApiResponse::Failure { error }) => {
-                debug!("Zepto error: {:?}", error);
-                Err(AppError::ZeptoServiceError(format!(
-                    "ZeptoMail error: {} - {} ({:?})",
-                    error.code, error.message, error.details
-                )))
-            }
-            Err(err) => {
-                debug!("Failed to parse ZeptoMail response: {:?}", err);
-                Err(AppError::ZeptoServiceError(format!(
-                    "Unexpected ZeptoMail response: {}",
-                    err
-                )))
+            ZeptoApiResponse::Failure { error } => {
+                error!("Zepto error: {:?}", error);
+                Err(ZeptoError::Api { error })
             }
         }
     }

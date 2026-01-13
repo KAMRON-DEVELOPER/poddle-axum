@@ -24,7 +24,7 @@ use tracing::info;
 use tracing_subscriber::{
     EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
-
+use utility::shutdown_signal;
 use crate::utilities::app_state::AppState;
 
 #[tokio::main]
@@ -135,7 +135,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_state(app_state);
 
     info!("🚀 Server running on port {:#?}", config.server_address);
-    let listener = tokio::net::TcpListener::bind("0.0.0.0:8003").await.unwrap();
+    let listener = tokio::net::TcpListener::bind("0.0.0.0:8003").await?;
     // let listener = tokio::net::TcpListener::bind(config.clone().server_addres.clone())
     //     .await
     //     .unwrap();
@@ -144,8 +144,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
-    .await
-    .unwrap();
+    .await?;
 
     Ok(())
 }
@@ -155,26 +154,4 @@ async fn not_found_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl I
     (StatusCode::NOT_FOUND, "nothing to see here")
 }
 
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    #[cfg(not(unix))]
-    let terminate = std::future::pending::<()>();
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
-}
+ 

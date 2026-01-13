@@ -1,4 +1,3 @@
-pub mod jwt;
 use tokio::signal;
 
 pub async fn shutdown_signal() {

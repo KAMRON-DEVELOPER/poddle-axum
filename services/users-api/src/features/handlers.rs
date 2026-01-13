@@ -15,7 +15,7 @@ use bcrypt::{DEFAULT_COST, hash};
 use factory::factories::{database::Database, zepto::ZeptoMail};
 use serde_json::{Value, json};
 use std::net::SocketAddr;
-use users_core::jwt::{TokenType, create_token};
+use users_core::jwt::{Claims, TokenType, create_token, verify_token};
 
 use axum::{
     Json,
@@ -33,7 +33,7 @@ use cookie::{SameSite, time::Duration as CookieDuration};
 use oauth2::{
     AuthorizationCode, CsrfToken, PkceCodeChallenge, PkceCodeVerifier, Scope, TokenResponse,
 };
-use object_store::{ObjectStore, gcp::GoogleCloudStorage, path::Path as ObjectStorePath};
+use object_store::{ObjectStore, aws::AmazonS3, path::Path as ObjectStorePath};
 use reqwest::Client;
 use tracing::debug;
 use uuid::Uuid;
@@ -346,10 +346,10 @@ pub async fn continue_with_email_handler(
 
     match zepto
         .send_email_verification_link(
-            user.email.clone(),
-            user.username.clone(),
-            verification_link,
-            config.email_service_api_key,
+            &user.email,
+            &user.username,
+            &verification_link,
+            &config.email_service_api_key,
         )
         .await
     {
@@ -387,7 +387,7 @@ pub async fn continue_with_email_handler(
         }
         Err(email_error) => {
             tx.rollback().await?;
-            Err(email_error)
+            Err(email_error.into())
         }
     }
 }
@@ -416,7 +416,7 @@ pub async fn verify_handler(
     .await?;
 
     match query_result.rows_affected() {
-        0 => Err(AppError::QueryError(
+        0 => Err(AppError::InternalServerError(
             "User couldn't set to verified".to_string(),
         )),
         _ => {
@@ -471,7 +471,7 @@ pub async fn get_user_handler(
 // -- UPDATE USER
 // -- =====================
 pub async fn update_user_handler(
-    State(gcs): State<GoogleCloudStorage>,
+    State(s3): State<AmazonS3>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
     let mut oauth_user_schema = UserIn {
@@ -505,7 +505,7 @@ pub async fn update_user_handler(
                     })?
                     .extension();
                 let location = ObjectStorePath::from(format!("{}/{}.{}", new_user_id, pic_id, ext));
-                gcs.put(&location, data.into()).await?;
+                s3.put(&location, data.into()).await?;
                 oauth_user_schema.picture = Some(location.to_string());
             }
             _ => {}
