@@ -28,7 +28,7 @@ pub trait JwtConfig {
     fn email_verification_token_expire_in_hours(&self) -> i64;
 }
 
-pub fn create_token<C: JwtConfig>(
+pub fn create_token<C: JwtConfig + ?Sized>(
     cfg: &C,
     user_id: Uuid,
     typ: TokenType,
@@ -55,7 +55,7 @@ pub fn create_token<C: JwtConfig>(
     encode(&Header::new(Algorithm::HS256), &claims, &encoding_key).map_err(|_| JwtError::Creation)
 }
 
-pub fn verify_token<C: JwtConfig>(cfg: &C, token: &str) -> Result<Claims, JwtError> {
+pub fn verify_token<C: JwtConfig + ?Sized>(cfg: &C, token: &str) -> Result<Claims, JwtError> {
     let decoding_key = DecodingKey::from_secret(cfg.jwt_secret().as_bytes());
     decode::<Claims>(token, &decoding_key, &Validation::default())
         .map(|d| d.claims)

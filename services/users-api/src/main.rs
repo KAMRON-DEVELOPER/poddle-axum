@@ -38,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::init(cargo_manifest_dir).await?;
     let _guard = Observability::init(
         &config.otel_exporter_otlp_endpoint,
-        cargo_pkg_name.clone(),
+        cargo_pkg_name,
         cargo_pkg_version,
     )
     .await;
@@ -59,4 +59,3 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
-

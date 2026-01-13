@@ -67,6 +67,12 @@ impl AppState {
     }
 }
 
+impl FromRef<AppState> for Box<dyn JwtConfig> {
+    fn from_ref(state: &AppState) -> Self {
+        Box::new(state.config.clone())
+    }
+}
+
 impl JwtConfig for AppState {
     fn jwt_secret(&self) -> &str {
         self.config.jwt_secret_key.as_str()

@@ -91,8 +91,8 @@ impl Config {
             .parse()
             .expect("Invalid default socket address");
         let server_address = get_config_value(
-            "SERVER_ADDRES",
-            Some("SERVER_ADDRES"),
+            "SERVER_ADDRESS",
+            Some("SERVER_ADDRESS"),
             None,
             Some(socket_addr),
         )
