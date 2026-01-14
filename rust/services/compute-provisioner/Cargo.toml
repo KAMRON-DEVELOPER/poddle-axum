@@ -1,0 +1,40 @@
+[package]
+name = "compute-provisioner"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+factory = { path = "../../crates/factory" }
+rustls.workspace = true
+axum.workspace = true
+chrono.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sqlx.workspace = true
+redis.workspace = true
+lapin.workspace = true
+tokio.workspace = true
+tower-http.workspace = true
+dotenvy.workspace = true
+time.workspace = true
+uuid.workspace = true
+futures.workspace = true
+kube-client.workspace = true
+kube.workspace = true
+k8s-openapi.workspace = true
+schemars.workspace = true
+kcr_cert_manager_io.workspace = true
+kcr_traefik_io.workspace = true
+kcr_secrets_hashicorp_com.workspace = true
+vaultrs.workspace = true
+vaultrs-login.workspace = true
+prometheus-client.workspace = true
+aes-gcm = "0.10.3"
+base64 = "0.22.1"
+
+opentelemetry_sdk.workspace = true
+opentelemetry-otlp.workspace = true
+tracing-opentelemetry.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "users-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+axum.workspace = true
+axum-extra.workspace = true
+thiserror.workspace = true
+jsonwebtoken.workspace = true
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
