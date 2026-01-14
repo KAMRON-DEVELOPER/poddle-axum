@@ -1,16 +1,7 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use factory::factories::tls::Tls;
-use factory::factories::{amqp::AmqpConfig, database::DatabaseConfig, redis::RedisConfig};
-use lapin::tcp::{OwnedIdentity, OwnedTLSConfig};
-use redis::{
-    ClientTlsConfig, ConnectionAddr, ConnectionInfo, IntoConnectionInfo, ProtocolVersion,
-    RedisConnectionInfo, TlsCertificates,
-};
-
 use sqlx::postgres::PgSslMode;
-use tracing::{Level, info};
-use users_core::jwt::JwtConfig;
+use tracing::Level;
 use utility::get_config_value::get_config_value;
 use utility::get_optional_config_value::get_optional_config_value;
 

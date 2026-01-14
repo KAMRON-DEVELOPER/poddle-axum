@@ -1,16 +1,11 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use factory::factories::tls::Tls;
-use factory::factories::{amqp::AmqpConfig, database::DatabaseConfig, redis::RedisConfig};
-use lapin::tcp::{OwnedIdentity, OwnedTLSConfig};
-use redis::{
-    ClientTlsConfig, ConnectionAddr, ConnectionInfo, IntoConnectionInfo, ProtocolVersion,
-    RedisConnectionInfo, TlsCertificates,
-};
-
 use sqlx::postgres::PgSslMode;
-use tracing::{Level, info};
-use users_core::jwt::JwtConfig;
+use tracing::Level;
+use utility::get_config_value::get_config_value;
+use utility::get_optional_config_value::get_optional_config_value;
+
+use crate::error::AppError;
 
 #[derive(Clone, Debug)]
 pub struct Config {
@@ -222,143 +217,5 @@ impl Config {
         };
 
         Ok(config)
-    }
-}
-
-// Map your local config to the Factory's needs
-impl DatabaseConfig for Config {
-    type Tls = Tls;
-
-    fn database_url(&self) -> String {
-        self.database_url.clone()
-    }
-    fn max_connections(&self) -> u32 {
-        self.postgres_pool_size.unwrap_or_default()
-    }
-    fn pg_ssl_mode(&self) -> PgSslMode {
-        self.pg_ssl_mode
-    }
-    fn tls_config(&self) -> Self::Tls {
-        Tls {
-            ca: self.ca.clone(),
-            ca_path: self.ca_path.clone(),
-            client_cert: self.client_cert.clone(),
-            client_cert_path: self.client_cert_path.clone(),
-            client_key: self.client_key.clone(),
-            client_key_path: self.client_key_path.clone(),
-        }
-    }
-}
-
-impl RedisConfig for Config {
-    fn connection_info(&self) -> impl IntoConnectionInfo {
-        // Prefer explicit host/port
-        if let Some(host) = &self.redis_host
-            && let Some(port) = self.redis_port
-        {
-            let conn_info = ConnectionInfo {
-                addr: ConnectionAddr::Tcp(host.to_string(), port),
-                redis: RedisConnectionInfo {
-                    db: 0,
-                    username: self.redis_username.clone(),
-                    password: self.redis_password.clone(),
-                    protocol: ProtocolVersion::RESP3,
-                },
-            };
-
-            return conn_info;
-        }
-
-        // Fallback to URL
-        let mut url = self
-            .redis_url
-            .clone()
-            .expect("Either `REDIS_URL` or `REDIS_HOST`+`REDIS_PORT` must be set");
-
-        // Enforce RESP3
-        if !url.contains("protocol=") {
-            let sep = if url.contains('?') { "&" } else { "?" };
-            url.push_str(sep);
-            url.push_str("protocol=resp3");
-        }
-
-        // Convert URL → ConnectionInfo
-        let mut conn_info = url.into_connection_info().expect("Invalid Redis URL");
-
-        // Ensure credentials override URL if explicitly provided
-        if self.redis_username.is_some() || self.redis_password.is_some() {
-            conn_info.redis.username = self.redis_username.clone();
-            conn_info.redis.password = self.redis_password.clone();
-        }
-
-        conn_info
-    }
-
-    fn tls_certificates(&self) -> Option<TlsCertificates> {
-        if let Some(ca) = &self.ca
-            && let Some(client_cert) = &self.client_cert
-            && let Some(client_key) = &self.client_key
-        {
-            // Structure to hold mTLS client certificate and key binaries in PEM format
-            let client_tls_config = ClientTlsConfig {
-                client_cert: client_cert.as_bytes().to_vec(),
-                client_key: client_key.as_bytes().to_vec(),
-            };
-
-            // Structure to hold TLS certificates
-            // * client_tls: binaries of clientkey and certificate within a ClientTlsConfig structure if mTLS is used
-            // * root_cert: binary CA certificate in PEM format if CA is not in local truststore
-            let tls_certs = TlsCertificates {
-                client_tls: Some(client_tls_config),
-                root_cert: Some(ca.as_bytes().to_vec()),
-            };
-
-            return Some(tls_certs);
-        }
-
-        None
-    }
-}
-
-impl AmqpConfig for Config {
-    fn uri(&self) -> String {
-        self.amqp_addr.clone()
-    }
-
-    fn tls_config(&self) -> OwnedTLSConfig {
-        let mut config = OwnedTLSConfig::default();
-
-        if let (Some(ca), Some(client_cert), Some(client_key)) = (
-            self.ca.clone(),
-            self.client_cert.clone(),
-            self.client_key.clone(),
-        ) {
-            info!("🔐 AMQP SSL/TLS enabled");
-            config.cert_chain = Some(ca.to_string());
-            config.identity = Some(OwnedIdentity::PKCS8 {
-                pem: client_cert.clone().into_bytes(),
-                key: client_key.clone().into_bytes(),
-            });
-        }
-
-        config
-    }
-}
-
-impl JwtConfig for Config {
-    fn jwt_secret(&self) -> &str {
-        &self.jwt_secret_key
-    }
-
-    fn access_token_expire_in_minute(&self) -> i64 {
-        self.access_token_expire_in_minute
-    }
-
-    fn refresh_token_expire_in_days(&self) -> i64 {
-        self.refresh_token_expire_in_days
-    }
-
-    fn email_verification_token_expire_in_hours(&self) -> i64 {
-        self.email_verification_token_expire_in_hours
     }
 }

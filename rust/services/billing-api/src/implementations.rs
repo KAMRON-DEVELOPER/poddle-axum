@@ -3,30 +3,18 @@ use factory::factories::{
     database::DatabaseConfig,
     redis::{RedisConfig, RedisParams},
     tls::Tls,
+    zepto::error::ZeptoError,
 };
 use sqlx::postgres::PgSslMode;
 use users_core::jwt::JwtConfig;
 
 use crate::config::Config;
 
-use users_core::error::JwtError;
-
 use crate::error::AppError;
 
 // -------------------------------------------------------------------------------
 // ---------------------------- Error implementations ----------------------------
 // -------------------------------------------------------------------------------
-
-impl From<JwtError> for AppError {
-    fn from(e: JwtError) -> Self {
-        match e {
-            JwtError::Creation => AppError::TokenCreationError,
-            JwtError::Invalid => AppError::InvalidTokenError,
-            JwtError::Expired => AppError::ExpiredTokenError,
-            JwtError::WrongType => AppError::WrongTokenTypeError,
-        }
-    }
-}
 
 impl From<ZeptoError> for AppError {
     fn from(err: ZeptoError) -> Self {

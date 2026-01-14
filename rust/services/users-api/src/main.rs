@@ -2,7 +2,7 @@ pub mod app;
 pub mod config;
 pub mod error;
 pub mod features;
-pub mod implementation;
+pub mod implementations;
 pub mod services;
 pub mod utilities;
 
