@@ -1,14 +1,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use shared::utilities::config::Config;
-use shared::utilities::errors::AppError;
 use tracing::info;
 use uuid::Uuid;
 use vaultrs::client::{Client, VaultClient, VaultClientSettingsBuilder};
 
 use vaultrs::auth::kubernetes;
 use vaultrs::kv2;
+
+use crate::config::Config;
+use crate::error::AppError;
 
 #[derive(Clone)]
 pub struct VaultService {
@@ -58,7 +59,7 @@ impl VaultService {
         kv2::set(&*self.client, &self.kv_mount, &path, &secrets)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to store secrets in Vault: {}", e))
+                AppError::InternalServerError(format!("Failed to store secrets in Vault: {}", e))
             })?;
 
         Ok(path)
@@ -75,7 +76,7 @@ impl VaultService {
         let secret = kv2::read(&*self.client, &self.kv_mount, &path)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to read secrets from Vault: {}", e))
+                AppError::InternalServerError(format!("Failed to read secrets from Vault: {}", e))
             })?;
 
         Ok(secret)
@@ -93,7 +94,7 @@ impl VaultService {
         kv2::set(&*self.client, &self.kv_mount, &path, &secrets)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to update secrets in Vault: {}", e))
+                AppError::InternalServerError(format!("Failed to update secrets in Vault: {}", e))
             })?;
 
         Ok(())
@@ -110,7 +111,7 @@ impl VaultService {
         kv2::delete_latest(&*self.client, &self.kv_mount, &path)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to delete secrets from Vault: {}", e))
+                AppError::InternalServerError(format!("Failed to delete secrets from Vault: {}", e))
             })?;
 
         Ok(())

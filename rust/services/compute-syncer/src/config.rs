@@ -15,27 +15,12 @@ pub struct Config {
     pub tracing_level: Level,
 
     // KUBERNETES
-    pub domain: String,
-    pub traefik_namespace: String,
-    pub cluster_issuer_name: String,
-    pub ingress_class_name: Option<String>,
-    pub wildcard_certificate_name: String,
-    pub wildcard_certificate_secret_name: String,
-
     pub k8s_in_cluster: bool,
     pub k8s_config_path: Option<String>,
     pub k8s_sa_token: String,
 
-    pub label_selector: String,
     pub scrape_interval_seconds: u64,
     pub metric_snapshots_to_keep: u64,
-    pub cache_ttl_seconds: u64,
-
-    pub vault_address: String,
-    pub vault_auth_mount: String,
-    pub vault_auth_role: String,
-    pub vault_kv_mount: String,
-    pub vault_skip_tls_verify: bool,
 
     pub prometheus_url: String,
 
@@ -145,13 +130,6 @@ impl Config {
         )
         .await;
 
-        let label_selector = get_config_value(
-            "LABEL_SELECTOR",
-            Some("LABEL_SELECTOR"),
-            None,
-            Some("managed-by=poddle".to_string()),
-        )
-        .await;
         let scrape_interval_seconds = get_config_value(
             "SCRAPE_INTERVAL_SECONDS",
             Some("SCRAPE_INTERVAL_SECONDS"),
@@ -164,77 +142,6 @@ impl Config {
             Some("METRIC_SNAPSHOTS_TO_KEEP"),
             None,
             Some(240),
-        )
-        .await;
-        let cache_ttl_seconds =
-            get_config_value("CACHE_TTL_SECS", Some("CACHE_TTL_SECONDS"), None, Some(90)).await;
-
-        let vault_address = get_config_value(
-            "VAULT_ADDR",
-            Some("VAULT_ADDR"),
-            None,
-            Some("http://vault.poddle.uz:8200".to_string()),
-        )
-        .await;
-        let vault_auth_mount = get_config_value(
-            "VAULT_AUTH_MOUNT",
-            Some("VAULT_AUTH_MOUNT"),
-            None,
-            Some("kubernetes".to_string()),
-        )
-        .await;
-        let vault_auth_role = get_config_value(
-            "VAULT_AUTH_ROLE",
-            Some("VAULT_AUTH_ROLE"),
-            None,
-            Some("vso".to_string()),
-        )
-        .await;
-        let vault_kv_mount = get_config_value(
-            "VAULT_KV_MOUNT",
-            Some("VAULT_KV_MOUNT"),
-            None,
-            Some("kvv2".to_string()),
-        )
-        .await;
-        let vault_skip_tls_verify = get_config_value(
-            "VAULT_SKIP_TLS_VERIFY",
-            Some("VAULT_SKIP_TLS_VERIFY"),
-            None,
-            Some(true),
-        )
-        .await;
-
-        let domain = get_config_value(
-            "DOMAIN",
-            Some("DOMAIN"),
-            None,
-            Some("poddle.uz".to_string()),
-        )
-        .await;
-        let traefik_namespace =
-            get_config_value("TRAEFIK_NAMESPACE", Some("TRAEFIK_NAMESPACE"), None, None).await;
-        let cluster_issuer_name = get_config_value(
-            "CLUSTER_ISSUER_NAME",
-            Some("CLUSTER_ISSUER_NAME"),
-            None,
-            None,
-        )
-        .await;
-        let ingress_class_name =
-            get_optional_config_value("INGRESS_CLASS_NAME", Some("INGRESS_CLASS_NAME"), None).await;
-        let wildcard_certificate_name = get_config_value(
-            "WILDCARD_CERTIFICATE_NAME",
-            Some("WILDCARD_CERTIFICATE_NAME"),
-            None,
-            None,
-        )
-        .await;
-        let wildcard_certificate_secret_name = get_config_value(
-            "WILDCARD_CERTIFICATE_SECRET_NAME",
-            Some("WILDCARD_CERTIFICATE_SECRET_NAME"),
-            None,
-            None,
         )
         .await;
 
@@ -418,21 +325,8 @@ impl Config {
             k8s_in_cluster,
             k8s_config_path,
             k8s_sa_token,
-            label_selector,
             scrape_interval_seconds,
             metric_snapshots_to_keep,
-            cache_ttl_seconds,
-            vault_address,
-            vault_auth_mount,
-            vault_auth_role,
-            vault_kv_mount,
-            vault_skip_tls_verify,
-            domain,
-            traefik_namespace,
-            cluster_issuer_name,
-            ingress_class_name,
-            wildcard_certificate_name,
-            wildcard_certificate_secret_name,
             prometheus_url,
             database_url: postgres_url,
             postgres_pool_size,

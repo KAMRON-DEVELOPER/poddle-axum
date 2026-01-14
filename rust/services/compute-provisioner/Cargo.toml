@@ -5,8 +5,13 @@ edition = "2024"
 
 [dependencies]
 factory = { path = "../../crates/factory" }
+utility = { path = "../../crates/utility" }
+compute-core = { path = "../../crates/compute-core" }
+thiserror.workspace = true
+anyhow.workspace = true
 rustls.workspace = true
 axum.workspace = true
+axum-core.workspace = true
 chrono.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -30,7 +35,6 @@ kcr_secrets_hashicorp_com.workspace = true
 vaultrs.workspace = true
 vaultrs-login.workspace = true
 prometheus-client.workspace = true
-aes-gcm = "0.10.3"
 base64 = "0.22.1"
 
 opentelemetry_sdk.workspace = true

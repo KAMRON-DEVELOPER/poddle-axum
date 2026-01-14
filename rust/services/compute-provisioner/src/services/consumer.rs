@@ -1,3 +1,7 @@
+use compute_core::schemas::{
+    CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage,
+};
+use factory::factories::{amqp::Amqp, redis::Redis};
 use futures::StreamExt;
 use kube::Client;
 use lapin::{
@@ -8,33 +12,15 @@ use lapin::{
     },
     types::FieldTable,
 };
-use shared::{
-    schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
-    servicesservices::{amqp::Amqp, redis::Redis},
-    utilities::errors::AppError,
-};
+
 use sqlx::{Pool, Postgres};
 use tokio::task::JoinSet;
 use tracing::{error, info, warn};
 
-use crate::services::{kubernetes_service::KubernetesService, vault_service::VaultService};
-
-/*
-// In Provisioner consumer loop
-use tracing_opentelemetry::OpenTelemetrySpanExt;
-
-// Extract the trace context from AMQP headers
-let parent_cx = global::get_text_map_propagator(|propagator| {
-    propagator.extract(&HeaderExtractor(&delivery.properties.headers))
-});
-
-let span = tracing::info_span!("process_deployment", deployment_id = %msg.deployment_id);
-span.set_parent(parent_cx); // <--- Links the traces!
-
-async move {
-    // Your processing logic here
-}.instrument(span).await;
-*/
+use crate::{
+    error::AppError,
+    services::{kubernetes_service::KubernetesService, vault_service::VaultService},
+};
 
 pub async fn start_consumer(
     amqp: Amqp,
@@ -49,7 +35,7 @@ pub async fn start_consumer(
     wildcard_certificate_secret_name: String,
     vault_service: VaultService,
 ) -> Result<(), AppError> {
-    let channel = amqp.channel().await?;
+    let channel = amqp.channel().await;
 
     let kubernetes_service = KubernetesService {
         client,

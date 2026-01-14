@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
-users-core = { path = "../../crates/users-core" }
 compute-core = { path = "../../crates/compute-core" }
 thiserror.workspace = true
 anyhow.workspace = true

@@ -13,8 +13,8 @@ use crate::error::AppError;
 
 pub async fn start_deployment_status_syncer(
     pool: PgPool,
-    client: KubeClient,
     mut redis: MultiplexedConnection,
+    client: KubeClient,
 ) -> Result<(), AppError> {
     let watcher_config = Config::default().labels("managed-by=poddle");
 

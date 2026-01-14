@@ -834,10 +834,12 @@ dependencies = [
 name = "compute-provisioner"
 version = "0.1.0"
 dependencies = [
- "aes-gcm",
+ "anyhow",
  "axum",
+ "axum-core",
  "base64",
  "chrono",
+ "compute-core",
  "dotenvy",
  "factory",
  "futures",
@@ -858,12 +860,14 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-opentelemetry",
  "tracing-subscriber",
+ "utility",
  "uuid",
  "vaultrs",
  "vaultrs-login",
@@ -900,7 +904,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "urlencoding",
- "users-core",
  "utility",
  "uuid",
 ]

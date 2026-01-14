@@ -3,6 +3,11 @@ use std::collections::HashMap;
 
 use chrono::Utc;
 use compute_core::channel_names::ChannelNames;
+use compute_core::models::ResourceSpec;
+use compute_core::schemas::CreateDeploymentMessage;
+use compute_core::schemas::DeleteDeploymentMessage;
+use compute_core::schemas::UpdateDeploymentMessage;
+use factory::factories::redis::Redis;
 use k8s_openapi::api::apps::v1::{Deployment as K8sDeployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Namespace;
 use k8s_openapi::api::core::v1::TypedLocalObjectReference;
@@ -38,16 +43,11 @@ use kube::api::PostParams;
 use kube::{Api, Client};
 use redis::AsyncTypedCommands;
 use serde_json::json;
-use shared::models::ResourceSpec;
-use shared::schemas::CreateDeploymentMessage;
-use shared::schemas::DeleteDeploymentMessage;
-use shared::schemas::UpdateDeploymentMessage;
-use shared::servicesservices::redis::Redis;
-use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::info;
 use uuid::Uuid;
 
+use crate::error::AppError;
 use crate::services::vault_service::VaultService;
 
 #[derive(Clone)]
@@ -74,7 +74,7 @@ impl KubernetesService {
             Ok(_) => info!("✅ ClusterIssuer '{}' found.", self.cluster_issuer_name),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
                 // FAIL FAST: Do not try to create it.
-                return Err(AppError::InternalError(format!(
+                return Err(AppError::InternalServerError(format!(
                     "CRITICAL: ClusterIssuer '{}' is missing. Please apply infrastructure configuration.",
                     self.cluster_issuer_name
                 )));
@@ -91,7 +91,7 @@ impl KubernetesService {
                 self.wildcard_certificate_name
             ),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
-                return Err(AppError::InternalError(format!(
+                return Err(AppError::InternalServerError(format!(
                     "CRITICAL: Wildcard Certificate '{}' is missing in namespace '{}'.",
                     self.wildcard_certificate_name, self.traefik_namespace
                 )));
@@ -106,7 +106,7 @@ impl KubernetesService {
         match middleware_api.get(middleware_name).await {
             Ok(_) => info!("✅ Middleware '{}' found.", middleware_name),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
-                return Err(AppError::InternalError(format!(
+                return Err(AppError::InternalServerError(format!(
                     "CRITICAL: Traefik Middleware '{}' is missing.",
                     middleware_name
                 )));
@@ -270,7 +270,7 @@ impl KubernetesService {
                 .create(&PostParams::default(), &vault_static_secret)
                 .await
                 .map_err(|e| {
-                    AppError::InternalError(format!("Failed to create VSO Secret: {}", e))
+                    AppError::InternalServerError(format!("Failed to create VSO Secret: {}", e))
                 })?;
 
             let vault_static_secret = VaultStaticSecret {
@@ -367,7 +367,9 @@ impl KubernetesService {
         secrets_api
             .create(&PostParams::default(), &secret)
             .await
-            .map_err(|e| AppError::InternalError(format!("Failed to create secret: {}", e)))?;
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Failed to create secret: {}", e))
+            })?;
 
         info!("Secret {} created in namespace {}", secret_name, namespace);
         Ok(())
@@ -482,7 +484,7 @@ impl KubernetesService {
             .create(&PostParams::default(), &deployment)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to create K8s deployment: {}", e))
+                AppError::InternalServerError(format!("Failed to create K8s deployment: {}", e))
             })?;
 
         info!("Deployment {} created in namespace {}", name, namespace);
@@ -524,7 +526,9 @@ impl KubernetesService {
         services_api
             .create(&PostParams::default(), &service)
             .await
-            .map_err(|e| AppError::InternalError(format!("Failed to create service: {}", e)))?;
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Failed to create service: {}", e))
+            })?;
 
         info!("Service {} created in namespace {}", name, namespace);
         Ok(())
@@ -660,7 +664,9 @@ impl KubernetesService {
         ingress_api
             .create(&PostParams::default(), &ingress)
             .await
-            .map_err(|e| AppError::InternalError(format!("Failed to create ingress: {}", e)))?;
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Failed to create ingress: {}", e))
+            })?;
 
         info!(
             "Ingress {} created in namespace {}",
@@ -704,7 +710,7 @@ impl KubernetesService {
                 .patch(&name, &PatchParams::default(), &Patch::Strategic(patch))
                 .await
                 .map_err(|e| {
-                    AppError::InternalError(format!("Failed to update deployment: {}", e))
+                    AppError::InternalServerError(format!("Failed to update deployment: {}", e))
                 })?;
 
             // ! We can send pubsub message to notify users via SEE
@@ -838,12 +844,14 @@ impl KubernetesService {
         vault_auth_api
             .create(&PostParams::default(), &vault_auth)
             .await
-            .map_err(|e| AppError::InternalError(format!("Failed to create VaultAuth: {}", e)))?;
+            .map_err(|e| {
+                AppError::InternalServerError(format!("Failed to create VaultAuth: {}", e))
+            })?;
         vault_connection_api
             .create(&PostParams::default(), &vault_connection)
             .await
             .map_err(|e| {
-                AppError::InternalError(format!("Failed to create VaultConnection: {}", e))
+                AppError::InternalServerError(format!("Failed to create VaultConnection: {}", e))
             })?;
 
         info!("VaultAuth and VaultConnection created in {}", ns_string);

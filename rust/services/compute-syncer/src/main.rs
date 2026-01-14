@@ -10,8 +10,7 @@ use std::path::PathBuf;
 use std::result::Result::Ok;
 
 use factory::factories::{
-    amqp::Amqp, database::Database, kubernetes::Kubernetes, observability::Observability,
-    redis::Redis,
+    database::Database, kubernetes::Kubernetes, observability::Observability, redis::Redis,
 };
 
 use tokio::task::JoinSet;
@@ -58,36 +57,25 @@ async fn main() -> anyhow::Result<()> {
     let kubernetes = Kubernetes::new(&config).await?;
     let database = Database::new(&config).await;
     let redis = Redis::new(&config).await;
-    let amqp = Amqp::new(&config).await;
     // let kafka = Kafka::new(config, "users-service")?;
     let http_client = reqwest::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
     let prometheus = Prometheus::new(&config, http_client.clone()).await?;
 
-    let app = app::app().await?;
-    let listener = tokio::net::TcpListener::bind(config.server_address).await?;
-
-    info!(
-        "🚀 {} service running at {:#?}",
-        cargo_pkg_name, config.server_address
-    );
-    axum::serve(
-        listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .with_graceful_shutdown(shutdown_signal())
-    .await?;
-
     let mut set = JoinSet::new();
 
     // Spawn tasks into the set
     set.spawn(start_deployment_status_syncer(
         database.pool.clone(),
-        kubernetes.client.clone(),
         redis.connection.clone(),
+        kubernetes.client.clone(),
     ));
-    set.spawn(start_metrics_scraper(config, prometheus.client, redis));
+    set.spawn(start_metrics_scraper(
+        config.clone(),
+        prometheus.client,
+        redis,
+    ));
     set.spawn(start_reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),
