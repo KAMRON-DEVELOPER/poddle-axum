@@ -16,7 +16,7 @@ impl Prometheus {
         match client.query("up").get().await {
             Ok(_) => info!("✅ Successfully connected to Prometheus!"),
             Err(e) => {
-                return Err(AppError::InternalError(format!(
+                return Err(AppError::InternalServerError(format!(
                     "Failed to connect to Prometheus: {}. Check URL and credentials.",
                     e
                 )));
