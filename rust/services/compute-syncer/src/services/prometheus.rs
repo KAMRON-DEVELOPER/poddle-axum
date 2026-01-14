@@ -1,7 +1,8 @@
 use prometheus_http_query::Client;
 use reqwest::Client as HttpClient;
-use shared::utilities::{config::Config, errors::AppError};
 use tracing::info;
+
+use crate::{config::Config, error::AppError};
 
 #[derive(Clone)]
 pub struct Prometheus {

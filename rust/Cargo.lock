@@ -873,8 +873,11 @@ dependencies = [
 name = "compute-syncer"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
+ "axum-core",
  "chrono",
+ "compute-core",
  "dotenvy",
  "factory",
  "futures",
@@ -890,12 +893,15 @@ dependencies = [
  "serde",
  "serde_json",
  "sqlx",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-subscriber",
  "urlencoding",
+ "users-core",
+ "utility",
  "uuid",
 ]
 

@@ -1,10 +1,11 @@
+use compute_core::models::DeploymentStatus;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use kube::{Api, Client};
-use shared::models::DeploymentStatus;
-use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{error, info, warn};
+
+use crate::error::AppError;
 
 /// Periodic reconciliation to catch missed events and fix drift
 pub async fn start_reconciliation_loop(pool: PgPool, client: Client) -> Result<(), AppError> {
@@ -25,9 +26,9 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
     // Fetch all active deployments from database
     let db_deployments = sqlx::query!(
         r#"
-        SELECT id, cluster_namespace, cluster_deployment_name, status as "status: DeploymentStatus", replicas
-        FROM deployments
-        WHERE status NOT IN ('failed', 'suspended')
+            SELECT id, cluster_namespace, cluster_deployment_name, status as "status: DeploymentStatus", replicas
+            FROM deployments
+            WHERE status NOT IN ('failed', 'suspended')
         "#
     )
     .fetch_all(pool)
@@ -109,9 +110,9 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
 
                 sqlx::query!(
                     r#"
-                    UPDATE deployments
-                    SET status = 'failed', updated_at = NOW()
-                    WHERE id = $1
+                        UPDATE deployments
+                        SET status = 'failed', updated_at = NOW()
+                        WHERE id = $1
                     "#,
                     deployment_id
                 )

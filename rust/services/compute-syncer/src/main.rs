@@ -1,81 +1,81 @@
+pub mod app;
+pub mod config;
+pub mod error;
+pub mod implementations;
 pub mod services;
 pub mod utilities;
 
 use std::net::SocketAddr;
+use std::path::PathBuf;
+use std::result::Result::Ok;
 
-use crate::{
-    services::prometheus::Prometheus,
-    utilities::{
-        deployment_status_syncer::start_deployment_status_syncer,
-        metrics_scraper::start_metrics_scraper, reconcilation_loop::start_reconciliation_loop,
-    },
-};
-use axum::{extract::DefaultBodyLimit, http};
-use shared::{
-    servicesservices::{database::Database, kubernetes::Kubernetes, redis::Redis},
-    utilities::{config::Config, errors::AppError},
-};
-use time::macros::format_description;
-use tokio::{signal, task::JoinSet};
-use tower_http::trace::{DefaultOnResponse, TraceLayer};
+use config::Config;
+use factory::factories::amqp::Amqp;
+use factory::factories::database::Database;
+use factory::factories::kubernetes::Kubernetes;
+use factory::factories::observability::Observability;
+
+use factory::factories::redis::Redis;
+use tokio::task::JoinSet;
 use tracing::{error, info};
-use tracing_subscriber::{
-    EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
-};
+use utility::shutdown_signal::shutdown_signal;
+
+use crate::error::AppError;
+use crate::services::prometheus::Prometheus;
+use crate::utilities::deployment_status_syncer::start_deployment_status_syncer;
+use crate::utilities::metrics_scraper::start_metrics_scraper;
+use crate::utilities::reconcilation_loop::start_reconciliation_loop;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Install crypto provider
+async fn main() -> anyhow::Result<()> {
     rustls::crypto::ring::default_provider()
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    // Load .env file
-    match dotenvy::dotenv() {
-        Ok(path) => {
-            info!("Loaded .env file from {}", path.display());
-        }
-        Err(dotenvy::Error::Io(ref err)) if err.kind() == std::io::ErrorKind::NotFound => {
-            println!(".env file not found, continuing without it");
-        }
-        Err(e) => {
-            println!("Couldn't load .env file: {}", e);
-        }
-    }
+    // These are baked at COMPILE time
+    let cargo_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    // let cargo_crate_name = env!("CARGO_CRATE_NAME");
+    let cargo_pkg_name = env!("CARGO_PKG_NAME");
+    let cargo_pkg_version = env!("CARGO_PKG_VERSION").into();
 
-    // Initialize config
-    let config = Config::init().await?;
+    let env_path = cargo_manifest_dir.join(".env");
 
-    // Initialize tracing
-    let filter =
-        EnvFilter::new("compute_syncer=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn");
-    let timer = LocalTime::new(format_description!(
-        "[year]-[month]-[day] [hour]:[minute]:[second]"
-    ));
-    tracing_subscriber::registry()
-        .with(filter)
-        .with(
-            tracing_subscriber::fmt::layer()
-                .with_target(false)
-                .with_file(true)
-                .with_line_number(true)
-                .with_timer(timer),
-        )
-        .init();
+    // Load workspace root .env as fallback
+    dotenvy::dotenv().ok();
+    // Load service-specific .env
+    dotenvy::from_path(env_path).ok();
 
-    info!("🚀 Starting compute-syncer");
+    let config = Config::init(cargo_manifest_dir).await?;
+    let _guard = Observability::init(
+        &config.otel_exporter_otlp_endpoint,
+        cargo_pkg_name,
+        cargo_pkg_version,
+    )
+    .await;
 
-    // Initialize services
-    // let rustls_config = build_rustls_config(&config)?;
-    let database = Database::new(&config).await?;
-    let redis = Redis::new(&config).await?;
     let kubernetes = Kubernetes::new(&config).await?;
-    // let amqp = Amqp::new(&config).await?;
-    // let kafka = Kafka::new(&config, "compute-service-group")?;
+    let database = Database::new(&config).await;
+    let redis = Redis::new(&config).await;
+    let amqp = Amqp::new(&config).await;
+    // let kafka = Kafka::new(config, "users-service")?;
     let http_client = reqwest::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
     let prometheus = Prometheus::new(&config, http_client.clone()).await?;
+
+    let app = app::app().await?;
+    let listener = tokio::net::TcpListener::bind(config.server_address).await?;
+
+    info!(
+        "🚀 {} service running at {:#?}",
+        cargo_pkg_name, config.server_address
+    );
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await?;
 
     let mut set = JoinSet::new();
 
@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         database.pool.clone(),
         kubernetes.client.clone(),
     ));
-    set.spawn(start_health_server());
+    set.spawn(start_health_server(cargo_pkg_name, config.server_address));
 
     info!("✅ All background tasks started");
 
@@ -111,64 +111,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    info!("👋 Compute-syncer shutting down");
+    info!("👋 {} shutting down", cargo_pkg_name);
 
     Ok(())
 }
 
-/// Start a simple HTTP server for health checks and metrics
-async fn start_health_server() -> Result<(), AppError> {
-    use axum::{Json, Router, routing::get};
-    use serde_json::json;
-
-    let health_route = Router::new()
-        .route(
-            "/health",
-            get(|| async {
-                Json(json!({
-                    "status": "healthy",
-                    "service": "compute-syncer"
-                }))
-            }),
-        )
-        .route(
-            "/ready",
-            get(|| async {
-                Json(json!({
-                    "status": "ready",
-                    "service": "compute-syncer"
-                }))
-            }),
-        );
-
-    let tracing_layer = TraceLayer::new_for_http()
-        .on_request(|request: &http::Request<_>, _span: &tracing::Span| {
-            let method = request.method();
-            let uri = request.uri();
-            let matched_path = request
-                .extensions()
-                .get::<axum::extract::MatchedPath>()
-                .map(|p| p.as_str())
-                .unwrap_or("<unknown>");
-
-            if uri.query().is_some() {
-                info!("{} {} {}", method, matched_path, uri);
-            } else {
-                info!("{} {}", method, matched_path);
-            }
-        })
-        .on_response(DefaultOnResponse::new().level(tracing::Level::INFO));
-
-    let app = Router::new()
-        .merge(health_route)
-        .layer(DefaultBodyLimit::max(10 * 1024 * 1024))
-        .layer(tracing_layer);
-
-    let addr = "0.0.0.0:8005";
-    info!("🏥 Health check server running on {}", addr);
-
+// Start a simple HTTP server for health checks and metrics
+async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
+    let app = app::app().await?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
+    info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -177,25 +130,4 @@ async fn start_health_server() -> Result<(), AppError> {
     .await?;
 
     Ok(())
-}
-
-async fn shutdown_signal() {
-    let ctrl_c = async {
-        signal::ctrl_c()
-            .await
-            .expect("failed to install Ctrl+C handler");
-    };
-
-    #[cfg(unix)]
-    let terminate = async {
-        signal::unix::signal(signal::unix::SignalKind::terminate())
-            .expect("failed to install signal handler")
-            .recv()
-            .await;
-    };
-
-    tokio::select! {
-        _ = ctrl_c => {},
-        _ = terminate => {},
-    }
 }

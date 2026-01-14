@@ -1,14 +1,15 @@
+use compute_core::models::DeploymentStatus;
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::core::v1::Pod;
 use kube::runtime::watcher::{Config, Event};
 use kube::{Api, Client as KubeClient};
 use redis::aio::MultiplexedConnection;
-use shared::models::DeploymentStatus;
-use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::{error, info, warn};
 use uuid::Uuid;
+
+use crate::error::AppError;
 
 pub async fn start_deployment_status_syncer(
     pool: PgPool,
