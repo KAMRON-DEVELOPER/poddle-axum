@@ -123,7 +123,7 @@ impl Observability {
         // Filters
         let level_filter = tracing_subscriber::filter::LevelFilter::from_level(Level::INFO);
         let env_filter = EnvFilter::new(format!(
-            "{}=debug,shared=debug,tower_http=warn,hyper=warn,reqwest=warn",
+            "{}=debug,tower_http=warn,hyper=warn,reqwest=warn",
             cargo_pkg_name
         ));
 

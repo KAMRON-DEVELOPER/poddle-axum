@@ -1,7 +1,6 @@
 pub mod app;
 pub mod config;
 pub mod error;
-pub mod error_implementations;
 pub mod features;
 pub mod implementation;
 pub mod services;

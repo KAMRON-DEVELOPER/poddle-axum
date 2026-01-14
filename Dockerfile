@@ -3,7 +3,7 @@
 # ------------------------------------------------------
 FROM 1.92-slim-bookworm AS chef
 WORKDIR /app
-# We only pay the installation cost once, 
+# We only pay the installation cost once,
 # it will be cached from the second build onwards
 RUN cargo install cargo-chef
 
@@ -15,8 +15,8 @@ FROM chef AS planner
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml shared/Cargo.toml
 COPY services services
-# This prepares the dependency recipe for the whole workspace 
-RUN cargo chef prepare --recipe-path recipe.json 
+# This prepares the dependency recipe for the whole workspace
+RUN cargo chef prepare --recipe-path recipe.json
 
 # ------------------------------------------------------
 # Stage 3: Cacher (Dependency Pre-build)

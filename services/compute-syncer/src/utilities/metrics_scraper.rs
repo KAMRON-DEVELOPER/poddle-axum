@@ -1,10 +1,10 @@
 use chrono::Utc;
+use compute_core::channel_names::ChannelNames;
 use prometheus_http_query::Client as PrometheusClient;
 use serde_json::json;
 use shared::schemas::{DeploymentMetrics, MetricSnapshot};
 use shared::servicesservices::redis::Redis;
 use shared::utilities::cache_keys::CacheKeys;
-use compute_core::channel_names::ChannelNames;
 use shared::utilities::config::Config;
 use shared::utilities::errors::AppError;
 use std::collections::HashMap;

@@ -286,7 +286,7 @@ impl DeploymentRepository {
         sqlx::query_as::<_, Deployment>(
             r#"
                 UPDATE deployments d
-                SET 
+                SET
                     name = COALESCE($3, d.name),
                     image = COALESCE($4, d.image),
                     port = COALESCE($5, d.port),

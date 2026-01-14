@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 
 use chrono::Utc;
+use compute_core::channel_names::ChannelNames;
 use k8s_openapi::api::apps::v1::{Deployment as K8sDeployment, DeploymentSpec};
 use k8s_openapi::api::core::v1::Namespace;
 use k8s_openapi::api::core::v1::TypedLocalObjectReference;
@@ -42,7 +43,6 @@ use shared::schemas::CreateDeploymentMessage;
 use shared::schemas::DeleteDeploymentMessage;
 use shared::schemas::UpdateDeploymentMessage;
 use shared::servicesservices::redis::Redis;
-use compute_core::channel_names::ChannelNames;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::info;

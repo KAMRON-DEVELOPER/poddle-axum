@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "shared",
     "services/users-api",
     "services/billing-api",
     "services/billing-worker",

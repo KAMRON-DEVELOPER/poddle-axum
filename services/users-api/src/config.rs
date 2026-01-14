@@ -7,13 +7,14 @@ use redis::{
     ClientTlsConfig, ConnectionAddr, ConnectionInfo, IntoConnectionInfo, ProtocolVersion,
     RedisConnectionInfo, TlsCertificates,
 };
-use shared::utilities::{
-    config::{get_config_value, get_optional_config_value},
-    errors::AppError,
-};
+
 use sqlx::postgres::PgSslMode;
 use tracing::{Level, info};
 use users_core::jwt::JwtConfig;
+use utility::get_config_value::get_config_value;
+use utility::get_optional_config_value::get_optional_config_value;
+
+use crate::error::AppError;
 
 #[derive(Clone, Debug)]
 pub struct Config {

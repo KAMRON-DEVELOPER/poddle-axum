@@ -230,13 +230,13 @@ loki:
   # -- Check https://grafana.com/docs/loki/latest/configuration/#schema_config for more info on how to configure schemas
   schemaConfig:
     configs:
-    - from: "2020-09-07"
-      store: boltdb-shipper
-      object_store: filesystem
-      schema: v11
-      index:
-        prefix: loki_index_
-        period: 24h
+      - from: "2020-09-07"
+        store: boltdb-shipper
+        object_store: filesystem
+        schema: v11
+        index:
+          prefix: loki_index_
+          period: 24h
 
   # -- Check https://grafana.com/docs/loki/latest/configuration/#storage_config for more info on how to configure storages
   storageConfig:
@@ -247,11 +247,11 @@ loki:
       cache_ttl: 168h
     filesystem:
       directory: /var/loki/chunks
-# -- Uncomment to configure each storage individually
-#   azure: {}
-#   gcs: {}
-#   s3: {}
-#   boltdb: {}
+  # -- Uncomment to configure each storage individually
+  #   azure: {}
+  #   gcs: {}
+  #   s3: {}
+  #   boltdb: {}
 
   # -- Structured loki configuration, takes precedence over `loki.config`, `loki.schemaConfig`, `loki.storageConfig`
   structuredConfig: {}
@@ -994,13 +994,13 @@ tableManager:
 # You'll need to supply authn configuration for your ingress controller.
 ingress:
   enabled: false
-#  ingressClassName: nginx
+  #  ingressClassName: nginx
   annotations: {}
-#    nginx.ingress.kubernetes.io/auth-type: basic
-#    nginx.ingress.kubernetes.io/auth-secret: loki-distributed-basic-auth
-#    nginx.ingress.kubernetes.io/auth-secret-type: auth-map
-#    nginx.ingress.kubernetes.io/configuration-snippet: |
-#      proxy_set_header X-Scope-OrgID $remote_user;
+  #    nginx.ingress.kubernetes.io/auth-type: basic
+  #    nginx.ingress.kubernetes.io/auth-secret: loki-distributed-basic-auth
+  #    nginx.ingress.kubernetes.io/auth-secret-type: auth-map
+  #    nginx.ingress.kubernetes.io/configuration-snippet: |
+  #      proxy_set_header X-Scope-OrgID $remote_user;
   # -- Custom labels for the ingress
   labels: {}
   paths:
@@ -1168,7 +1168,7 @@ gateway:
     enabled: false
     # -- Ingress Class Name. MAY be required for Kubernetes versions >= 1.18
     # For example: `ingressClassName: nginx`
-    ingressClassName: ''
+    ingressClassName: ""
 
     # -- Annotations for the gateway ingress
     annotations: {}
@@ -2098,4 +2098,3 @@ networkPolicy:
     podSelector: {}
     # -- Specifies the namespace the discovery Pods are running in
     namespaceSelector: {}
-
