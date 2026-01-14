@@ -10,7 +10,6 @@ use crate::error::AppError;
 #[derive(Clone, Debug)]
 pub struct Config {
     pub server_address: SocketAddr,
-    pub frontend_endpoint: String,
 
     pub tracing_level: Level,
 
@@ -66,14 +65,6 @@ impl Config {
             Some("SERVER_ADDRESS"),
             None,
             Some(socket_addr),
-        )
-        .await;
-
-        let frontend_endpoint = get_config_value(
-            "FRONTEND_ENDPOINT",
-            Some("FRONTEND_ENDPOINT"),
-            None,
-            Some("http://localhost:5173".to_string()),
         )
         .await;
 
@@ -188,7 +179,6 @@ impl Config {
 
         let config = Config {
             server_address,
-            frontend_endpoint,
             tracing_level,
             database_url: postgres_url,
             postgres_pool_size,
