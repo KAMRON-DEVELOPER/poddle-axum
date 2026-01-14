@@ -1,6 +1,7 @@
 use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
-use shared::{schemas::PodMetrics, utilities::errors::AppError};
 use uuid::Uuid;
+use compute_core::schemas::PodMetrics;
+use crate::error::AppError;
 
 pub struct ComputeCache(pub MultiplexedConnection);
 

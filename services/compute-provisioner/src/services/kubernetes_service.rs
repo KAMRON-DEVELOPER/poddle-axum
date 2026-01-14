@@ -42,7 +42,7 @@ use shared::schemas::CreateDeploymentMessage;
 use shared::schemas::DeleteDeploymentMessage;
 use shared::schemas::UpdateDeploymentMessage;
 use shared::servicesservices::redis::Redis;
-use shared::utilities::channel_names::ChannelNames;
+use compute_core::channel_names::ChannelNames;
 use shared::utilities::errors::AppError;
 use sqlx::PgPool;
 use tracing::info;

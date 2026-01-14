@@ -13,6 +13,8 @@
       <sourceFolder url="file://$MODULE_DIR$/services/users-api/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/shared/src" isTestSource="false" />
       <sourceFolder url="file://$MODULE_DIR$/crates/users-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/compute-core/src" isTestSource="false" />
+      <sourceFolder url="file://$MODULE_DIR$/crates/http-contracts/src" isTestSource="false" />
       <excludeFolder url="file://$MODULE_DIR$/target" />
     </content>
     <orderEntry type="inheritedJdk" />

@@ -4,10 +4,16 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-shared = { path = "../../shared" }
-utility = {path = "../../crates/utility"}
+factory = { path = "../../crates/factory" }
+utility = { path = "../../crates/utility" }
+http-contracts = { path = "../../crates/http-contracts" }
+users-core = { path = "../../crates/users-core" }
+anyhow.workspace = true
+thiserror.workspace = true
 rustls.workspace = true
 axum.workspace = true
+axum-core.workspace = true
+axum-extra.workspace = true
 chrono.workspace = true
 reqwest.workspace = true
 serde.workspace = true
@@ -22,3 +28,5 @@ validator.workspace = true
 dotenvy.workspace = true
 time.workspace = true
 bigdecimal.workspace = true
+lapin.workspace = true
+redis.workspace = true

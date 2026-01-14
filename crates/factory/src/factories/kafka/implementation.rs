@@ -5,28 +5,29 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::producer::FutureProducer;
 use tracing::info;
 
-use shared::utilities::{config::Config, errors::AppError};
-
-#[derive(Clone)]
-pub struct Kafka {
-    pub producer: FutureProducer,
-    pub consumer: Arc<StreamConsumer>,
-}
+use crate::factories::{
+    kafka::{Kafka, KafkaConfig, error::KafkaError},
+    tls::TlsConfig,
+};
 
 impl Kafka {
-    pub fn new(config: &Config, group_id: &str) -> Result<Self, AppError> {
-        let mut common = ClientConfig::new();
-        common.set("bootstrap.servers", config.kafka_bootstrap_servers.clone());
+    pub fn new<T: KafkaConfig>(cfg: &T, group_id: &str) -> Result<Self, KafkaError> {
+        let tls_config = cfg.tls_config();
 
-        if let (Some(ca), Some(cert), Some(key)) =
-            (&config.ca, &config.client_cert, &config.client_key)
-        {
+        let mut common = ClientConfig::new();
+        common.set("bootstrap.servers", cfg.kafka_bootstrap_servers());
+
+        if let (Some(ca), Some(client_cert), Some(client_key)) = (
+            tls_config.ca(),
+            tls_config.client_cert(),
+            tls_config.client_key(),
+        ) {
             info!("🔐 Kafka SSL/TLS enabled");
             common
                 .set("security.protocol", "ssl")
                 .set("ssl.ca.pem", ca)
-                .set("ssl.certificate.pem", cert)
-                .set("ssl.key.pem", key);
+                .set("ssl.certificate.pem", client_cert)
+                .set("ssl.key.pem", client_key);
         }
 
         let producer = common

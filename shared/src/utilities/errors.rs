@@ -13,7 +13,7 @@ pub enum ErrorKind {
 }
 
 // #[derive(Error, Clone, Debug, PartialEq)]
-// pub enum CreateUserError {
+// pub enum CreateUserError {InClusterError>
 //     #[error("invalid email address: {0}")]
 //     InvalidEmail(String),
 //     #[error("invalid password: {reason}")]

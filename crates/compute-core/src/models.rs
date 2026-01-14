@@ -2,13 +2,12 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::types::Json;
-use sqlx::{FromRow, Type};
+use sqlx::{FromRow, Type, types::Json};
 use uuid::Uuid;
 
-// ============================================
+// ---------------------------------------------
 // ENUMS
-// ============================================
+// ---------------------------------------------
 
 #[derive(Type, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
@@ -41,9 +40,9 @@ impl std::fmt::Display for DeploymentStatus {
     }
 }
 
-// ============================================
+// ---------------------------------------------
 // MODELS
-// ============================================
+// ---------------------------------------------
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -90,9 +89,9 @@ pub struct DeploymentEvent {
     pub created_at: DateTime<Utc>,
 }
 
-// ============================================
+// ---------------------------------------------
 // HELPER STRUCTS FOR JSONB FIELDS
-// ============================================
+// ---------------------------------------------
 
 /// Resource specification stored in the `resources` JSONB field
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]

@@ -3,6 +3,7 @@ pub mod config;
 pub mod error;
 pub mod error_implementations;
 pub mod features;
+pub mod implementation;
 pub mod services;
 pub mod utilities;
 
@@ -14,7 +15,7 @@ use config::Config;
 use factory::factories::observability::Observability;
 
 use tracing::info;
-use utility::shutdown_signal;
+use utility::shutdown_signal::shutdown_signal;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

@@ -10,7 +10,7 @@ use crate::utilities::app_state::AppState;
 
 use axum::{Router, routing::get};
 
-pub fn routes() -> Router<AppState> {
+pub fn get_routes() -> Router<AppState> {
     Router::new()
         // Projects
         .route(

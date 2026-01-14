@@ -16,10 +16,7 @@ use tracing_subscriber::{
     EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-pub struct Observability {
-    pub tracer_provider: SdkTracerProvider,
-    pub meter_provider: SdkMeterProvider,
-}
+use crate::factories::observability::Observability;
 
 impl Drop for Observability {
     fn drop(&mut self) {

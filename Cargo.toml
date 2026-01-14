@@ -9,7 +9,7 @@ members = [
     "services/compute-syncer",
     "services/ai-orchestrator",
     "crates/factory",
-    "crates/utility", "crates/users-core",
+    "crates/utility", "crates/users-core", "crates/http-contracts", "crates/compute-core",
 ]
 
 resolver = "2"
@@ -126,7 +126,7 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "grpc-tonic",
     "gzip-tonic",
 ] }
-# Semantic conventions for consistent attribute naming 
+# Semantic conventions for consistent attribute naming
 opentelemetry-semantic-conventions = { version = "0.31.0", features = [
     "semconv_experimental",
 ] }
@@ -142,3 +142,4 @@ tracing-subscriber = { version = "0.3.20", features = [
 # Integration between the tracing crate and the opentelemetry crate
 tracing-opentelemetry = "0.32.0"
 jsonwebtoken = "9.3.1"
+once_cell = "1.21.3"

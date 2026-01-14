@@ -1,11 +1,9 @@
 use axum::{Json, extract::State, response::IntoResponse};
-use shared::{
-    schemas::ListResponse,
-    servicesservices::database::Database,
-    utilities::{errors::AppError, jwt::Claims},
-};
+use factory::factories::database::Database;
+use http_contracts::list::schema::ListResponse;
+use users_core::jwt::Claims;
 
-use crate::features::repository::BillingRepository;
+use crate::{error::AppError, features::repository::BillingRepository};
 
 pub async fn get_balance(
     claims: Claims,

@@ -1,32 +1,14 @@
-use sqlx::{
-    PgPool,
-    postgres::{PgConnectOptions, PgPoolOptions, PgSslMode},
-};
+use sqlx::postgres::{PgConnectOptions, PgPoolOptions};
 use tracing::info;
 
-use crate::factories::tls::TlsConfig;
-
-pub trait DatabaseConfig {
-    type Tls: TlsConfig;
-
-    fn database_url(&self) -> String;
-    fn max_connections(&self) -> u32 {
-        100
-    }
-    fn pg_ssl_mode(&self) -> PgSslMode;
-    // fn tls_config(&self) -> Box<dyn TlsConfig>;
-    fn tls_config(&self) -> Self::Tls;
-}
-
-#[derive(Clone)]
-pub struct Database {
-    pub pool: PgPool,
-}
+use crate::factories::{
+    database::{Database, DatabaseConfig},
+    tls::TlsConfig,
+};
 
 impl Database {
     pub async fn new<T: DatabaseConfig>(cfg: &T) -> Self {
-        let mut options: PgConnectOptions =
-            cfg.database_url().parse().expect("Invalid database URL");
+        let mut options: PgConnectOptions = cfg.url().parse().expect("Invalid database URL");
 
         options = options.ssl_mode(cfg.pg_ssl_mode());
 
@@ -62,7 +44,8 @@ impl Database {
         let pool = PgPoolOptions::new()
             .max_connections(100)
             .connect_with(options)
-            .await.unwrap_or_else(|e| {panic!("Couldn't connect to database, {}", e)});
+            .await
+            .unwrap_or_else(|e| panic!("Couldn't connect to database, {}", e));
 
         info!("✅ Postgres pool created.");
 

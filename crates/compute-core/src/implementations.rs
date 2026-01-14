@@ -4,44 +4,9 @@ use crate::{
     models::Deployment,
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentMetrics, DeploymentResponse,
-        MessageResponse, Pagination, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
-    utilities::errors::AppError,
 };
-
-impl MessageResponse {
-    pub fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-impl Pagination {
-    pub fn validate(&self) -> Result<(), AppError> {
-        if self.offset < 0 {
-            return Err(AppError::ValidationError(
-                "Offset must be positive".to_string(),
-            ));
-        }
-
-        if self.limit < 0 {
-            return Err(AppError::ValidationError("Limit must positive".to_string()));
-        } else if self.limit == 0 {
-            return Err(AppError::ValidationError(
-                "Limit must not be zero!".to_string(),
-            ));
-        }
-
-        if self.limit > 100 {
-            return Err(AppError::ValidationError(
-                "Limit cannot exceed 100".to_string(),
-            ));
-        }
-
-        Ok(())
-    }
-}
 
 impl DeploymentResponse {
     pub fn from_parts(d: Deployment, dm: DeploymentMetrics) -> Self {

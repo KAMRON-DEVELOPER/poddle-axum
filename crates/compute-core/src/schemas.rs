@@ -9,27 +9,9 @@ use validator::Validate;
 
 use crate::models::{DeploymentStatus, ResourceSpec};
 
-#[derive(Serialize, Debug)]
-pub struct ListResponse<T> {
-    pub data: Vec<T>,
-    pub total: i64,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct Pagination {
-    #[serde(default = "default_offset")]
-    pub offset: i64,
-    #[serde(default = "default_limit")]
-    pub limit: i64,
-}
-
-fn default_offset() -> i64 {
-    0
-}
-
-fn default_limit() -> i64 {
-    20
-}
+// -----------------------------------------------
+// PROJECT SCHEMAS
+// -----------------------------------------------
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct ProjectPageQuery {
@@ -40,10 +22,6 @@ pub struct ProjectPageQuery {
 fn project_page_minutes() -> u64 {
     5
 }
-
-// ============================================
-// PROJECT SCHEMAS
-// ============================================
 
 #[derive(Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -63,18 +41,9 @@ pub struct UpdateProjectRequest {
     pub description: Option<String>,
 }
 
-// ============================================
-// RESPONSE WRAPPERS
-// ============================================
-
-#[derive(Serialize, Debug)]
-pub struct MessageResponse {
-    pub message: String,
-}
-
-// ============================================
+// -----------------------------------------------
 // DEPLOYMENT SCHEMAS
-// ============================================
+// -----------------------------------------------
 
 #[derive(Clone, Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -154,11 +123,11 @@ pub struct DeploymentEventResponse {
     pub created_at: DateTime<Utc>,
 }
 
-// ============================================
+// -----------------------------------------------
 // RABBITMQ MESSAGE TYPES
-// ============================================
+// -----------------------------------------------
 
-/// Message sent to compute.create queue
+/// Message sent to `compute.create` queue
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDeploymentMessage {
@@ -179,7 +148,7 @@ pub struct CreateDeploymentMessage {
     pub timestamp: i64,
 }
 
-/// Message sent to compute.scale queue
+/// Message sent to `compute.scale` queue
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDeploymentMessage {
@@ -200,7 +169,7 @@ pub struct UpdateDeploymentMessage {
     pub timestamp: i64,
 }
 
-/// Message sent to compute.delete queue
+/// Message sent to `compute.delete` queue
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DeleteDeploymentMessage {
@@ -210,9 +179,9 @@ pub struct DeleteDeploymentMessage {
     pub timestamp: i64,
 }
 
-// ============================================
+// -----------------------------------------------
 // POD METRICS
-// ============================================
+// -----------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -241,9 +210,9 @@ pub struct PodMetrics {
     pub started_at: Option<i64>,
 }
 
-// ============================================
+// -----------------------------------------------
 // DEPLOYMENT METRICS
-// ============================================
+// -----------------------------------------------
 
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]

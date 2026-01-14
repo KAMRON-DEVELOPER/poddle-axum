@@ -37,6 +37,7 @@ use axum_extra::{
 // }
 
 // Option B: State can produce a JwtConfig via FromRef
+// Box<dyn JwtConfig>: FromRef<S> means “For this implementation to exist, Box<dyn JwtConfig> must be constructible from &S.”
 impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,

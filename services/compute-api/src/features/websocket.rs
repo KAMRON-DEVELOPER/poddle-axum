@@ -1,3 +1,4 @@
+use crate::error::AppError;
 use axum::{
     extract::{
         Path, State,
@@ -5,9 +6,10 @@ use axum::{
     },
     response::IntoResponse,
 };
+use compute_core::schemas::PodMetrics;
+use factory::factories::redis::Redis;
 use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
 use serde_json::json;
-use shared::{schemas::PodMetrics, servicesservices::redis::Redis, utilities::errors::AppError};
 use tokio::time::{self, Duration};
 use uuid::Uuid;
 

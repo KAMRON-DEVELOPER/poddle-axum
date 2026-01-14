@@ -536,21 +536,29 @@ dependencies = [
 name = "billing-api"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "axum",
+ "axum-core",
+ "axum-extra",
  "bigdecimal",
  "chrono",
  "dotenvy",
+ "factory",
+ "http-contracts",
+ "lapin",
+ "redis",
  "reqwest",
  "rustls",
  "serde",
  "serde_json",
- "shared",
  "sqlx",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tower-http",
  "tracing",
  "tracing-subscriber",
+ "users-core",
  "utility",
  "uuid",
  "validator",
@@ -775,37 +783,48 @@ dependencies = [
 name = "compute-api"
 version = "0.1.0"
 dependencies = [
- "async-stream",
+ "anyhow",
  "axum",
- "bigdecimal",
+ "axum-core",
+ "axum-extra",
  "chrono",
+ "compute-core",
  "dotenvy",
+ "factory",
  "futures",
- "k8s-openapi",
- "kube",
- "kube-client",
+ "infer",
  "lapin",
- "once_cell",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
+ "rand 0.9.2",
  "redis",
- "redis-macros",
- "regex",
  "reqwest",
  "rustls",
- "schemars",
  "serde",
  "serde_json",
- "shared",
  "sqlx",
+ "thiserror 2.0.17",
  "time",
  "tokio",
  "tokio-stream",
  "tower-http",
  "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
+ "users-core",
  "utility",
+ "uuid",
+ "validator",
+]
+
+[[package]]
+name = "compute-core"
+version = "0.1.0"
+dependencies = [
+ "chrono",
+ "once_cell",
+ "redis",
+ "redis-macros",
+ "regex",
+ "serde",
+ "serde_json",
+ "sqlx",
  "uuid",
  "validator",
 ]
@@ -837,7 +856,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "shared",
  "sqlx",
  "time",
  "tokio",
@@ -857,6 +875,7 @@ dependencies = [
  "axum",
  "chrono",
  "dotenvy",
+ "factory",
  "futures",
  "k8s-openapi",
  "kube",
@@ -869,7 +888,6 @@ dependencies = [
  "schemars",
  "serde",
  "serde_json",
- "shared",
  "sqlx",
  "time",
  "tokio",
@@ -1410,7 +1428,9 @@ dependencies = [
 name = "factory"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "kube",
+ "kube-client",
  "lapin",
  "opentelemetry",
  "opentelemetry-otlp",
@@ -1861,6 +1881,15 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+]
+
+[[package]]
+name = "http-contracts"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
@@ -4182,56 +4211,6 @@ dependencies = [
 [[package]]
 name = "shared"
 version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "axum-core",
- "axum-extra",
- "bcrypt",
- "chrono",
- "dotenvy",
- "futures",
- "jsonwebtoken",
- "k8s-openapi",
- "kube",
- "kube-client",
- "lapin",
- "oauth2",
- "object_store",
- "once_cell",
- "opentelemetry",
- "opentelemetry-otlp",
- "opentelemetry-semantic-conventions",
- "opentelemetry_sdk",
- "prometheus-http-query",
- "rand 0.9.2",
- "rdkafka",
- "redis",
- "redis-macros",
- "regex",
- "reqwest",
- "rustls",
- "rustls-pemfile",
- "serde",
- "serde_json",
- "sqlx",
- "sqlx-core",
- "thiserror 2.0.17",
- "time",
- "tokio",
- "tokio-rustls",
- "tonic",
- "tower",
- "tower-http",
- "tracing",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "url",
- "uuid",
- "validator",
- "vaultrs",
- "vaultrs-login",
-]
 
 [[package]]
 name = "shlex"
@@ -5180,20 +5159,14 @@ dependencies = [
  "redis",
  "reqwest",
  "rustls",
- "rustls-pemfile",
  "serde",
  "serde_json",
- "shared",
  "sqlx",
- "sqlx-core",
  "thiserror 2.0.17",
  "time",
  "tokio",
- "tokio-rustls",
- "tower",
  "tower-http",
  "tracing",
- "tracing-subscriber",
  "users-core",
  "utility",
  "uuid",
@@ -5230,6 +5203,7 @@ checksum = "b6c140620e7ffbb22c2dee59cafe6084a59b5ffc27a8859a5f0d494b5d52b6be"
 name = "utility"
 version = "0.1.0"
 dependencies = [
+ "dotenvy",
  "tokio",
 ]
 
