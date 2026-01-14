@@ -1,6 +1,7 @@
 use factory::factories::{
     amqp::AmqpConfig,
     database::DatabaseConfig,
+    kubernetes::KubernetesConfig,
     redis::{RedisConfig, RedisParams},
     tls::Tls,
     zepto::error::ZeptoError,
@@ -46,6 +47,16 @@ impl From<ZeptoError> for AppError {
 // -------------------------------------------------------------------------------
 // --------------------------- Factory implementations ---------------------------
 // -------------------------------------------------------------------------------
+
+impl KubernetesConfig for Config {
+    fn k8s_in_cluster(&self) -> bool {
+        self.k8s_in_cluster.clone()
+    }
+
+    fn k8s_config_path(&self) -> Option<String> {
+        self.k8s_config_path.clone()
+    }
+}
 
 impl DatabaseConfig for Config {
     type Tls = Tls;

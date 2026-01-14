@@ -44,6 +44,9 @@ pub enum AppError {
     #[error("IO error, {0}")]
     IoError(#[from] std::io::Error),
 
+    #[error("Redis error: {0}")]
+    RedisError(#[from] redis::RedisError),
+
     #[error("Token creation error")]
     TokenCreationError,
     #[error("Invalid token error")]
@@ -126,6 +129,14 @@ impl IntoResponse for AppError {
             Self::InternalServerError(msg) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Internal server error: {}", msg),
+            ),
+            Self::IoError(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal server error: {}", e),
+            ),
+            Self::RedisError(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Internal server error: {}", e),
             ),
 
             Self::InvalidTokenError => (

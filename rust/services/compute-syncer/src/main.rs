@@ -9,22 +9,24 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::result::Result::Ok;
 
-use config::Config;
-use factory::factories::amqp::Amqp;
-use factory::factories::database::Database;
-use factory::factories::kubernetes::Kubernetes;
-use factory::factories::observability::Observability;
+use factory::factories::{
+    amqp::Amqp, database::Database, kubernetes::Kubernetes, observability::Observability,
+    redis::Redis,
+};
 
-use factory::factories::redis::Redis;
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use utility::shutdown_signal::shutdown_signal;
 
-use crate::error::AppError;
-use crate::services::prometheus::Prometheus;
-use crate::utilities::deployment_status_syncer::start_deployment_status_syncer;
-use crate::utilities::metrics_scraper::start_metrics_scraper;
-use crate::utilities::reconcilation_loop::start_reconciliation_loop;
+use crate::{
+    config::Config,
+    error::AppError,
+    services::prometheus::Prometheus,
+    utilities::{
+        deployment_status_syncer::start_deployment_status_syncer,
+        metrics_scraper::start_metrics_scraper, reconcilation_loop::start_reconciliation_loop,
+    },
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

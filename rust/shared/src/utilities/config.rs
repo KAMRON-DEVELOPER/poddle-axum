@@ -19,6 +19,7 @@ pub struct Config {
     pub base_dir: PathBuf,
     pub tracing_level: Level,
 
+    // KUBERNETES
     pub domain: String,
     pub traefik_namespace: String,
     pub cluster_issuer_name: String,
@@ -26,7 +27,6 @@ pub struct Config {
     pub wildcard_certificate_name: String,
     pub wildcard_certificate_secret_name: String,
 
-    // KUBERNETES
     pub k8s_in_cluster: bool,
     pub k8s_config_path: Option<String>,
     pub k8s_sa_token: String,

@@ -67,7 +67,7 @@ async fn scrape(
         prometheus.query(cpu_query).get(),
         prometheus.query(memory_query).get()
     )
-    .map_err(|e| AppError::InternalError(format!("Prometheus query failed: {}", e)))?;
+    .map_err(|e| AppError::InternalServerError(format!("Prometheus query failed: {}", e)))?;
 
     // info!("cpu_result: {:?}", cpu_result);
     // info!("memory_result: {:?}", memory_result);
@@ -168,7 +168,7 @@ async fn scrape(
         let _: () = pipe
             .query_async(&mut redis.connection)
             .await
-            .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
+            .map_err(|e| AppError::InternalServerError(format!("Redis pipeline failed: {}", e)))?;
 
         info!("✅ Updated metrics for {} deployments", total_deployments);
     }
