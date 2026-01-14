@@ -1,30 +1,31 @@
-use crate::features::repository::{CacheRepository, DeploymentRepository, ProjectRepository};
+use crate::{
+    config::Config,
+    error::AppError,
+    features::repository::{CacheRepository, DeploymentRepository, ProjectRepository},
+};
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::IntoResponse,
 };
+use compute_core::schemas::{
+    CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
+    DeleteDeploymentMessage, DeploymentResponse, ProjectPageQuery, UpdateDeploymentMessage,
+    UpdateDeploymentRequest, UpdateProjectRequest,
+};
+use factory::factories::{amqp::Amqp, database::Database, redis::Redis};
+use http_contracts::{
+    list::schema::ListResponse, message::schema::MessageResponse, pagination::schema::Pagination,
+};
 use lapin::{
     BasicProperties,
     options::{BasicPublishOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
     types::FieldTable,
 };
-use shared::{
-    schemas::{
-        CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-        DeleteDeploymentMessage, DeploymentResponse, MessageResponse, ProjectPageQuery,
-        UpdateDeploymentMessage, UpdateDeploymentRequest, UpdateProjectRequest,
-    },
-    servicesservices::{amqp::Amqp, redis::Redis},
-    utilities::config::Config,
-};
-use shared::{
-    schemas::{ListResponse, Pagination},
-    servicesservices::database::Database,
-    utilities::{errors::AppError, jwt::Claims},
-};
+
 use tracing::{debug, info, instrument};
+use users_core::jwt::Claims;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -198,7 +199,7 @@ pub async fn create_deployment(
         DeploymentRepository::create(user_id, project_id, req.clone(), &mut tx).await?;
 
     // Get RabbitMQ channel
-    let channel = amqp.channel().await?;
+    let channel = amqp.channel().await;
 
     // Declare exchange (idempotent)
     channel
@@ -294,7 +295,7 @@ pub async fn update_deployment(
         DeploymentRepository::update(user_id, deployment_id, req.clone(), &mut tx).await?;
 
     // Get RabbitMQ channel
-    let channel = amqp.channel().await?;
+    let channel = amqp.channel().await;
 
     // Prepare message
     let message: UpdateDeploymentMessage = (user_id, project_id, deployment_id, req).into();
@@ -338,7 +339,7 @@ pub async fn delete_deployment(
     DeploymentRepository::delete(user_id, deployment_id, &mut tx).await?;
 
     // Get RabbitMQ channel
-    let channel = amqp.channel().await?;
+    let channel = amqp.channel().await;
 
     // Prepare message
     let message = DeleteDeploymentMessage {

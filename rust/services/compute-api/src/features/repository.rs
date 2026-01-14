@@ -1,20 +1,18 @@
-use redis::{aio::MultiplexedConnection, pipe};
-
-use shared::{
-    models::ResourceSpec,
+use compute_core::{
+    cache_keys::CacheKeys,
+    models::{Deployment, DeploymentEvent, DeploymentStatus, Project, ResourceSpec},
     schemas::{
-        CreateProjectRequest, DeploymentMetrics, MetricSnapshot, Pagination,
+        CreateDeploymentRequest, CreateProjectRequest, DeploymentMetrics, MetricSnapshot,
         UpdateDeploymentRequest,
     },
-    utilities::{cache_keys::CacheKeys, errors::AppError},
 };
+use http_contracts::pagination::schema::Pagination;
+use redis::{aio::MultiplexedConnection, pipe};
+
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
-use shared::{
-    models::{Deployment, DeploymentEvent, DeploymentStatus, Project},
-    schemas::CreateDeploymentRequest,
-};
+use crate::error::AppError;
 
 pub struct ProjectRepository;
 
@@ -408,7 +406,7 @@ impl CacheRepository {
         let results: Vec<Option<Vec<String>>> = p
             .query_async(connection)
             .await
-            .map_err(|e| AppError::InternalError(format!("Redis pipeline failed: {}", e)))?;
+            .map_err(|e| AppError::InternalServerError(format!("Redis pipeline failed: {}", e)))?;
 
         // Extract MGET Results safely
         // Take the first result, flatten the Option, and default to empty Vec on failure

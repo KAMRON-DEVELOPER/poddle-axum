@@ -14,6 +14,9 @@ pub struct Config {
 
     pub tracing_level: Level,
 
+    // KUBERNETES
+    pub scrape_interval_seconds: u64,
+
     // POSTGRES
     pub database_url: String,
     pub postgres_pool_size: Option<u32>,
@@ -106,7 +109,15 @@ impl Config {
         )
         .await;
 
-        let postgres_url = get_config_value(
+        let scrape_interval_seconds = get_config_value(
+            "SCRAPE_INTERVAL_SECONDS",
+            Some("SCRAPE_INTERVAL_SECONDS"),
+            None,
+            Some(15),
+        )
+        .await;
+
+        let database_url = get_config_value(
             "DATABASE_URL",
             Some("DATABASE_URL"),
             None,
@@ -275,7 +286,8 @@ impl Config {
             server_address,
             frontend_endpoint,
             tracing_level,
-            database_url: postgres_url,
+            scrape_interval_seconds,
+            database_url,
             postgres_pool_size,
             redis_url,
             redis_host,
