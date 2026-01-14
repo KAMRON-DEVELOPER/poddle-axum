@@ -1,9 +1,0 @@
-[package]
-name = "http-contracts"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-axum.workspace=true
-serde.workspace = true
-thiserror.workspace = true
