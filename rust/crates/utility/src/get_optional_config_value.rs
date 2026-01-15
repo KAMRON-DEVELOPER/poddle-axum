@@ -15,7 +15,7 @@ where
     if docker_secret.exists() {
         if let Ok(content) = fs::read_to_string(&docker_secret).await {
             if let Ok(parsed) = T::from_str(content.trim()) {
-                Some(parsed);
+                return Some(parsed);
             }
         }
     }
