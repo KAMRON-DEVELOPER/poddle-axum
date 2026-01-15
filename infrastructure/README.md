@@ -724,6 +724,7 @@ kubectl exec -n vault -i vault-0 -- vault policy write cert-manager - < infrastr
 ##### Apply wildcard certificate
 
 ```bash
+kubectl create namespace traefik
 kubectl apply -f infrastructure/charts/cert-manager/wildcard-certificate.yaml
 kubectl get certificate -n traefik
 # NAME                             READY   SECRET                          AGE
@@ -800,7 +801,7 @@ kubectl exec -n vault -i vault-0 -- vault auth list
 # token/         token         auth_token_3bb5335c         token based credentials    n/a
 ```
 
-> Then replace tenant-policy.hcl to take account correct Accessor!
+> Then replace `tenant-policy.hcl` to take account correct Accessor!
 
 ```bash
 kubectl exec -n vault -i vault-0 -- vault policy write tenant-policy - < infrastructure/charts/vault/tenant-policy.hcl
