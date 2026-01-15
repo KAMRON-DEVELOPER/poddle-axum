@@ -42,7 +42,6 @@ spec:
     - "vault.poddle.uz"
   ipAddresses:
     - 127.0.0.1
-    - 192.168.31.4
   privateKey:
     algorithm: RSA
     size: 4096

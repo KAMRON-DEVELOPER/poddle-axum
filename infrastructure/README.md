@@ -356,7 +356,7 @@ kubectl get secret vault-root-ca-secret -n vault \
 ```
 
 For cert-manager ClusterIssuer
-Use this value as caBundle in your vault-k8s-ci ClusterIssuer.
+Use this value as `caBundle` in your `vault-k8s-ci` ClusterIssuer.
 
 ```bash
 kubectl get secret vault-root-ca-secret -n vault -o jsonpath='{.data.ca\.crt}'
