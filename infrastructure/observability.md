@@ -102,7 +102,7 @@ kubectl get pod prometheus-server-674f658949-spg7p -n prometheus -o jsonpath='{.
 #### We may need to create IngressRoute(Traefik) for Prometheus, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/prometheus-community/prometheus-ingress.yaml
+kubectl apply -f infrastructure/charts/prometheus-community/prometheus-ingressroute.yaml
 ```
 
 ### Install Loki
@@ -137,7 +137,7 @@ kubectl get pod loki-0 -n loki -o jsonpath='{.spec.containers[*].name}'
 #### We may need to create IngressRoute(Traefik) for Loki, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/loki/loki-ingress.yaml
+kubectl apply -f infrastructure/charts/loki/loki-ingressroute.yaml
 ```
 
 ### Install Tempo
@@ -165,7 +165,7 @@ kubectl get all -n tempo
 #### We may need to create IngressRoute(Traefik) for Tempo, so axum microservices can access
 
 ```bash
-kubectl apply -f infrastructure/charts/tempo/tempo-ingress.yaml
+kubectl apply -f infrastructure/charts/tempo/tempo-ingressroute.yaml
 ```
 
 ### Install Grafana
@@ -203,7 +203,7 @@ kubectl apply -f infrastructure/charts/grafana/grafana-datasources.yaml
 #### 4. Access Grafana
 
 ```bash
-kubectl apply -f infrastructure/charts/grafana/grafana-ingress.yaml
+kubectl apply -f infrastructure/charts/grafana/grafana-ingressroute.yaml
 ```
 
 Then open: <https://grafana.poddle.uz>
@@ -221,7 +221,7 @@ After logging in, navigate to **Configuration → Data Sources** to verify that 
 
 - `grafana-values.yaml` - Main Helm values with persistence, resources, and sidecar configuration
 - `grafana-datasources.yaml` - ConfigMap with all datasource definitions (Prometheus, Loki, Tempo)
-- `grafana-ingress.yaml` - (Optional) Ingress configuration for external access
+- `grafana-ingressroute.yaml` - (Optional) Ingress configuration for external access
 
 #### Managing Datasources
 
@@ -324,7 +324,7 @@ helm upgrade --install alloy-agent grafana/alloy \
 Expose
 
 ```bash
-kubectl apply -f infrastructure/charts/alloy/agent/alloy-ingress.yaml
+kubectl apply -f infrastructure/charts/alloy/agent/alloy-healthcheck-ingressroute.yaml
 ```
 
 ##### Verifying Kubelet TLS for `prometheus.scrape "cadvisor"`
@@ -716,7 +716,10 @@ helm upgrade --install alloy-gateway grafana/alloy \
 Expose
 
 ```bash
-kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingress.yaml
+kubectl apply -f infrastructure/charts/alloy/gateway/alloy-grpcroute.yaml
+kubectl apply -f infrastructure/charts/alloy/gateway/alloy-httproute.yaml
+kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingressroutetcp.yaml
+kubectl apply -f infrastructure/charts/alloy/gateway/alloy-healthcheck-ingressroute.yaml
 ```
 
 ### Grafana Alloy Architecture Overview
