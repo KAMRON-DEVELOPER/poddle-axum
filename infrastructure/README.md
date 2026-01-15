@@ -646,7 +646,6 @@ kubectl exec -n vault vault-0 -- vault write auth/kubernetes/role/cert-manager \
 
 ```bash
 kubectl apply -f infrastructure/charts/cert-manager/cluster-issuers.yaml
-kubectl get clusterissuers
 ```
 
 ##### Checking
