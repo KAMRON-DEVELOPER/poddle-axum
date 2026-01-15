@@ -727,7 +727,19 @@ kubectl apply -f infrastructure/charts/alloy/gateway/alloy-healthcheck-ingressro
 Check GRPC working
 
 ```bash
-telnet alloy-gateway.poddle.uz 4317
+# telnet alloy-gateway.poddle.uz 4317
+# Trying 192.168.31.10...
+# Connected to alloy-gateway.poddle.uz.
+# Escape character is '^]'.
+
+openssl s_client -connect alloy-gateway.poddle.uz:4317 -servername alloy-gateway.poddle.uz
+# Connecting to 192.168.31.10
+# CONNECTED(00000009)
+# depth=1 CN=Poddle Root CA
+# verify return:1
+# depth=0 CN=*.poddle.uz
+# verify return:1
+# ...
 ```
 
 ### Grafana Alloy Architecture Overview
