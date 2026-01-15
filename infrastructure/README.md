@@ -440,6 +440,12 @@ helm install vault hashicorp/vault \
 helm upgrade --install vault hashicorp/vault \
   --values infrastructure/charts/vault/vault-values.yaml \
   --namespace vault --create-namespace
+
+# or
+
+helm upgrade --install vault hashicorp/vault \
+  --values infrastructure/charts/vault/vault-values-with-gcpckms.yaml \
+  --namespace vault --create-namespace
 ```
 
 ```bash
