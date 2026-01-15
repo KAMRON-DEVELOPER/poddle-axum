@@ -210,13 +210,30 @@ spec:
 
 ### 3. Install cert-manager
 
+> When you enable cert-manager `gateway api` your cluster need to be installed `Gateway API CRDs`
+>
+> Useful links:
+>
+> - <https://gateway-api.sigs.k8s.io/guides/getting-started/>
+>
+> - <https://doc.traefik.io/traefik/reference/install-configuration/providers/kubernetes/kubernetes-gateway/>
+>
+> - <https://kubernetes.io/docs/concepts/services-networking/gateway/>
+
+Installing Gateway API
+
+```bash
+kubectl apply --server-side -f https://github.com/kubernetes-sigs/gateway-api/releases/download/v1.4.1/standard-install.yaml
+```
+
 ```bash
 helm install cert-manager jetstack/cert-manager \
   --set crds.enabled=true \
   --namespace cert-manager --create-namespace
 
 # or
- 
+
+# run to see other args: `docker run quay.io/jetstack/cert-manager-controller:v1.19.2 --help`
 helm upgrade --install cert-manager jetstack/cert-manager \
 --set crds.enabled=true \
 --set "extraArgs={--enable-gateway-api}" \
@@ -241,9 +258,9 @@ kubectl get pods -n cert-manager
 > [!NOTE]
 > There many things you need to be carefull and consider, tls certificates(secrets) are namespaced
 >
-> You can setup ServersTransport to control tls comunication beetween vault and traefik or
+> You can setup `ServersTransport` to control tls comunication beetween `vault` and `traefik` or
 >
-> by IngressRouteTCP and setting `passthrough: false`.
+> by `IngressRouteTCP` and setting `passthrough: false`.
 >
 > Also there we are not using mTLS which requires client and server(vault) to authenticate each other.
 >
@@ -256,7 +273,7 @@ kubectl get pods -n cert-manager
 > [!INFO]
 > Vault bootstrap PKI certs will be created by cert-manager
 >
-> vault-k8s-ci
+> `vault-k8s-ci`
 >
 
 ```bash
@@ -279,9 +296,8 @@ infrastructure/charts/cert-manager/vault/
 ├── ca/
 │   ├── selfsigned-issuer.yaml
 │   ├── vault-root-ca-certificate.yaml
-│   └── vault-root-ca-issuer.yaml
-└── certs/
-    └── vault-server-tls-certificate.yaml
+│   ├── vault-root-ca-issuer.yaml
+│   └── vault-server-tls-certificate.yaml 
 ```
 
 Apply manifests in order:
@@ -303,14 +319,14 @@ kubectl get secrets -n vault
 
 Expected important secrets:
 
-* `vault-root-ca-secret`
-* `vault-server-tls-secret`
+- `vault-root-ca-secret`
+- `vault-server-tls-secret`
 
 The server TLS secret should contain:
 
-* `tls.crt`
-* `tls.key`
-* `ca.crt`
+- `tls.crt`
+- `tls.key`
+- `ca.crt`
 
 #### What this PKI setup does (important)
 
@@ -320,34 +336,34 @@ This setup solves the chicken-and-egg problem:
 So cert-manager provides only the bootstrap PKI, after which Vault can take over.
 
 1. Flow overview
-    * Bootstrap Issuer
-    * File: selfsigned-issuer.yaml
-    * Creates a one-time self-signed Issuer
-    * Used only to mint the root CA
+    - Bootstrap Issuer
+    - File: `selfsigned-issuer.yaml`
+    - Creates a one-time `selfsigned-issuer`
+    - Used only to mint the root CA
 2. Root CA Certificate
-    * File: vault-root-ca-certificate.yaml
-    * Generates a self-signed root CA
-    * Stored in Secret: vault-root-ca-secret
+    - File: `vault-root-ca-certificate.yaml`
+    - Generates a self-signed `vault-root-ca-certificate` root CA
+    - Stored in Secret: `vault-root-ca-secret`
 3. CA-backed Issuer
-    * File: vault-root-ca-issuer.yaml
-    * Uses vault-root-ca-secret
-    * Becomes the real signing authority
+    - File: `vault-root-ca-issuer.yaml`
+    - Uses `vault-root-ca-secret`
+    - Becomes the real signing authority
 4. Vault Server TLS Certificate
-    * File: vault-server-tls-certificate.yaml
-    * Issues TLS certs for:
-      * vault.vault.svc
-      * vault-active
-      * vault-standby
-      * StatefulSet pod DNS
-      * Internal wildcards
-    * Stored in Secret: vault-server-tls-secret
+    - File: `vault-server-tls-certificate.yaml`
+    - Issues TLS certs for:
+      - `vault.vault.svc`
+      - `vault-active`
+      - `vault-standby`
+      - StatefulSet pod DNS
+      - Internal wildcards
+    - Stored in Secret: `vault-server-tls-secret`
 
 #### Extra
 >
 > [!NOTE]
-> Since we are dealing TLS termination in the Vault <-> Traefik we don't strictly need to do this.
+> Since we are dealing TLS termination in the `Vault <-> Traefik` we don't strictly need to do this.
 >
-> if IngressRoute is using `websucure` we need to use `poddle-root-ca.crt`
+> if `IngressRoute` is using `websucure` we need to use `poddle-root-ca.crt`
 
 ```bash
 mkdir -p ~/certs
@@ -411,9 +427,9 @@ kubectl create secret generic poddle-kms-service-account-secret \
 3. **Leader Election**: If the leader fails, followers automatically elect a new leader (typically within seconds).
 4. **Data Replication**: All write operations go through the leader, which replicates them to followers.
 5. **High Availability**:
-   * With 3 replicas, the cluster can tolerate 1 node failure
-   * Minimum 2 nodes needed for quorum (majority)
-   * Formula: quorum = (n/2) + 1, where n = total nodes
+   - With 3 replicas, the cluster can tolerate 1 node failure
+   - Minimum 2 nodes needed for quorum (majority)
+   - Formula: quorum = (n/2) + 1, where n = total nodes
 
 ```bash
 helm install vault hashicorp/vault \
@@ -853,9 +869,9 @@ kubectl apply -f infrastructure/charts/vault/vault-ingress.yaml
 
 ### Prerequisites
 
-* `kubectl` configured to access your cluster
-* Vault server running and accessible
-* `vault` CLI installed and configured
+- `kubectl` configured to access your cluster
+- Vault server running and accessible
+- `vault` CLI installed and configured
 
 ```bash
 helm install vso hashicorp/vault-secrets-operator \
