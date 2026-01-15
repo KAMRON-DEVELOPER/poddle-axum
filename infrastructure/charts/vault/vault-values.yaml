@@ -53,11 +53,26 @@ server:
     enabled: true
     scheme: HTTPS
     path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+    # When a probe fails, Kubernetes will try failureThreshold times before giving up
+    failureThreshold: 5
+    # Number of seconds after the container has started before probe initiates
+    initialDelaySeconds: 10
+    # How often (in seconds) to perform the probe
+    periodSeconds: 5
+    # Number of seconds after which the probe times out.
+    timeoutSeconds: 5
   livenessProbe:
     enabled: true
     scheme: HTTPS
     path: "/v1/sys/health?standbyok=true&sealedcode=204"
-    initialDelaySeconds: 60
+    # When a probe fails, Kubernetes will try failureThreshold times before giving up
+    failureThreshold: 5
+    # Number of seconds after the container has started before probe initiates
+    initialDelaySeconds: 120
+    # How often (in seconds) to perform the probe
+    periodSeconds: 15
+    # Number of seconds after which the probe times out.
+    timeoutSeconds: 5
 
   # Affinity to spread across nodes
   affinity: |
