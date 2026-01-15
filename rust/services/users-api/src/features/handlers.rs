@@ -43,7 +43,6 @@ use uuid::Uuid;
 // -- =====================
 pub async fn google_oauth_handler(
     jar: PrivateCookieJar,
-    State(config): State<Config>,
     State(google_oauth_client): State<GoogleOAuthClient>,
 ) -> Result<Response, AppError> {
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -75,7 +74,6 @@ pub async fn google_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
     State(database): State<Database>,
-    State(config): State<Config>,
     Query(query): Query<OAuthCallback>,
     State(google_oauth_client): State<GoogleOAuthClient>,
 ) -> Result<Response, AppError> {
@@ -144,7 +142,6 @@ pub async fn google_oauth_callback_handler(
 // -- =====================
 pub async fn github_oauth_handler(
     jar: PrivateCookieJar,
-    State(config): State<Config>,
     State(github_oauth_client): State<GithubOAuthClient>,
 ) -> Result<Response, AppError> {
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
@@ -171,7 +168,6 @@ pub async fn github_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
     State(database): State<Database>,
-    State(config): State<Config>,
     Query(query): Query<OAuthCallback>,
     State(github_oauth_client): State<GithubOAuthClient>,
 ) -> Result<Response, AppError> {
