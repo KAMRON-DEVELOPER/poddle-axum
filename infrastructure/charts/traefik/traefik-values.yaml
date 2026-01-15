@@ -21,19 +21,31 @@ ports:
     port: 4317
     nodePort: 30317
     protocol: TCP
+    expose:
+      default: true
+    tls:
+      enabled: true
 
   otlp-http:
     port: 4318
     nodePort: 30318
     protocol: TCP
+    expose:
+      default: true
+    tls:
+      enabled: true
 
   tcp:
     port: 8443
     protocol: TCP
+    expose:
+      default: false
 
   udp:
     port: 9000
     protocol: UDP
+    expose:
+      default: false
 
 # Providers
 providers:
