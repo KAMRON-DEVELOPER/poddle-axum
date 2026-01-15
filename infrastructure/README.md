@@ -359,7 +359,7 @@ So cert-manager provides only the bootstrap PKI, after which Vault can take over
     - Stored in Secret: `vault-server-tls-secret`
 
 #### Extra
->
+
 > [!NOTE]
 > Since we are dealing TLS termination in the `Vault <-> Traefik` we don't strictly need to do this.
 >
@@ -370,9 +370,9 @@ mkdir -p ~/certs
 kubectl get secret vault-root-ca-secret -n vault \
   -o jsonpath='{.data.ca\.crt}' | base64 -d > ~/certs/vault-root-ca.crt
 ```
-
-For cert-manager ClusterIssuer
-Use this value as `caBundle` in your `vault-k8s-ci` ClusterIssuer.
+>
+> [!NOTE]
+> For cert-manager ClusterIssuer Use this value as `caBundle` in your `vault-k8s-ci` ClusterIssuer.
 
 ```bash
 kubectl get secret vault-root-ca-secret -n vault -o jsonpath='{.data.ca\.crt}'
