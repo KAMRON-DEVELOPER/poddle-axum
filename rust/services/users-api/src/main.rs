@@ -40,6 +40,7 @@ async fn main() -> anyhow::Result<()> {
         &config.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
+        config.tracing_level,
     )
     .await;
 

@@ -22,7 +22,7 @@ async fn main() -> anyhow::Result<()> {
 
     // These are baked at COMPILE time
     let cargo_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    // let cargo_crate_name = env!("CARGO_CRATE_NAME");
+    let cargo_crate_name = env!("CARGO_CRATE_NAME");
     let cargo_pkg_name = env!("CARGO_PKG_NAME");
     let cargo_pkg_version = env!("CARGO_PKG_VERSION").into();
 
@@ -36,8 +36,9 @@ async fn main() -> anyhow::Result<()> {
     let config = Config::init(cargo_manifest_dir).await?;
     let _guard = Observability::init(
         &config.otel_exporter_otlp_endpoint,
-        cargo_pkg_name,
+        cargo_crate_name,
         cargo_pkg_version,
+        config.tracing_level,
     )
     .await;
 

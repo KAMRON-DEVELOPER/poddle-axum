@@ -35,6 +35,7 @@ impl Observability {
         otel_exporter_otlp_endpoint: &str,
         cargo_crate_name: &str,
         cargo_pkg_version: &str,
+        tracing_level: Level,
     ) -> Observability {
         let resource = Self::get_resource(cargo_crate_name, cargo_pkg_version);
 
@@ -48,11 +49,9 @@ impl Observability {
         let metrics_layer = MetricsLayer::new(meter_provider.clone());
 
         // Filters
-        let level_filter = tracing_subscriber::filter::LevelFilter::from_level(Level::INFO);
-        let env_filter = EnvFilter::new(format!(
-            "{}=debug,tower_http=warn,hyper=warn,reqwest=warn",
-            cargo_crate_name
-        ));
+        let level_filter = tracing_subscriber::filter::LevelFilter::from_level(tracing_level);
+        let env_filter = EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| EnvFilter::new(tracing_level.as_str().to_lowercase()));
 
         // Stdout
         let timer = LocalTime::new(format_description!(
