@@ -45,8 +45,7 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1d219da8-127b-4f87-a34a-e13d396a1195" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/services/users-api/src/config.rs" beforeDir="false" afterPath="$PROJECT_DIR$/services/users-api/src/config.rs" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/services/users-api/src/services/build_s3.rs" beforeDir="false" afterPath="$PROJECT_DIR$/services/users-api/src/services/build_s3.rs" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../infrastructure/charts/vault/vault-values.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/../infrastructure/charts/vault/vault-values.yaml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -60,26 +59,26 @@
   <component name="MacroExpansionManager">
     <option name="directoryName" value="1oKV1R6u" />
   </component>
-  <component name="ProjectColorInfo"><![CDATA[{
-  "associatedIndex": 4
-}]]></component>
+  <component name="ProjectColorInfo">{
+  &quot;associatedIndex&quot;: 4
+}</component>
   <component name="ProjectId" id="38HCdVdg6iSLopnntqaIwuGQxKg" />
   <component name="ProjectViewState">
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent"><![CDATA[{
-  "keyToString": {
-    "ModuleVcsDetector.initialDetectionPerformed": "true",
-    "RunOnceActivity.ShowReadmeOnStart": "true",
-    "RunOnceActivity.git.unshallow": "true",
-    "git-widget-placeholder": "master",
-    "last_opened_file_path": "/home/kamronbek/Documents/Coding/rust/backend/poddle-axum/rust",
-    "org.rust.cargo.project.model.PROJECT_DISCOVERY": "true",
-    "org.rust.first.attach.projects": "true",
-    "settings.editor.selected.configurable": "language.rust.cargo.check"
+  <component name="PropertiesComponent">{
+  &quot;keyToString&quot;: {
+    &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/home/kamronbek/Documents/Coding/rust/backend/poddle-axum/rust&quot;,
+    &quot;org.rust.cargo.project.model.PROJECT_DISCOVERY&quot;: &quot;true&quot;,
+    &quot;org.rust.first.attach.projects&quot;: &quot;true&quot;,
+    &quot;settings.editor.selected.configurable&quot;: &quot;language.rust.cargo.check&quot;
   }
-}]]></component>
+}</component>
   <component name="RunManager" selected="Cargo.Test rust">
     <configuration name="Run ai-orchestrator" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
       <option name="command" value="run --package ai-orchestrator --bin ai-orchestrator" />
@@ -229,7 +228,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1768447196594</updated>
-      <workItem from="1768447197882" duration="1419000" />
+      <workItem from="1768447197882" duration="2019000" />
     </task>
     <servers />
   </component>
