@@ -53,6 +53,7 @@ pub struct Config {
     pub s3_endpoint: Option<String>,
     pub s3_region: Option<String>,
     pub s3_bucket_name: Option<String>,
+    pub s3_allow_http: bool,
 
     // JWT
     pub jwt_secret_key: String,
@@ -60,7 +61,6 @@ pub struct Config {
     pub refresh_token_expire_in_days: i64,
     pub email_verification_token_expire_in_hours: i64,
     pub refresh_token_renewal_threshold_days: i64,
-    pub cookie_secure: bool,
 
     // EMAIL
     pub email_service_api_key: String,
@@ -210,6 +210,9 @@ impl Config {
         let s3_region = get_optional_config_value("S3_REGION", Some("S3_REGION"), None).await;
         let s3_bucket_name =
             get_optional_config_value("S3_BUCKET_NAME", Some("S3_BUCKET_NAME"), None).await;
+        let s3_allow_http =
+            get_config_value("S3_ALLOW_HTTP", Some("S3_ALLOW_HTTP"), None, Some(false)).await;
+
         let jwt_secret_key = get_config_value("SECRET_KEY", Some("SECRET_KEY"), None, None).await;
         let access_token_expire_in_minute = get_config_value(
             "ACCESS_TOKEN_EXPIRE_IN_MINUTE",
@@ -299,6 +302,7 @@ impl Config {
             s3_endpoint,
             s3_region,
             s3_bucket_name,
+            s3_allow_http,
             jwt_secret_key,
             access_token_expire_in_minute,
             refresh_token_expire_in_days,
