@@ -144,7 +144,7 @@ kubectl apply -f infrastructure/charts/loki/loki-ingress.yaml
 
 ```bash
 helm upgrade --install tempo grafana/tempo \
-  --f infrastructure/charts/tempo/tempo-values.yaml \
+  -f infrastructure/charts/tempo/tempo-values.yaml \
   --namespace tempo --create-namespace
 ```
 
