@@ -105,7 +105,7 @@ gateway:
 
     otlp-grpc:
       port: 4317
-      protocol: TLS
+      protocol: HTTPS
       namespacePolicy:
         from: All
       certificateRefs:
