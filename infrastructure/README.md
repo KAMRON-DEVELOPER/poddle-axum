@@ -540,13 +540,14 @@ Reload
 > ~/.zsh_secrets file should be like this
 
 ```bash
-UNSEAL_KEY1='...'
-UNSEAL_KEY2='...'
-UNSEAL_KEY3='...'
-UNSEAL_KEY4='...'
-UNSEAL_KEY5='...'
+cat ~/.zsh_secrets
+# UNSEAL_KEY1='...'
+# UNSEAL_KEY2='...'
+# UNSEAL_KEY3='...'
+# UNSEAL_KEY4='...'
+# UNSEAL_KEY5='...'
 
-VAULT_TOKEN='...'
+# VAULT_TOKEN='...'
 ```
 
 > ~/.zshrc file should be added these, so it prevent from adding secrets to git/stow
