@@ -72,6 +72,24 @@ gateway:
         - name: wildcard-poddle-uz-tls-secret
           kind: Secret
 
+    otlp-http:
+      port: 4318
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: wildcard-poddle-uz-tls-secret
+          kind: Secret
+
+    otlp-grpc:
+      port: 4317
+      protocol: TCP
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: wildcard-poddle-uz-tls-secret
+          kind: Secret
+
 # Default TLSStore with wildcard cert
 tlsStore:
   default:

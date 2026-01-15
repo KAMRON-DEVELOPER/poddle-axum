@@ -1,7 +1,7 @@
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: alloy-agent-ingressroute
+  name: alloy-agent-healthcheck-ingressroute
   namespace: alloy-agent
 spec:
   entryPoints: []
