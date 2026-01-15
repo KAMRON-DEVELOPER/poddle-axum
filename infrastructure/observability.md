@@ -724,6 +724,12 @@ kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingressroutetcp.yaml
 kubectl apply -f infrastructure/charts/alloy/gateway/alloy-healthcheck-ingressroute.yaml
 ```
 
+Check GRPC working
+
+```bash
+telnet alloy-gateway.poddle.uz 4317
+```
+
 ### Grafana Alloy Architecture Overview
 
 This document explains the architecture of our observability stack using Grafana Alloy in a Kubernetes environment. We deploy Alloy in two distinct patterns: **DaemonSet** and **StatefulSet**, each serving specific purposes based on the physical constraints and logical requirements of different telemetry signals.
