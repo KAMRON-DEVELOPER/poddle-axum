@@ -729,13 +729,13 @@ kubectl exec -n vault -i vault-0 -- vault secrets enable -path=kvv2 -version=2 k
 
 ```bash
 kubectl exec -n vault -i vault-0 -- vault policy write vso-policy - <<EOF
-path "kvv2/data/deployments/*" {
+path "kvv2/data/*" {
   capabilities = ["read", "create", "update"]
 }
-path "kvv2/metadata/deployments/*" {
+path "kvv2/metadata/*" {
   capabilities = ["list", "read"]
 }
-path "kvv2/delete/deployments/*" {
+path "kvv2/delete/*" {
   capabilities = ["update"]
 }
 EOF
@@ -844,7 +844,7 @@ kubectl get svc -n traefik
 #### Create ingress, so applications can access to vault
 
 ```bash
-kubectl apply -f infrastructure/charts/vault/ingress.yaml
+kubectl apply -f infrastructure/charts/vault/vault-ingress.yaml
 ```
 
 ---

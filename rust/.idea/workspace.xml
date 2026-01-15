@@ -45,7 +45,8 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="1d219da8-127b-4f87-a34a-e13d396a1195" name="Changes" comment="">
-      <change beforePath="$PROJECT_DIR$/../infrastructure/charts/vault/vault-values.yaml" beforeDir="false" afterPath="$PROJECT_DIR$/../infrastructure/charts/vault/vault-values.yaml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../infrastructure/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/../infrastructure/README.md" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/../infrastructure/charts/vault/tenant-policy.hcl" beforeDir="false" afterPath="$PROJECT_DIR$/../infrastructure/charts/vault/tenant-policy.hcl" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -228,7 +229,7 @@
       <option name="number" value="Default" />
       <option name="presentableId" value="Default" />
       <updated>1768447196594</updated>
-      <workItem from="1768447197882" duration="2019000" />
+      <workItem from="1768447197882" duration="2633000" />
     </task>
     <servers />
   </component>
