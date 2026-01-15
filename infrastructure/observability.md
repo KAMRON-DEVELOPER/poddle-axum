@@ -5,9 +5,8 @@
 ## Setup `kube-state-metrics`
 
 ```bash
-helm show values prometheus-community/kube-state-metrics > infrastructure/charts/kube-state-metrics/values.yaml
-
-helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics --namespace kube-system
+helm upgrade --install kube-state-metrics prometheus-community/kube-state-metrics \
+  --namespace kube-system
 
 # or
 

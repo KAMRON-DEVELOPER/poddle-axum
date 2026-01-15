@@ -55,6 +55,7 @@ helm show values grafana/tempo > infrastructure/charts/tempo/values.yaml
 helm show values grafana/tempo-distributed > infrastructure/charts/tempo/distributed-values.yaml
 helm show values grafana/mimir-distributed > infrastructure/charts/mimir/distributed-values.yaml
 helm show values prometheus-community/prometheus > infrastructure/charts/prometheus-community/values.yaml
+helm show values prometheus-community/kube-state-metrics > infrastructure/charts/kube-state-metrics/values.yaml
 helm show values minio/minio > infrastructure/charts/minio/values.yaml
 ```
 
@@ -869,7 +870,11 @@ kubectl get svc -n traefik
 
 #### Create ingress, so applications can access to vault
 
+> [!NOTE]
+> Remember "we are dealing TLS termination in the`Vault <-> Traefik`"? we need to setup `vault-transport` first.
+
 ```bash
+kubectl apply -f infrastructure/charts/traefik/vault-transport.yaml
 kubectl apply -f infrastructure/charts/vault/vault-ingress.yaml
 ```
 
