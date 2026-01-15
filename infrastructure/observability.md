@@ -716,9 +716,11 @@ helm upgrade --install alloy-gateway grafana/alloy \
 Expose
 
 ```bash
+# only one is enough (alloy-httproute.yaml is for otlp http, not grpc)
 kubectl apply -f infrastructure/charts/alloy/gateway/alloy-grpcroute.yaml
 kubectl apply -f infrastructure/charts/alloy/gateway/alloy-httproute.yaml
 kubectl apply -f infrastructure/charts/alloy/gateway/alloy-ingressroutetcp.yaml
+
 kubectl apply -f infrastructure/charts/alloy/gateway/alloy-healthcheck-ingressroute.yaml
 ```
 
