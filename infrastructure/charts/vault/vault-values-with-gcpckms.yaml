@@ -32,10 +32,17 @@ server:
       secret:
         defaultMode: 420
         secretName: vault-server-tls-secret
+    - name: poddle-kms-service-account-volume
+      secret:
+        defaultMode: 420
+        secretName: poddle-kms-service-account-secret
 
   volumeMounts:
     - mountPath: /vault/tls
       name: vault-server-tls-secret-volume
+      readOnly: true
+    - mountPath: /vault/gcpkms
+      name: poddle-kms-service-account-volume
       readOnly: true
 
   resources:
@@ -90,6 +97,15 @@ server:
           tls_cert_file = "/vault/tls/tls.crt"
           tls_key_file = "/vault/tls/tls.key"
           tls_client_ca_file = "/vault/tls/ca.crt"
+        }
+
+        seal "gcpckms" {
+          disabled    = "false"
+          region      = "global"
+          project     = "poddle-cloud-dev"
+          credentials = "/vault/gcpkms/poddle-kms-service-account.json"
+          key_ring    = "vault-unseal-key-ring"
+          crypto_key  = "vault-unseal-crypto-key"
         }
 
         storage "raft" {
