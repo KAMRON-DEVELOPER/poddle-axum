@@ -33,10 +33,10 @@ impl Observability {
     // Initialize tracing-subscriber and return Observability for opentelemetry-related termination processing
     pub async fn init(
         otel_exporter_otlp_endpoint: &str,
-        cargo_pkg_name: &str,
+        cargo_crate_name: &str,
         cargo_pkg_version: &str,
     ) -> Observability {
-        let resource = Self::get_resource(cargo_pkg_name, cargo_pkg_version);
+        let resource = Self::get_resource(cargo_crate_name, cargo_pkg_version);
 
         let tracer_provider =
             Self::init_tracer_provider(otel_exporter_otlp_endpoint.to_owned(), resource.clone());
@@ -51,7 +51,7 @@ impl Observability {
         let level_filter = tracing_subscriber::filter::LevelFilter::from_level(Level::INFO);
         let env_filter = EnvFilter::new(format!(
             "{}=debug,tower_http=warn,hyper=warn,reqwest=warn",
-            cargo_pkg_name
+            cargo_crate_name
         ));
 
         // Stdout
@@ -86,11 +86,11 @@ impl Observability {
     }
 
     // Resource
-    fn get_resource(cargo_pkg_name: &str, cargo_pkg_version: &str) -> Resource {
+    fn get_resource(cargo_crate_name: &str, cargo_pkg_version: &str) -> Resource {
         Resource::builder()
             .with_schema_url(
                 [
-                    KeyValue::new(SERVICE_NAME, cargo_pkg_name.to_string()),
+                    KeyValue::new(SERVICE_NAME, cargo_crate_name.to_string()),
                     KeyValue::new(SERVICE_VERSION, cargo_pkg_version.to_string()),
                 ],
                 SCHEMA_URL,
