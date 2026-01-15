@@ -102,12 +102,16 @@ impl Observability {
         otel_exporter_otlp_endpoint: String,
         resource: Resource,
     ) -> SdkTracerProvider {
+        println!("📤 Initializing OTLP trace exporter...");
+
         // Initialize OTLP Trace exporter using gRPC (Tonic)
         let trace_exporter = SpanExporter::builder()
             .with_tonic()
             .with_endpoint(otel_exporter_otlp_endpoint)
             .build()
             .expect("Failed to create trace exporter");
+
+        println!("✅ Trace exporter created");
 
         // Create a tracer provider with the exporter
         let tracer_provider = SdkTracerProvider::builder()
@@ -120,6 +124,8 @@ impl Observability {
         // Set it as the global provider
         global::set_tracer_provider(tracer_provider.clone());
 
+        println!("✅ Tracer provider registered globally");
+
         tracer_provider
     }
 
@@ -128,12 +134,16 @@ impl Observability {
         otel_exporter_otlp_endpoint: String,
         resource: Resource,
     ) -> SdkMeterProvider {
+        println!("📊 Initializing OTLP metric exporter...");
+
         // Initialize OTLP Metric exporter using gRPC (Tonic)
         let metric_exporter = opentelemetry_otlp::MetricExporter::builder()
             .with_tonic()
             .with_endpoint(otel_exporter_otlp_endpoint)
             .build()
             .expect("Failed to create metric exporter");
+
+        println!("✅ Metric exporter created");
 
         let reader = PeriodicReader::builder(metric_exporter)
             .with_interval(std::time::Duration::from_secs(30))
@@ -146,14 +156,16 @@ impl Observability {
         //     .build();
 
         // Create a metric provider with the OTLP Metric exporter
-        let metric_provider = SdkMeterProvider::builder()
+        let meter_provider = SdkMeterProvider::builder()
             // .with_periodic_exporter(metric_exporter)
             .with_resource(resource)
             .with_reader(reader)
             .build();
 
-        global::set_meter_provider(metric_provider.clone());
+        global::set_meter_provider(meter_provider.clone());
 
-        metric_provider
+        println!("✅ Meter provider registered globally");
+
+        meter_provider
     }
 }

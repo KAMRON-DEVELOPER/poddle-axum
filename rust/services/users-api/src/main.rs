@@ -35,7 +35,13 @@ async fn main() -> anyhow::Result<()> {
     // Load service-specific .env
     dotenvy::from_path(&env_path).ok();
 
+    println!("🔍 Loading configuration...");
     let config = Config::init(cargo_manifest_dir).await?;
+
+    println!("🌐 Server address: {}", config.server_address);
+    println!("📡 OTLP endpoint: {}", config.otel_exporter_otlp_endpoint);
+
+    println!("🔭 Initializing observability...");
     let _guard = Observability::init(
         &config.otel_exporter_otlp_endpoint,
         cargo_crate_name,
@@ -44,7 +50,10 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
+    println!("🏗️  Building application...");
     let app = app::app(&config).await?;
+
+    println!("🔌 Binding to {}...", config.server_address);
     let listener = tokio::net::TcpListener::bind(config.server_address).await?;
 
     info!(
@@ -57,6 +66,8 @@ async fn main() -> anyhow::Result<()> {
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;
+
+    println!("👋 Shutting down gracefully...");
 
     Ok(())
 }
