@@ -486,6 +486,20 @@ kubectl exec -it -n vault vault-0 -- vault operator init
 ```
 
 ```bash
+cat > ~/.zsh_secrets <<EOF
+UNSEAL_KEY1=''
+UNSEAL_KEY2=''
+UNSEAL_KEY3=''
+UNSEAL_KEY4=''
+UNSEAL_KEY5=''
+
+VAULT_TOKEN=''
+EOF
+```
+
+Other way
+
+```bash
 kubectl exec -n vault vault-0 -- vault operator init -key-shares=5 -key-threshold=3 \
   -format=json > ~/certs/vault-keys.json
 ```
@@ -501,7 +515,7 @@ export UNSEAL_KEY5=$(cat ~/certs/vault-keys.json | jq -r '.unseal_keys_b64[4]')
 export VAULT_TOKEN=$(cat ~/certs/vault-keys.json | jq -r '.root_token')
 ```
 
-Keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.json`
+Or keep persistent in ~/.zsh_secrets, Generate the secrets file from `vault-keys.json`
 
 ```bash
 cat > ~/.zsh_secrets <<EOF
@@ -514,18 +528,6 @@ export UNSEAL_KEY5="$(jq -r '.unseal_keys_b64[4]' ~/certs/vault-keys.json)"
 
 # Vault root token
 export VAULT_TOKEN="$(jq -r '.root_token' ~/certs/vault-keys.json)"
-EOF
-```
-
-```bash
-cat > ~/.zsh_secrets <<EOF
-UNSEAL_KEY1=''
-UNSEAL_KEY2=''
-UNSEAL_KEY3=''
-UNSEAL_KEY4=''
-UNSEAL_KEY5=''
-
-VAULT_TOKEN=''
 EOF
 ```
 
