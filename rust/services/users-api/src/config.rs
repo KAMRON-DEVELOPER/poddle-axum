@@ -199,8 +199,6 @@ impl Config {
         .await;
 
         let cookie_key = get_config_value("COOKIE_KEY", Some("COOKIE_KEY"), None, None).await;
-        let cookie_secure =
-            get_config_value("COOKIE_SECURE", Some("COOKIE_SECURE"), None, None).await;
 
         let s3_access_key_id =
             get_optional_config_value("S3_ACCESS_KEY_ID", Some("S3_ACCESS_KEY_ID"), None).await;
@@ -308,7 +306,6 @@ impl Config {
             refresh_token_expire_in_days,
             email_verification_token_expire_in_hours,
             refresh_token_renewal_threshold_days,
-            cookie_secure,
             email_service_api_key,
             ca_path: Some(ca_path),
             ca,

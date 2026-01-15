@@ -65,7 +65,7 @@ pub async fn google_oauth_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(config.cookie_secure);
+            .secure(true);
     let jar = jar.add(pkce_verifier_cookie);
 
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
@@ -130,7 +130,7 @@ pub async fn google_oauth_callback_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(config.cookie_secure);
+            .secure(true);
     let jar = jar.add(google_oauth_user_sub_cookie);
 
     let response = Json(RedirectResponse {
@@ -161,7 +161,7 @@ pub async fn github_oauth_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(config.cookie_secure);
+            .secure(true);
     let jar = jar.add(pkce_verifier_cookie);
 
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
@@ -231,7 +231,7 @@ pub async fn github_oauth_callback_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(config.cookie_secure);
+            .secure(true);
     let jar = jar.add(github_oauth_user_sub_cookie);
 
     let response = Json(RedirectResponse {
@@ -267,7 +267,7 @@ pub async fn continue_with_email_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(max_age_days))
-            .secure(config.cookie_secure);
+            .secure(true);
         let jar = jar.add(refresh_cookie);
 
         let tokens = Tokens {
@@ -364,7 +364,7 @@ pub async fn continue_with_email_handler(
                 .path("/")
                 .same_site(SameSite::Lax)
                 .max_age(CookieDuration::days(max_age_days))
-                .secure(config.cookie_secure);
+                .secure(true);
             let jar = jar.add(refresh_cookie);
 
             let tokens = Tokens {
@@ -571,7 +571,7 @@ pub async fn refresh_handler(
                 .http_only(true)
                 .same_site(SameSite::Lax)
                 .max_age(CookieDuration::days(max_age_days))
-                .secure(config.cookie_secure);
+                .secure(true);
             jar.add(cookie)
         } else {
             jar
