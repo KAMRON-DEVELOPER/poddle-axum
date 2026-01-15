@@ -13,9 +13,19 @@ ports:
 
   websecure:
     port: 443
-    nodePort: 30001
+    nodePort: 30443
     tls:
       enabled: true
+
+  otlp-grpc:
+    port: 4317
+    nodePort: 30317
+    protocol: TCP
+
+  otlp-http:
+    port: 4318
+    nodePort: 30318
+    protocol: TCP
 
   tcp:
     port: 8443
