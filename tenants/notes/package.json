@@ -1,14 +1,16 @@
 {
   "name": "notes",
   "version": "1.0.0",
-  "description": "Note Keeper",
+  "description": "Note Taking API with OpenTelemetry",
   "keywords": [
-    "notes"
+    "notes",
+    "api",
+    "opentelemetry"
   ],
   "license": "ISC",
   "author": "kamronbek",
   "type": "module",
-  "main": "index.ts",
+  "main": "app.ts",
   "scripts": {
     "dev": "nodemon src/app.ts",
     "run": "tsc && node dist/app.js",
@@ -16,6 +18,10 @@
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "dependencies": {
+    "@opentelemetry/exporter-trace-otlp-grpc": "^0.210.0",
+    "@opentelemetry/instrumentation-express": "^0.58.0",
+    "@opentelemetry/instrumentation-http": "^0.210.0",
+    "@opentelemetry/sdk-node": "^0.210.0",
     "express": "^5.2.1"
   },
   "devDependencies": {
