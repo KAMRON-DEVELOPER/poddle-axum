@@ -1,5 +1,5 @@
 use opentelemetry::{KeyValue, global, trace::TracerProvider as _};
-use opentelemetry_otlp::{SpanExporter, WithExportConfig};
+use opentelemetry_otlp::{SpanExporter, WithExportConfig, WithTonicConfig};
 use opentelemetry_sdk::{
     Resource,
     metrics::{PeriodicReader, SdkMeterProvider},
@@ -10,6 +10,7 @@ use opentelemetry_semantic_conventions::{
     attribute::{SERVICE_NAME, SERVICE_VERSION},
 };
 use time::macros::format_description;
+use tonic::transport::ClientTlsConfig;
 use tracing::Level;
 use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
 use tracing_subscriber::{
@@ -104,10 +105,34 @@ impl Observability {
     ) -> SdkTracerProvider {
         println!("📤 Initializing OTLP trace exporter...");
 
+        /*
+        pub struct ClientTlsConfig {
+            domain: Option<String>,
+            certs: Vec<Certificate>,
+            trust_anchors: Vec<TrustAnchor<'static>>,
+            identity: Option<Identity>,
+            assume_http2: bool,
+            with_native_roots: bool,
+            use_key_log: bool,
+            timeout: Option<Duration>,
+        }
+        */
+        let tls_config = ClientTlsConfig::new().with_native_roots();
+        // tls_config.ca_certificate(ca_certificate);
+        // tls_config.ca_certificates(ca_certificates);
+        // tls_config.domain_name(domain_name);
+        // tls_config.identity(identity);
+        // tls_config.trust_anchor(trust_anchor);
+        // tls_config.trust_anchors(trust_anchors);
+        // tls_config.with_enabled_roots(); // Activates all TLS roots enabled through tls-*-roots feature flags
+        // tls_config.with_native_roots(); // Enables the platform's trusted certs.
+
         // Initialize OTLP Trace exporter using gRPC (Tonic)
         let trace_exporter = SpanExporter::builder()
             .with_tonic()
             .with_endpoint(otel_exporter_otlp_endpoint)
+            .with_compression(opentelemetry_otlp::Compression::Gzip)
+            .with_tls_config(tls_config)
             .build()
             .expect("Failed to create trace exporter");
 
@@ -136,10 +161,13 @@ impl Observability {
     ) -> SdkMeterProvider {
         println!("📊 Initializing OTLP metric exporter...");
 
+        let tls_config = ClientTlsConfig::new().with_native_roots();
+
         // Initialize OTLP Metric exporter using gRPC (Tonic)
         let metric_exporter = opentelemetry_otlp::MetricExporter::builder()
             .with_tonic()
             .with_endpoint(otel_exporter_otlp_endpoint)
+            .with_tls_config(tls_config)
             .build()
             .expect("Failed to create metric exporter");
 

@@ -8,7 +8,10 @@ members = [
     "services/compute-syncer",
     "services/ai-orchestrator",
     "crates/factory",
-    "crates/utility", "crates/users-core", "crates/http-contracts", "crates/compute-core",
+    "crates/utility",
+    "crates/users-core",
+    "crates/http-contracts",
+    "crates/compute-core",
 ]
 
 resolver = "2"
@@ -124,6 +127,7 @@ opentelemetry-otlp = { version = "0.31.0", features = [
     "tonic",
     "grpc-tonic",
     "gzip-tonic",
+    "tls-roots",
 ] }
 # Semantic conventions for consistent attribute naming
 opentelemetry-semantic-conventions = { version = "0.31.0", features = [
