@@ -13,7 +13,7 @@ use std::result::Result::Ok;
 use config::Config;
 use factory::factories::observability::Observability;
 
-use tracing::{info, warn};
+use tracing::{error_span, info, warn_span};
 use utility::shutdown_signal::shutdown_signal;
 
 #[tokio::main]
@@ -56,15 +56,9 @@ async fn main() -> anyhow::Result<()> {
     println!("🔌 Binding to {}...", config.server_address);
     let listener = tokio::net::TcpListener::bind(config.server_address).await?;
 
-    warn!(
-        "🚀 {} service running at {:#?}",
-        cargo_pkg_name, config.server_address
-    );
-    tracing::error!(
-        "🚀 {} service running at {:#?}",
-        cargo_pkg_name,
-        config.server_address
-    );
+    warn_span!("🚀 service running");
+    error_span!("🚀 service running");
+
     info!(
         "🚀 {} service running at {:#?}",
         cargo_pkg_name, config.server_address
