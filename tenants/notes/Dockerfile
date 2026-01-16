@@ -11,7 +11,6 @@ COPY tsconfig.json ./
 COPY src ./src
 
 # Build TypeScript
-RUN npm install -g typescript
 RUN npm run build
 
 # Stage 2: Run
@@ -30,7 +29,7 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
 
 # Install only production dependencies
-RUN npm install --production
+RUN npm ci --only=production
 
 EXPOSE 3000
 
