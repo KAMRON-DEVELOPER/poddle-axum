@@ -165,13 +165,13 @@ otelcol.processor.tail_sampling "default" {
 		}
 	}
 
-	// Sample 10% of normal traces
+	// Sample 10% of normal traces, 100% in dev
 	policy {
 		name = "normal"
 		type = "probabilistic"
 
 		probabilistic {
-			sampling_percentage = 10
+			sampling_percentage = 100
 		}
 	}
 
