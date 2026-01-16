@@ -4,31 +4,14 @@ use factory::factories::{
     kubernetes::KubernetesConfig,
     redis::{RedisConfig, RedisParams},
     tls::Tls,
-    zepto::error::ZeptoError,
 };
 use sqlx::postgres::PgSslMode;
 
 use crate::config::Config;
 
-use crate::error::AppError;
-
 // -------------------------------------------------------------------------------
 // ---------------------------- Error implementations ----------------------------
 // -------------------------------------------------------------------------------
-
-impl From<ZeptoError> for AppError {
-    fn from(err: ZeptoError) -> Self {
-        match err {
-            ZeptoError::Api { error } => AppError::ExternalServiceError {
-                service: "ZeptoMail".to_string(),
-                code: error.code,
-                message: error.message,
-            },
-            ZeptoError::Request(_) => AppError::ServiceUnavailable("ZeptoMail".to_string()),
-            ZeptoError::Deserialize(e) => AppError::InternalServerError(e.to_string()),
-        }
-    }
-}
 
 // -------------------------------------------------------------------------------
 // --------------------------- Factory implementations ---------------------------
