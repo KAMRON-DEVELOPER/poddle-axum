@@ -18,14 +18,19 @@ RUN npm run build
 FROM node:24-alpine
 
 ENV OTEL_EXPORTER_OTLP_ENDPOINT='https://alloy-gateway.poddle.uz:4317'
+ENV OTEL_EXPORTER_OTLP_PROTOCOL='grpc'
 ENV OTEL_SERVICE_NAME='notes-service'
 ENV PORT=3000
 ENV NODE_ENV=development
 
 WORKDIR /app
 
-# Remove dev dependencies
-RUN rm -rf src tsconfig.json
+# Copy built artifacts and package files
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/package*.json ./
+
+# Install only production dependencies
+RUN npm install --production
 
 EXPOSE 3000
 
