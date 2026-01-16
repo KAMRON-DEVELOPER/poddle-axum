@@ -5,3 +5,6 @@ certs
 
 # FastEmbed cache
 .fastembed_cache/
+
+.venv
+node_modules
