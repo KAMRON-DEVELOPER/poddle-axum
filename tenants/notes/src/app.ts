@@ -91,6 +91,12 @@ seedNotes.forEach((note) => {
 // -----------------------------
 // Helper Functions
 // -----------------------------
+function queryToString(value: unknown, fallback = 'none'): string {
+  if (typeof value === 'string') return value;
+  if (Array.isArray(value)) return value.join(',');
+  return fallback;
+}
+
 function simulateDelay(operation: string, minMs = 5, maxMs = 30): void {
   const delay = Math.floor(Math.random() * (maxMs - minMs + 1)) + minMs;
   const start = Date.now();
@@ -133,12 +139,6 @@ function searchNotes(query: string, tags?: string[]): Note[] {
   }
 
   return results;
-}
-
-function queryToString(value: unknown, fallback = 'none'): string {
-  if (typeof value === 'string') return value;
-  if (Array.isArray(value)) return value.join(',');
-  return fallback;
 }
 
 // -----------------------------
