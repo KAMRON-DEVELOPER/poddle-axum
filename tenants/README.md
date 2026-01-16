@@ -1,5 +1,7 @@
 # Setup GitHub Container Registry (GHCR)
 
+> You can follow the official instruction at [working-with-a-github-packages-registry](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-container-registry)
+
 ## Prerequisites
 
 - A GitHub account.
@@ -10,7 +12,7 @@
 
 > GHCR requires a personal access token (classic) with specific scopes for authentication.
 
-1. Go to your GitHub `Settings`, then `Developer settings` > `Personal access tokens`.
+1. Go to your GitHub `Settings`, then `Developer settings` > [`Personal access tokens`](https://github.com/settings/tokens).
 2. Click Generate new token (classic).
 3. Give the token a descriptive name and set an expiration.
 4. Select the necessary scopes:
@@ -68,3 +70,7 @@ docker push ghcr.io/YOUR_GITHUB_USERNAME/YOUR_REPO_NAME:latest
 ```
 
 Once pushed, you can view the image in the `Packages` section of your GitHub profile or repository.
+
+Like:
+<https://github.com/settings/packages>
+<https://github.com/KAMRON-DEVELOPER?tab=packages>
