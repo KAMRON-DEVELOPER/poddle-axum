@@ -40,7 +40,7 @@ logger.info(f"Initializing OpenTelemetry for {SERVICE_NAME} to {ENDPOINT}")
 resource = Resource.create({
     "service.name": SERVICE_NAME,
     "service.version": "0.1.0",
-    "deployment.environment": "demo",
+    "deployment.environment": "development",
 })
 
 provider = TracerProvider(resource=resource)

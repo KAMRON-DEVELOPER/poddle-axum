@@ -102,10 +102,10 @@ curl http://localhost:8000/stats
 
 ## Environment Variables
 
-- `PORT`: Server port (default: 8000)
+- `PORT`: Server port (default: `8000`)
 - `OTEL_EXPORTER_OTLP_ENDPOINT`: OpenTelemetry collector endpoint (`https://alloy-gateway.poddle.uz:4317`)
-- `OTEL_SERVICE_NAME`: Service identifier for traces `bookshop-service`
-- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol (grpc)
+- `OTEL_SERVICE_NAME`: Service identifier for traces (`bookshop-service`)
+- `OTEL_EXPORTER_OTLP_PROTOCOL`: Protocol (`grpc`)
 
 ## Deployment
 
