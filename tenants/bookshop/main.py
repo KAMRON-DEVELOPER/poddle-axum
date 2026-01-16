@@ -19,7 +19,7 @@ from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 # Configuration
 # -----------------------------
 PORT = int(os.getenv("PORT", "8000"))
-SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "bookstore-backend-demo")
+SERVICE_NAME = os.getenv("OTEL_SERVICE_NAME", "bookshop-service")
 ENDPOINT = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT", "https://alloy-gateway.poddle.uz:4317")
 
 # -----------------------------
