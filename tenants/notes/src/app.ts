@@ -1,43 +1,34 @@
+import { sdk, SERVICE_NAME } from './tracing.js';
+
 import express, { type Application, type Request, type Response } from 'express';
 import { trace, context, SpanStatusCode } from '@opentelemetry/api';
-import { NodeSDK } from '@opentelemetry/sdk-node';
-import { OTLPTraceExporter } from '@opentelemetry/exporter-trace-otlp-grpc';
-import { resourceFromAttributes } from '@opentelemetry/resources';
-import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from '@opentelemetry/semantic-conventions';
-import { HttpInstrumentation } from '@opentelemetry/instrumentation-http';
-import { ExpressInstrumentation } from '@opentelemetry/instrumentation-express';
-
-// -----------------------------
-// Configuration
-// -----------------------------
-const PORT = parseInt(process.env.PORT || '3000', 10);
-const SERVICE_NAME = process.env.OTEL_SERVICE_NAME || 'notes-service';
-const OTEL_ENDPOINT = process.env.OTEL_EXPORTER_OTLP_ENDPOINT || 'https://alloy-gateway.poddle.uz:4317';
-
-console.log(`[INFO] Initializing ${SERVICE_NAME}`);
-console.log(`[INFO] OpenTelemetry endpoint: ${OTEL_ENDPOINT}`);
-
-// -----------------------------
-// OpenTelemetry Setup
-// -----------------------------
-const traceExporter = new OTLPTraceExporter({
-  url: OTEL_ENDPOINT,
-});
-
-const resource = resourceFromAttributes({
-  [ATTR_SERVICE_NAME]: SERVICE_NAME,
-  [ATTR_SERVICE_VERSION]: '1.0.0',
-  'deployment.environment': 'production',
-});
-
-const sdk = new NodeSDK({
-  resource,
-  traceExporter,
-  instrumentations: [new HttpInstrumentation(), new ExpressInstrumentation()],
-});
 
 sdk.start();
 console.log('[INFO] OpenTelemetry SDK initialized');
+
+// -----------------------------
+// Express App
+// -----------------------------
+const PORT = parseInt(process.env.PORT || '3000', 10);
+
+const app: Application = express();
+app.use(express.json());
+
+// Logging middleware
+app.use((req: Request, _res: Response, next) => {
+  console.log(`[INFO] ${req.method} ${req.path} - Client: ${req.ip}`);
+  next();
+});
+
+// ---------------------------
+// Helpers
+// ---------------------------
+const logger = {
+  debug: (msg: string) => console.log(`${new Date().toISOString()} [DEBUG] ${SERVICE_NAME} - ${msg}`),
+  info: (msg: string) => console.log(`${new Date().toISOString()} [INFO] ${SERVICE_NAME} - ${msg}`),
+  warn: (msg: string) => console.log(`${new Date().toISOString()} [WARN] ${SERVICE_NAME} - ${msg}`),
+  error: (msg: string) => console.error(`${new Date().toISOString()} [ERROR] ${SERVICE_NAME} - ${msg}`),
+};
 
 const tracer = trace.getTracer(SERVICE_NAME, '1.0.0');
 
@@ -106,7 +97,7 @@ function simulateDelay(operation: string, minMs = 5, maxMs = 30): void {
   while (Date.now() - start < delay) {
     // Busy wait to simulate processing
   }
-  console.log(`[DEBUG] ${operation} completed in ${delay}ms`);
+  logger.debug(`${operation} completed in ${delay}ms`);
 }
 
 function validateNote(note: CreateNoteRequest | UpdateNoteRequest): string | null {
@@ -145,25 +136,13 @@ function searchNotes(query: string, tags?: string[]): Note[] {
 }
 
 // -----------------------------
-// Express App
-// -----------------------------
-const app: Application = express();
-app.use(express.json());
-
-// Logging middleware
-app.use((req: Request, _res: Response, next) => {
-  console.log(`[INFO] ${req.method} ${req.path} - Client: ${req.ip}`);
-  next();
-});
-
-// -----------------------------
 // Routes
 // -----------------------------
 
 // Health check
 app.get('/', (_req: Request, res: Response) => {
   const span = tracer.startSpan('root_handler');
-  console.log('[INFO] Root endpoint called');
+  logger.info('Root endpoint called');
 
   span.setAttribute('endpoint', '/');
   span.setAttribute('service', SERVICE_NAME);
@@ -180,7 +159,7 @@ app.get('/', (_req: Request, res: Response) => {
 
 app.get('/health', (_req: Request, res: Response) => {
   const span = tracer.startSpan('health_check');
-  console.log('[INFO] Health check endpoint called');
+  logger.info('Health check endpoint called');
 
   span.setAttribute('health_status', 'healthy');
   span.setAttribute('notes_count', notesDB.size);
@@ -196,7 +175,7 @@ app.get('/notes', (req: Request, res: Response) => {
   const tags = tag ? (Array.isArray(tag) ? (tag as string[]) : [tag as string]) : undefined;
   const showArchived = archived === 'true';
 
-  console.log(`[INFO] Listing notes - query: ${q || 'none'}, tags: ${tags?.join(',') || 'none'}, archived: ${showArchived}`);
+  logger.info(`Listing notes - query: ${q || 'none'}, tags: ${tags?.join(',') || 'none'}, archived: ${showArchived}`);
 
   const parentSpan = tracer.startSpan('list_notes');
   parentSpan.setAttribute('filter.query', (q as string) || 'none');
@@ -207,7 +186,7 @@ app.get('/notes', (req: Request, res: Response) => {
   const cacheSpan = tracer.startSpan('cache_lookup', {}, context.active());
   const cacheHit = Math.random() < 0.4;
   cacheSpan.setAttribute('cache_hit', cacheHit);
-  console.log(`[DEBUG] Cache lookup: ${cacheHit ? 'HIT' : 'MISS'}`);
+  logger.debug(`Cache lookup: ${cacheHit ? 'HIT' : 'MISS'}`);
   simulateDelay('cache_check', 2, 8);
   cacheSpan.end();
 
@@ -227,7 +206,7 @@ app.get('/notes', (req: Request, res: Response) => {
     notes = searchNotes((q as string) || '', tags);
   }
 
-  console.log(`[INFO] Retrieved ${notes.length} notes from database`);
+  logger.info(`Retrieved ${notes.length} notes from database`);
   dbSpan.setAttribute('result_count', notes.length);
   dbSpan.end();
 
@@ -239,14 +218,14 @@ app.get('/notes', (req: Request, res: Response) => {
   parentSpan.setAttribute('notes_returned', notes.length);
   parentSpan.end();
 
-  console.log(`[INFO] Returning ${notes.length} notes to client`);
+  logger.info(`Returning ${notes.length} notes to client`);
   res.json({ notes, count: notes.length });
 });
 
 // Get single note
 app.get('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const id = parseInt(req.params.id, 10);
-  console.log(`[INFO] Fetching note with ID: ${id}`);
+  logger.info(`Fetching note with ID: ${id}`);
 
   const parentSpan = tracer.startSpan('get_note');
   parentSpan.setAttribute('note_id', id);
@@ -255,7 +234,7 @@ app.get('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const cacheSpan = tracer.startSpan('cache_lookup', {}, context.active());
   const cacheHit = Math.random() < 0.5;
   cacheSpan.setAttribute('cache_hit', cacheHit);
-  console.log(`[DEBUG] Cache lookup for note ${id}: ${cacheHit ? 'HIT' : 'MISS'}`);
+  logger.debug(`Cache lookup for note ${id}: ${cacheHit ? 'HIT' : 'MISS'}`);
   simulateDelay('cache_check', 2, 8);
   cacheSpan.end();
 
@@ -268,7 +247,7 @@ app.get('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const note = notesDB.get(id);
 
   if (!note) {
-    console.log(`[WARN] Note ${id} not found`);
+    logger.warn(`Note ${id} not found`);
     dbSpan.setAttribute('error', true);
     dbSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Note not found' });
     dbSpan.end();
@@ -277,7 +256,7 @@ app.get('/notes/:id', (req: Request<IdParams>, res: Response) => {
     return;
   }
 
-  console.log(`[INFO] Retrieved note: "${note.title}"`);
+  logger.info(`Retrieved note: "${note.title}"`);
   dbSpan.end();
   parentSpan.end();
 
@@ -288,7 +267,7 @@ app.get('/notes/:id', (req: Request<IdParams>, res: Response) => {
 app.post('/notes', (req: Request, res: Response) => {
   const { title, content, tags = [] } = req.body as CreateNoteRequest;
 
-  console.log(`[INFO] Creating new note: "${title}"`);
+  logger.info(`Creating new note: "${title}"`);
 
   const parentSpan = tracer.startSpan('create_note');
   parentSpan.setAttribute('note_title', title);
@@ -300,7 +279,7 @@ app.post('/notes', (req: Request, res: Response) => {
   simulateDelay('validation', 2, 5);
 
   if (validationError) {
-    console.log(`[ERROR] Validation failed: ${validationError}`);
+    logger.error(`Validation failed: ${validationError}`);
     validateSpan.setAttribute('error', true);
     validateSpan.setStatus({ code: SpanStatusCode.ERROR, message: validationError });
     validateSpan.end();
@@ -309,7 +288,7 @@ app.post('/notes', (req: Request, res: Response) => {
     return;
   }
 
-  console.log('[DEBUG] Validation passed');
+  logger.debug('Validation passed');
   validateSpan.end();
 
   // Create note
@@ -329,26 +308,26 @@ app.post('/notes', (req: Request, res: Response) => {
   };
 
   notesDB.set(note.id, note);
-  console.log(`[INFO] Note created with ID: ${note.id}`);
+  logger.info(`Note created with ID: ${note.id}`);
   dbSpan.setAttribute('note_id', note.id);
   dbSpan.end();
 
   // Invalidate cache
   const cacheSpan = tracer.startSpan('cache_invalidate', {}, context.active());
   simulateDelay('cache_invalidate', 3, 10);
-  console.log('[DEBUG] Cache invalidated');
+  logger.debug('Cache invalidated');
   cacheSpan.end();
 
   // Index for search
   const indexSpan = tracer.startSpan('update_search_index', {}, context.active());
   simulateDelay('indexing', 5, 15);
-  console.log('[DEBUG] Search index updated');
+  logger.debug('Search index updated');
   indexSpan.end();
 
   parentSpan.setAttribute('note_id', note.id);
   parentSpan.end();
 
-  console.log(`[INFO] Note ${note.id} created successfully`);
+  logger.info(`Note ${note.id} created successfully`);
   res.status(201).json({ note });
 });
 
@@ -357,7 +336,7 @@ app.put('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const id = parseInt(req.params.id, 10);
   const updates = req.body as UpdateNoteRequest;
 
-  console.log(`[INFO] Updating note ${id}`);
+  logger.info(`Updating note ${id}`);
 
   const parentSpan = tracer.startSpan('update_note');
   parentSpan.setAttribute('note_id', id);
@@ -368,7 +347,7 @@ app.put('/notes/:id', (req: Request<IdParams>, res: Response) => {
   simulateDelay('validation', 2, 5);
 
   if (validationError) {
-    console.log(`[ERROR] Validation failed: ${validationError}`);
+    logger.error(`Validation failed: ${validationError}`);
     validateSpan.setAttribute('error', true);
     validateSpan.setStatus({ code: SpanStatusCode.ERROR, message: validationError });
     validateSpan.end();
@@ -386,7 +365,7 @@ app.put('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const note = notesDB.get(id);
 
   if (!note) {
-    console.log(`[WARN] Note ${id} not found`);
+    logger.warn(`Note ${id} not found`);
     fetchSpan.setAttribute('error', true);
     fetchSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Note not found' });
     fetchSpan.end();
@@ -409,19 +388,19 @@ app.put('/notes/:id', (req: Request<IdParams>, res: Response) => {
   };
 
   notesDB.set(id, updatedNote);
-  console.log(`[INFO] Note ${id} updated successfully`);
+  logger.info(`Note ${id} updated successfully`);
   updateSpan.end();
 
   // Invalidate cache
   const cacheSpan = tracer.startSpan('cache_invalidate', {}, context.active());
   simulateDelay('cache_invalidate', 3, 10);
-  console.log('[DEBUG] Cache invalidated');
+  logger.debug('Cache invalidated');
   cacheSpan.end();
 
   // Update search index
   const indexSpan = tracer.startSpan('update_search_index', {}, context.active());
   simulateDelay('indexing', 5, 15);
-  console.log('[DEBUG] Search index updated');
+  logger.debug('Search index updated');
   indexSpan.end();
 
   parentSpan.end();
@@ -431,7 +410,7 @@ app.put('/notes/:id', (req: Request<IdParams>, res: Response) => {
 // Delete note
 app.delete('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const id = parseInt(req.params.id, 10);
-  console.log(`[INFO] Deleting note ${id}`);
+  logger.info(`Deleting note ${id}`);
 
   const parentSpan = tracer.startSpan('delete_note');
   parentSpan.setAttribute('note_id', id);
@@ -443,7 +422,7 @@ app.delete('/notes/:id', (req: Request<IdParams>, res: Response) => {
   const note = notesDB.get(id);
 
   if (!note) {
-    console.log(`[WARN] Note ${id} not found`);
+    logger.warn(`Note ${id} not found`);
     checkSpan.setAttribute('error', true);
     checkSpan.setStatus({ code: SpanStatusCode.ERROR, message: 'Note not found' });
     checkSpan.end();
@@ -460,29 +439,29 @@ app.delete('/notes/:id', (req: Request<IdParams>, res: Response) => {
   simulateDelay('database_delete', 15, 40);
 
   notesDB.delete(id);
-  console.log(`[INFO] Note ${id} deleted from database`);
+  logger.info(`Note ${id} deleted from database`);
   deleteSpan.end();
 
   // Invalidate cache
   const cacheSpan = tracer.startSpan('cache_invalidate', {}, context.active());
   simulateDelay('cache_invalidate', 3, 10);
-  console.log('[DEBUG] Cache invalidated');
+  logger.debug('Cache invalidated');
   cacheSpan.end();
 
   // Remove from search index
   const indexSpan = tracer.startSpan('remove_from_search_index', {}, context.active());
   simulateDelay('indexing', 5, 15);
-  console.log('[DEBUG] Removed from search index');
+  logger.debug('Removed from search index');
   indexSpan.end();
 
   parentSpan.end();
-  console.log(`[INFO] Note ${id} deleted successfully`);
+  logger.info(`Note ${id} deleted successfully`);
   res.status(204).send();
 });
 
 // Get statistics
 app.get('/stats', (_req: Request, res: Response) => {
-  console.log('[INFO] Fetching notes statistics');
+  logger.info('Fetching notes statistics');
 
   const parentSpan = tracer.startSpan('get_stats');
 
@@ -495,7 +474,7 @@ app.get('/stats', (_req: Request, res: Response) => {
   const archivedNotes = notes.filter((n) => n.archived).length;
   const activeNotes = totalNotes - archivedNotes;
 
-  console.log(`[INFO] Total notes: ${totalNotes}, Active: ${activeNotes}, Archived: ${archivedNotes}`);
+  logger.info(`Total notes: ${totalNotes}, Active: ${activeNotes}, Archived: ${archivedNotes}`);
   countSpan.end();
 
   // Analyze tags
@@ -514,7 +493,7 @@ app.get('/stats', (_req: Request, res: Response) => {
     .slice(0, 5)
     .map(([tag, count]) => ({ tag, count }));
 
-  console.log(`[INFO] Found ${tagCounts.size} unique tags`);
+  logger.info(`Found ${tagCounts.size} unique tags`);
   tagsSpan.end();
 
   // Calculate average content length
@@ -523,7 +502,7 @@ app.get('/stats', (_req: Request, res: Response) => {
 
   const avgContentLength = Math.round(notes.reduce((sum, note) => sum + note.content.length, 0) / (totalNotes || 1));
 
-  console.log(`[INFO] Average content length: ${avgContentLength} characters`);
+  logger.info(`Average content length: ${avgContentLength} characters`);
   analyzeSpan.end();
 
   const stats = {
@@ -538,7 +517,7 @@ app.get('/stats', (_req: Request, res: Response) => {
   parentSpan.setAttribute('total_notes', totalNotes);
   parentSpan.end();
 
-  console.log('[INFO] Statistics calculated successfully');
+  logger.info('Statistics calculated successfully');
   res.json(stats);
 });
 
@@ -546,8 +525,8 @@ app.get('/stats', (_req: Request, res: Response) => {
 // Start Server
 // -----------------------------
 const server = app.listen(PORT, () => {
-  console.log(`[INFO] 📝 ${SERVICE_NAME} listening on port ${PORT}`);
-  console.log(`[INFO] Seeded with ${notesDB.size} sample notes`);
+  logger.info(`🚀 ${SERVICE_NAME} listening on port ${PORT}`);
+  logger.info(`Seeded with ${notesDB.size} sample notes`);
 });
 
 // Graceful shutdown
@@ -555,9 +534,12 @@ process.on('SIGTERM', () => {
   console.log('[INFO] SIGTERM received, shutting down gracefully');
   server.close(() => {
     console.log('[INFO] Server closed');
-    sdk.shutdown().then(() => {
-      console.log('[INFO] OpenTelemetry SDK shut down');
-      process.exit(0);
-    });
+    sdk.shutdown().then(
+      () => {
+        console.log('[INFO] OpenTelemetry SDK shut down successfully');
+        process.exit(0);
+      },
+      (err) => console.log('[ERROR] Error shutting down OpenTelemetry SDK', err)
+    );
   });
 });
