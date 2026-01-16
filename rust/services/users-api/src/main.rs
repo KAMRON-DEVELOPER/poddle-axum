@@ -30,10 +30,10 @@ async fn main() -> anyhow::Result<()> {
 
     let env_path = cargo_manifest_dir.join(".env");
 
-    // Load workspace root .env as fallback
-    dotenvy::dotenv().ok();
     // Load service-specific .env
     dotenvy::from_path(&env_path).ok();
+    // Load workspace root .env as fallback
+    dotenvy::dotenv().ok();
 
     println!("🔍 Loading configuration...");
     let config = Config::init(cargo_manifest_dir).await?;

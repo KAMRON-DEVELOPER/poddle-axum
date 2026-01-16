@@ -28,10 +28,10 @@ async fn main() -> anyhow::Result<()> {
 
     let env_path = cargo_manifest_dir.join(".env");
 
+    // Load service-specific .env
+    dotenvy::from_path(&env_path).ok();
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
-    // Load service-specific .env
-    dotenvy::from_path(env_path).ok();
 
     let config = Config::init(cargo_manifest_dir).await?;
     let _guard = Observability::init(
