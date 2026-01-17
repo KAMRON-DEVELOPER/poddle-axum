@@ -46,6 +46,7 @@ pub struct Config {
     pub github_oauth_redirect_url: String,
 
     pub cookie_key: String,
+    pub cookie_secure: bool,
 
     // S3
     pub s3_access_key_id: Option<String>,
@@ -199,6 +200,8 @@ impl Config {
         .await;
 
         let cookie_key = get_config_value("COOKIE_KEY", Some("COOKIE_KEY"), None, None).await;
+        let cookie_secure =
+            get_config_value("COOKIE_SECURE", Some("COOKIE_SECURE"), None, Some(true)).await;
 
         let s3_access_key_id =
             get_optional_config_value("S3_ACCESS_KEY_ID", Some("S3_ACCESS_KEY_ID"), None).await;
@@ -295,6 +298,7 @@ impl Config {
             github_oauth_client_secret,
             github_oauth_redirect_url,
             cookie_key,
+            cookie_secure,
             s3_access_key_id,
             s3_secret_key,
             s3_endpoint,

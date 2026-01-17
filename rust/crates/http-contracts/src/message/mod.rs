@@ -1,3 +1,9 @@
 pub mod error;
 pub mod implementation;
-pub mod schema;
+
+use serde::Serialize;
+
+#[derive(Serialize, Debug)]
+pub struct MessageResponse {
+    pub message: String,
+}

@@ -16,7 +16,7 @@ use compute_core::schemas::{
 };
 use factory::factories::{amqp::Amqp, database::Database, redis::Redis};
 use http_contracts::{
-    list::schema::ListResponse, message::schema::MessageResponse, pagination::schema::Pagination,
+    list::schema::ListResponse, message::MessageResponse, pagination::schema::Pagination,
 };
 use lapin::{
     BasicProperties,

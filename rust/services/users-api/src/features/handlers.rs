@@ -3,7 +3,7 @@ use crate::{
     error::AppError,
     features::{
         models::{OAuthUser, Provider, User, UserRole, UserStatus},
-        repository::create_session,
+        repository::UsersRepository,
         schemas::{
             AuthIn, AuthOut, GithubOAuthUser, GoogleOAuthUser, OAuthCallback, RedirectResponse,
             Tokens, UserIn, VerifyQuery,
@@ -13,6 +13,7 @@ use crate::{
 };
 use bcrypt::{DEFAULT_COST, hash};
 use factory::factories::{database::Database, zepto::ZeptoMail};
+use http_contracts::message::MessageResponse;
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 use users_core::jwt::{Claims, TokenType, create_token, verify_token};
@@ -21,7 +22,7 @@ use axum::{
     Json,
     extract::{ConnectInfo, Multipart, Query, State},
     http::StatusCode,
-    response::{IntoResponse, Redirect, Response},
+    response::{IntoResponse, Redirect},
 };
 use axum_extra::{
     TypedHeader,
@@ -43,8 +44,9 @@ use uuid::Uuid;
 // -- =====================
 pub async fn google_oauth_handler(
     jar: PrivateCookieJar,
+    State(config): State<Config>,
     State(google_oauth_client): State<GoogleOAuthClient>,
-) -> Result<Response, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, _csrf_token) = google_oauth_client
@@ -64,7 +66,7 @@ pub async fn google_oauth_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(true);
+            .secure(config.cookie_secure);
     let jar = jar.add(pkce_verifier_cookie);
 
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
@@ -74,9 +76,10 @@ pub async fn google_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
     State(database): State<Database>,
+    State(config): State<Config>,
     Query(query): Query<OAuthCallback>,
     State(google_oauth_client): State<GoogleOAuthClient>,
-) -> Result<Response, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let pkce_verifier = jar
         .get("pkce_verifier")
         .map(|cookie| PkceCodeVerifier::new(cookie.value().to_string()))
@@ -128,7 +131,7 @@ pub async fn google_oauth_callback_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(true);
+            .secure(config.cookie_secure);
     let jar = jar.add(google_oauth_user_sub_cookie);
 
     let response = Json(RedirectResponse {
@@ -142,8 +145,9 @@ pub async fn google_oauth_callback_handler(
 // -- =====================
 pub async fn github_oauth_handler(
     jar: PrivateCookieJar,
+    State(config): State<Config>,
     State(github_oauth_client): State<GithubOAuthClient>,
-) -> Result<Response, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, _csrf_token) = github_oauth_client
@@ -158,7 +162,7 @@ pub async fn github_oauth_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(true);
+            .secure(config.cookie_secure);
     let jar = jar.add(pkce_verifier_cookie);
 
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
@@ -168,9 +172,10 @@ pub async fn github_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
     State(database): State<Database>,
+    State(config): State<Config>,
     Query(query): Query<OAuthCallback>,
     State(github_oauth_client): State<GithubOAuthClient>,
-) -> Result<Response, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let pkce_verifier = jar
         .get("pkce_verifier")
         .map(|cookie| PkceCodeVerifier::new(cookie.value().to_string()))
@@ -227,7 +232,7 @@ pub async fn github_oauth_callback_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(365))
-            .secure(true);
+            .secure(config.cookie_secure);
     let jar = jar.add(github_oauth_user_sub_cookie);
 
     let response = Json(RedirectResponse {
@@ -246,7 +251,7 @@ pub async fn continue_with_email_handler(
     TypedHeader(user_agent): TypedHeader<UserAgent>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(auth_in): Json<AuthIn>,
-) -> Result<Response, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     debug!("auth_in is {:#?}", auth_in);
 
     let maybe_user = auth_in.verify(&database).await?;
@@ -263,7 +268,7 @@ pub async fn continue_with_email_handler(
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(max_age_days))
-            .secure(true);
+            .secure(config.cookie_secure);
         let jar = jar.add(refresh_cookie);
 
         let tokens = Tokens {
@@ -271,7 +276,7 @@ pub async fn continue_with_email_handler(
             refresh_token: Some(new_refresh.clone()),
         };
 
-        create_session(
+        UsersRepository::create_session(
             &database.pool,
             &user.id,
             &user_agent.to_string(),
@@ -285,7 +290,7 @@ pub async fn continue_with_email_handler(
     }
 
     if auth_in.username.is_none() {
-        return Ok((jar, Json(json!({"message": "new_user"}))).into_response());
+        return Ok(MessageResponse::new("new_user").into_response());
     }
 
     let mut tx = database.pool.begin().await?;
@@ -360,7 +365,7 @@ pub async fn continue_with_email_handler(
                 .path("/")
                 .same_site(SameSite::Lax)
                 .max_age(CookieDuration::days(max_age_days))
-                .secure(true);
+                .secure(config.cookie_secure);
             let jar = jar.add(refresh_cookie);
 
             let tokens = Tokens {
@@ -368,7 +373,7 @@ pub async fn continue_with_email_handler(
                 refresh_token: Some(new_refresh.clone()),
             };
 
-            create_session(
+            UsersRepository::create_session(
                 &database.pool,
                 &user.id,
                 &user_agent.to_string(),
@@ -567,7 +572,7 @@ pub async fn refresh_handler(
                 .http_only(true)
                 .same_site(SameSite::Lax)
                 .max_age(CookieDuration::days(max_age_days))
-                .secure(true);
+                .secure(config.cookie_secure);
             jar.add(cookie)
         } else {
             jar
