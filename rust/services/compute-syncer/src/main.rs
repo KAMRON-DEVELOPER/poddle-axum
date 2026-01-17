@@ -102,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
         }
     }
 
-    info!("👋 {} shutting down", cargo_pkg_name);
+    println!("👋 Shutting down gracefully...");
 
     Ok(())
 }

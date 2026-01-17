@@ -58,5 +58,7 @@ async fn main() -> anyhow::Result<()> {
     .with_graceful_shutdown(shutdown_signal())
     .await?;
 
+    println!("👋 Shutting down gracefully...");
+
     Ok(())
 }

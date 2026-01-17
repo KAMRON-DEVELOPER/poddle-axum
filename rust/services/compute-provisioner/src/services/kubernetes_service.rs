@@ -145,9 +145,11 @@ impl KubernetesService {
             "timestamp": now,
             "status": "provisioning"
         });
-        self.redis
+        let _ = self
+            .redis
             .connection
-            .publish(channel, json_message.to_string());
+            .publish(channel, json_message.to_string())
+            .await;
 
         let deployment_namespace = self.get_namespace_or_create(&self.client, user_id).await?;
 
@@ -276,7 +278,7 @@ impl KubernetesService {
             let vault_static_secret = VaultStaticSecret {
                 metadata: ObjectMeta {
                     name: Some(vso_resource_name),
-                    namespace: Some(deployment_namespace.clone().to_owned()),
+                    namespace: Some(deployment_namespace.to_owned()),
                     ..Default::default()
                 },
                 spec: VaultStaticSecretSpec {
@@ -326,6 +328,7 @@ impl KubernetesService {
         self.create_k8s_service(deployment_namespace, deployment_name, port, &labels)
             .await?;
 
+        // ! ERROR, We use Traefik IngressRoute
         self.create_k8s_ingress(
             deployment_namespace,
             deployment_name,
@@ -339,7 +342,7 @@ impl KubernetesService {
     }
 
     /// Create Kubernetes Secret
-    async fn create_k8s_secret(
+    async fn _create_k8s_secret(
         &self,
         namespace: &str,
         secret_name: &str,

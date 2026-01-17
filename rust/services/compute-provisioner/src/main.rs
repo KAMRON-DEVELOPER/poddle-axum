@@ -9,10 +9,19 @@ use std::path::PathBuf;
 use std::result::Result::Ok;
 
 use config::Config;
-use factory::factories::observability::Observability;
+use factory::factories::{
+    amqp::Amqp, database::Database, kubernetes::Kubernetes, observability::Observability,
+    redis::Redis,
+};
 
-use tracing::info;
+use tokio::task::JoinSet;
+use tracing::{error, info};
 use utility::shutdown_signal::shutdown_signal;
+
+use crate::{
+    error::AppError,
+    services::{consumer::start_consumer, vault_service::VaultService},
+};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -42,19 +51,72 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
-    let app = app::app().await?;
-    let listener = tokio::net::TcpListener::bind(config.server_address).await?;
+    // Initialize services
+    // let rustls_config = build_rustls_config(&config)?;
+    let database = Database::new(&config).await;
+    let redis = Redis::new(&config).await;
+    let kubernetes = Kubernetes::new(&config).await?;
+    let amqp = Amqp::new(&config).await;
+    // let kafka = Kafka::new(&config, "compute-service-group")?;
+    // let http_client = reqwest::ClientBuilder::new()
+    //     .redirect(reqwest::redirect::Policy::none())
+    //     .build()?;
+    let vault_service = VaultService::init(&config).await?;
 
-    info!(
-        "🚀 {} service running at {:#?}",
-        cargo_pkg_name, config.server_address
-    );
+    let mut set = JoinSet::new();
+
+    // Spawn background tasks
+    set.spawn(start_consumer(
+        amqp,
+        redis,
+        database.pool,
+        kubernetes.client,
+        config.domain,
+        config.traefik_namespace,
+        config.cluster_issuer_name,
+        config.ingress_class_name,
+        config.wildcard_certificate_name,
+        config.wildcard_certificate_secret_name,
+        vault_service,
+    ));
+    set.spawn(start_health_server(cargo_pkg_name, config.server_address));
+
+    info!("✅ All background tasks started");
+
+    // Unified shutdown logic
+    tokio::select! {
+        _ = shutdown_signal() => {
+            info!("🛑 Shutdown signal received");
+            set.shutdown().await;
+        }
+        Some(result) = set.join_next() => {
+            match result {
+                Ok(Ok(())) => error!("A background task exited unexpectedly!"),
+                Ok(Err(e)) => error!("Task failed: {}", e),
+                Err(e) => error!("Task panic: {}", e),
+            }
+            // Optional: trigger shutdown if a critical task dies
+            set.shutdown().await;
+        }
+    }
+
+    Ok(())
+}
+
+// Start a simple HTTP server for health checks and metrics
+async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
+    let app = app::app().await?;
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+
+    info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);
     axum::serve(
         listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;
+
+    println!("👋 Shutting down gracefully...");
 
     Ok(())
 }
