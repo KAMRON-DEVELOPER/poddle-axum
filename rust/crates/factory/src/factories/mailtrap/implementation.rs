@@ -21,6 +21,18 @@ impl Mailtrap {
         }
     }
 
+    #[tracing::instrument(
+        name = "mailtrip.send_email_verification_link",
+        skip(
+            self,
+            to_email,
+            name,
+            link,
+            email_service_api_key,
+            email_service_verification_template_uuid
+        ), fields(recipient = %to_email)
+        err
+    )]
     pub async fn send_email_verification_link(
         &self,
         to_email: &str,

@@ -1,6 +1,7 @@
 use factory::factories::{
     amqp::AmqpConfig,
     database::DatabaseConfig,
+    mailtrap::error::MailtrapError,
     redis::{RedisConfig, RedisParams},
     tls::Tls,
     zepto::error::ZeptoError,
@@ -39,6 +40,20 @@ impl From<ZeptoError> for AppError {
             },
             ZeptoError::Request(_) => AppError::ServiceUnavailable("ZeptoMail".to_string()),
             ZeptoError::Deserialize(e) => AppError::InternalServerError(e.to_string()),
+        }
+    }
+}
+
+impl From<MailtrapError> for AppError {
+    fn from(err: MailtrapError) -> Self {
+        match err {
+            MailtrapError::Api { error } => AppError::ExternalServiceError {
+                service: "Mailtrap".to_string(),
+                code: "".to_string(),
+                message: error.errors.join(","),
+            },
+            MailtrapError::Request(_) => AppError::ServiceUnavailable("Mailtrap".to_string()),
+            MailtrapError::Deserialization(e) => AppError::InternalServerError(e.to_string()),
         }
     }
 }

@@ -11,8 +11,8 @@ use crate::{
     },
     services::build_oauth::{GithubOAuthClient, GoogleOAuthClient},
 };
-use bcrypt::{DEFAULT_COST, hash};
-use factory::factories::{database::Database, zepto::ZeptoMail};
+use bcrypt::{DEFAULT_COST, hash, verify};
+use factory::factories::{database::Database, mailtrap::Mailtrap};
 use http_contracts::message::MessageResponse;
 use serde_json::{Value, json};
 use std::net::SocketAddr;
@@ -36,7 +36,7 @@ use oauth2::{
 };
 use object_store::{ObjectStore, aws::AmazonS3, path::Path as ObjectStorePath};
 use reqwest::Client;
-use tracing::debug;
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 // -- =====================
@@ -244,6 +244,15 @@ pub async fn github_oauth_callback_handler(
 // -- =====================
 // -- CONTINUE WITH EMAIL
 // -- =====================
+#[tracing::instrument(
+    name = "continue_with_email_handler",
+    skip(jar, database, config, user_agent, addr, auth_in),
+    fields(
+        email = %auth_in.email,
+        user_id = tracing::field::Empty // Placeholder to fill later
+    ),
+    err
+)]
 pub async fn continue_with_email_handler(
     jar: PrivateCookieJar,
     State(database): State<Database>,
@@ -254,11 +263,21 @@ pub async fn continue_with_email_handler(
 ) -> Result<impl IntoResponse, AppError> {
     debug!("auth_in is {:#?}", auth_in);
 
-    let maybe_user = auth_in.verify(&database).await?;
+    let maybe_user = UsersRepository::find_user_by_email(&auth_in.email, &database.pool).await?;
 
     debug!("maybe_user is {:#?}", maybe_user);
 
     if let Some(user) = maybe_user {
+        tracing::Span::current().record("user_id", &user.id.to_string());
+
+        let same = verify(&auth_in.password, &user.password)?;
+
+        if !same {
+            return Err(AppError::ValidationError(
+                "Password is incorrect".to_string(),
+            ));
+        }
+
         let new_access = create_token(&config, user.id, TokenType::Access)?;
         let new_refresh = create_token(&config, user.id, TokenType::Refresh)?;
 
@@ -290,72 +309,54 @@ pub async fn continue_with_email_handler(
     }
 
     if auth_in.username.is_none() {
+        info!(
+            reason = "missing_username",
+            "user not found, prompting registration"
+        );
         return Ok(MessageResponse::new("new_user").into_response());
     }
 
     let mut tx = database.pool.begin().await?;
 
     let username = auth_in.username.clone().unwrap_or_default();
+    let hash_password = hash(auth_in.password, DEFAULT_COST)?;
 
-    let email_oauth_user_id_str = Uuid::new_v4().to_string();
-    let email_oauth_user_id = sqlx::query_scalar!(
-        r#"
-            INSERT INTO oauth_users (id, provider, username, email, password)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id
-        "#,
-        email_oauth_user_id_str,
-        Provider::Email as Provider,
-        auth_in.username,
-        auth_in.email,
-        auth_in.password,
+    let email_oauth_user_id = UsersRepository::create_oauth_user(
+        &username,
+        &auth_in.email,
+        &hash_password,
+        Provider::Email,
+        &mut tx,
     )
-    .fetch_one(&mut *tx)
     .await?;
 
-    let hash_password = hash(auth_in.password, DEFAULT_COST)?;
-    let user = sqlx::query_as!(
-        User,
-        r#"
-        INSERT INTO users (username, email, password, oauth_user_id)
-        VALUES ($1,$2,$3,$4)
-        RETURNING
-            id,
-            username,
-            email,
-            password,
-            picture,
-            role AS "role: UserRole",
-            status AS "status: UserStatus",
-            email_verified,
-            oauth_user_id,
-            created_at,
-            updated_at
-        "#,
+    let user = UsersRepository::create_user(
         username,
         auth_in.email,
         hash_password,
-        email_oauth_user_id
+        email_oauth_user_id,
+        &mut tx,
     )
-    .fetch_one(&mut *tx)
     .await?;
 
     let token = create_token(&config, user.id, TokenType::EmailVerification)?;
     let verification_link = format!("{}/auth/verify?token={}", config.frontend_endpoint, token);
 
-    let zepto = ZeptoMail::new();
+    let mailtrap = Mailtrap::new();
 
-    match zepto
+    match mailtrap
         .send_email_verification_link(
             &user.email,
             &user.username,
             &verification_link,
             &config.email_service_api_key,
+            &config.email_service_verification_template_uuid,
         )
         .await
     {
         Ok(_) => {
             tx.commit().await?;
+            tracing::Span::current().record("user_id", &user.id.to_string());
             let new_access = create_token(&config, user.id, TokenType::Access)?;
             let new_refresh = create_token(&config, user.id, TokenType::Refresh)?;
 
@@ -387,6 +388,7 @@ pub async fn continue_with_email_handler(
             Ok((jar, response).into_response())
         }
         Err(email_error) => {
+            error!(name: "MailtrapError", "email_error: {}", email_error);
             tx.rollback().await?;
             Err(email_error.into())
         }
@@ -396,6 +398,11 @@ pub async fn continue_with_email_handler(
 // -- =====================
 // -- VERIFY
 // -- =====================
+#[tracing::instrument(
+    name = "verify_handler",
+    skip(jar, config, database, verify_query),
+    err
+)]
 pub async fn verify_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
@@ -436,12 +443,11 @@ pub async fn verify_handler(
 // -- =====================
 // -- GET USER
 // -- =====================
+#[tracing::instrument(name = "get_user_handler", skip(claims, database), err)]
 pub async fn get_user_handler(
     claims: Claims,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
-    debug!("claims: {:?}", claims);
-
     let user = sqlx::query_as!(
         User,
         r#"
@@ -520,6 +526,7 @@ pub async fn update_user_handler(
 // -- =====================
 // -- DELETE USER
 // -- =====================
+#[tracing::instrument(name = "delete_user_handler", skip(claims, database), err)]
 pub async fn delete_user_handler(
     claims: Claims,
     State(database): State<Database>,
@@ -539,6 +546,7 @@ pub async fn delete_user_handler(
 // -- =====================
 // -- REFRESH TOKEN
 // -- =====================
+#[tracing::instrument(name = "refresh_handler", skip(config, jar, auth_header), err)]
 pub async fn refresh_handler(
     State(config): State<Config>,
     jar: PrivateCookieJar,
@@ -594,6 +602,7 @@ pub async fn refresh_handler(
 // -- =====================
 // -- LOGOUT
 // -- =====================
+#[tracing::instrument(name = "logout_handler", skip(jar))]
 pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
     let mut jar = jar;
 

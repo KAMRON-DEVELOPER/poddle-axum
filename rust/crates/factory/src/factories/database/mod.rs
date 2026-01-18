@@ -16,7 +16,7 @@ pub trait DatabaseConfig {
     fn tls_config(&self) -> Self::Tls;
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Database {
     pub pool: PgPool,
 }

@@ -65,6 +65,7 @@ pub struct Config {
 
     // EMAIL
     pub email_service_api_key: String,
+    pub email_service_verification_template_uuid: String,
 
     // SSL/TLS
     pub ca: Option<String>,
@@ -251,6 +252,13 @@ impl Config {
             None,
         )
         .await;
+        let email_service_verification_template_uuid = get_config_value(
+            "EMAIL_SERVICE_VERIFICATION_TEMPLATE_UUID",
+            Some("EMAIL_SERVICE_VERIFICATION_TEMPLATE_UUID"),
+            None,
+            None,
+        )
+        .await;
 
         // TLS certs: Docker secrets → fallback path
         let ca_path = cargo_manifest_dir.join("certs/ca/ca.pem");
@@ -311,6 +319,7 @@ impl Config {
             email_verification_token_expire_in_hours,
             refresh_token_renewal_threshold_days,
             email_service_api_key,
+            email_service_verification_template_uuid,
             ca_path: Some(ca_path),
             ca,
             client_cert_path: Some(client_cert_path),

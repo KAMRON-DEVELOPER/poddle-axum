@@ -38,8 +38,8 @@ pub struct SuccessResponse {
 #[derive(Deserialize, Debug)]
 #[allow(dead_code)]
 pub struct ErrorResponse {
-    success: bool,
-    errors: Vec<String>,
+    pub success: bool,
+    pub errors: Vec<String>,
 }
 
 pub enum MailtrapApiResponse {
