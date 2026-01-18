@@ -2,7 +2,7 @@ use crate::{
     config::Config,
     error::AppError,
     features::{
-        models::{OAuthUser, Provider, User, UserRole, UserStatus},
+        models::{OAuthUser, Provider},
         repository::UsersRepository,
         schemas::{
             AuthIn, AuthOut, GithubOAuthUser, GoogleOAuthUser, OAuthCallback, RedirectResponse,
@@ -414,7 +414,7 @@ pub async fn verify_handler(
         0 => {
             warn!(user_id = %verification_token_claims.sub, "email verification update affected zero rows");
             Err(AppError::InternalServerError(
-                "User couldn't set to verified".to_string(),
+                "User not found or already verified".to_string(),
             ))
         }
         _ => {
@@ -438,35 +438,14 @@ pub async fn get_user_handler(
     claims: Claims,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user = sqlx::query_as!(
-        User,
-        r#"
-            SELECT
-                id,
-                username,
-                email,
-                password,
-                picture,
-                role AS "role: UserRole",
-                status AS "status: UserStatus",
-                email_verified,
-                oauth_user_id,
-                created_at,
-                updated_at
-            FROM users WHERE id = $1
-        "#,
-        claims.sub
-    )
-    .fetch_optional(&database.pool)
-    .await?
-    .ok_or_else(|| AppError::NotFoundError("User not found".to_string()))?;
-
+    let user = UsersRepository::get_user_by_id(&claims.sub, &database.pool).await?;
     Ok(Json(user))
 }
 
 // -- =====================
 // -- UPDATE USER
 // -- =====================
+// TODO
 pub async fn update_user_handler(
     State(s3): State<AmazonS3>,
     mut multipart: Multipart,

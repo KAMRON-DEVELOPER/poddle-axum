@@ -116,6 +116,35 @@ impl UsersRepository {
     }
 
     // ----------------------------------------------------------------------------
+    // get_user_by_id
+    // ----------------------------------------------------------------------------
+    #[tracing::instrument("users_repository.get_user_by_id", skip(pool), err)]
+    pub async fn get_user_by_id(id: &Uuid, pool: &PgPool) -> Result<User, AppError> {
+        Ok(sqlx::query_as!(
+            User,
+            r#"
+            SELECT
+                id,
+                username,
+                email,
+                password,
+                picture,
+                role AS "role: UserRole",
+                status AS "status: UserStatus",
+                email_verified,
+                oauth_user_id,
+                created_at,
+                updated_at
+            FROM users WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_optional(pool)
+        .await?
+        .ok_or_else(|| AppError::NotFoundError("User not found".to_string()))?)
+    }
+
+    // ----------------------------------------------------------------------------
     // find_user_by_email
     // ----------------------------------------------------------------------------
     #[tracing::instrument("users_repository.find_user_by_email", skip(pool), err)]
