@@ -2,7 +2,7 @@ use crate::{
     error::AppError,
     features::models::{OAuthUser, Provider, User, UserRole, UserStatus},
 };
-use sqlx::{PgPool, Postgres, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Transaction};
 use uuid::Uuid;
 
 pub struct UsersRepository;
@@ -13,28 +13,35 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     #[tracing::instrument(
         "users_repository.create_oauth_user",
-        skip(hash_password, provider, tx),
+        skip(picture, hash_password, provider, executor),
         err
     )]
-    pub async fn create_oauth_user(
-        username: &str,
-        email: &str,
-        hash_password: &str,
+    pub async fn create_oauth_user<'e, E>(
+        id: &str,
+        username: Option<&str>,
+        email: Option<&str>,
+        picture: Option<&str>,
+        hash_password: Option<&str>,
         provider: Provider,
-        tx: &mut Transaction<'_, Postgres>,
-    ) -> Result<String, AppError> {
+        executor: E,
+    ) -> Result<String, AppError>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
         Ok(sqlx::query_scalar!(
             r#"
-            INSERT INTO oauth_users (username, email, password, provider)
-            VALUES ($1, $2, $3, $4)
+            INSERT INTO oauth_users (id, username, email, picture, password, provider)
+            VALUES ($1, $2, $3, $4, $5, $6)
             RETURNING id
             "#,
+            id,
             username,
             email,
+            picture,
             hash_password,
             provider as Provider,
         )
-        .fetch_one(&mut **tx)
+        .fetch_one(executor)
         .await?)
     }
 

@@ -110,19 +110,15 @@ pub async fn google_oauth_callback_handler(
     let oauth_user: OAuthUser = google_oauth_user.into();
     debug!("oauth_user: {:#?}", oauth_user);
 
-    let google_oauth_user_sub = sqlx::query_scalar!(
-        r#"
-            INSERT INTO oauth_users (id, provider, username, email, picture)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id
-        "#,
-        oauth_user.id,
-        oauth_user.provider as Provider,
-        oauth_user.username,
-        oauth_user.email,
-        oauth_user.picture
+    let google_oauth_user_sub = UsersRepository::create_oauth_user(
+        &oauth_user.id,
+        oauth_user.username.as_deref(),
+        oauth_user.email.as_deref(),
+        oauth_user.picture.as_deref(),
+        None,
+        oauth_user.provider,
+        &database.pool,
     )
-    .fetch_one(&database.pool)
     .await?;
 
     let google_oauth_user_sub_cookie =
@@ -134,10 +130,8 @@ pub async fn google_oauth_callback_handler(
             .secure(config.cookie_secure);
     let jar = jar.add(google_oauth_user_sub_cookie);
 
-    let response = Json(RedirectResponse {
-        redirect_to: "complete-profile".to_string(),
-    });
-    Ok((jar, response).into_response().into_response())
+    let redirect = Redirect::to(&format!("{}/complete-profile", config.frontend_endpoint));
+    Ok((jar, redirect).into_response())
 }
 
 // -- =====================
@@ -191,7 +185,7 @@ pub async fn github_oauth_callback_handler(
 
     let get_github_oauth_user_response = http_client
         .get("https://api.github.com/user")
-        .header("User-Agent", "PineSpotApp")
+        .header("User-Agent", "Poddle Dev")
         .bearer_auth(access_token.clone())
         .send()
         .await?;
@@ -211,19 +205,15 @@ pub async fn github_oauth_callback_handler(
     let oauth_user: OAuthUser = github_oauth_user.into();
     debug!("oauth_user: {:#?}", oauth_user);
 
-    let github_oauth_user_id = sqlx::query_scalar!(
-        r#"
-            INSERT INTO oauth_users (id, provider, username, email, picture)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id
-        "#,
-        oauth_user.id,
-        oauth_user.provider as Provider,
-        oauth_user.username,
-        oauth_user.email,
-        oauth_user.picture
+    let github_oauth_user_id = UsersRepository::create_oauth_user(
+        &oauth_user.id,
+        oauth_user.username.as_deref(),
+        oauth_user.email.as_deref(),
+        oauth_user.picture.as_deref(),
+        None,
+        oauth_user.provider,
+        &database.pool,
     )
-    .fetch_one(&database.pool)
     .await?;
 
     let github_oauth_user_sub_cookie =
@@ -235,10 +225,8 @@ pub async fn github_oauth_callback_handler(
             .secure(config.cookie_secure);
     let jar = jar.add(github_oauth_user_sub_cookie);
 
-    let response = Json(RedirectResponse {
-        redirect_to: "complete-profile".to_string(),
-    });
-    Ok((jar, response).into_response())
+    let redirect = Redirect::to(&format!("{}/complete-profile", config.frontend_endpoint));
+    Ok((jar, redirect).into_response())
 }
 
 // -- =====================
@@ -249,7 +237,7 @@ pub async fn github_oauth_callback_handler(
     skip(jar, database, config, user_agent, addr, auth_in),
     fields(
         email = %auth_in.email,
-        user_id = tracing::field::Empty // Placeholder to fill later
+        user_id = tracing::field::Empty  
     ),
     err
 )]
@@ -322,11 +310,13 @@ pub async fn continue_with_email_handler(
     let hash_password = hash(auth_in.password, DEFAULT_COST)?;
 
     let email_oauth_user_id = UsersRepository::create_oauth_user(
-        &username,
-        &auth_in.email,
-        &hash_password,
+        Uuid::new_v4().to_string().as_ref(),
+        Some(&username),
+        Some(&auth_in.email),
+        None,
+        Some(&hash_password),
         Provider::Email,
-        &mut tx,
+        &mut *tx
     )
     .await?;
 
