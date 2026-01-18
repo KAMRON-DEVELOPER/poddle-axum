@@ -36,7 +36,7 @@ use oauth2::{
 };
 use object_store::{ObjectStore, aws::AmazonS3, path::Path as ObjectStorePath};
 use reqwest::Client;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 // -- =====================
@@ -237,7 +237,7 @@ pub async fn github_oauth_callback_handler(
     skip(jar, database, config, user_agent, addr, auth_in),
     fields(
         email = %auth_in.email,
-        user_id = tracing::field::Empty  
+        user_id = tracing::field::Empty
     ),
     err
 )]
@@ -316,7 +316,7 @@ pub async fn continue_with_email_handler(
         None,
         Some(&hash_password),
         Provider::Email,
-        &mut *tx
+        &mut *tx,
     )
     .await?;
 
@@ -406,17 +406,17 @@ pub async fn verify_handler(
         return Err(AppError::InvalidTokenError);
     }
 
-    let query_result = sqlx::query!(
-        "UPDATE users SET email_verified = TRUE, status = 'active' WHERE id = $1",
-        verification_token_claims.sub
-    )
-    .execute(&database.pool)
-    .await?;
+    let query_result =
+        UsersRepository::set_user_email_verified(&verification_token_claims.sub, &database.pool)
+            .await?;
 
     match query_result.rows_affected() {
-        0 => Err(AppError::InternalServerError(
-            "User couldn't set to verified".to_string(),
-        )),
+        0 => {
+            warn!(user_id = %verification_token_claims.sub, "email verification update affected zero rows");
+            Err(AppError::InternalServerError(
+                "User couldn't set to verified".to_string(),
+            ))
+        }
         _ => {
             let redirect_to = if jar.get("refresh_token").is_none() {
                 "auth".to_string()

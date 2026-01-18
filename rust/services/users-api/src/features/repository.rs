@@ -2,7 +2,7 @@ use crate::{
     error::AppError,
     features::models::{OAuthUser, Provider, User, UserRole, UserStatus},
 };
-use sqlx::{Executor, PgPool, Postgres, Transaction};
+use sqlx::{Executor, PgPool, Postgres, Transaction, postgres::PgQueryResult};
 use uuid::Uuid;
 
 pub struct UsersRepository;
@@ -140,6 +140,21 @@ impl UsersRepository {
             email,
         )
         .fetch_optional(pool)
+        .await?)
+    }
+
+    #[tracing::instrument("users_repository.set_user_email_verified", skip(pool), err)]
+    pub async fn set_user_email_verified(
+        id: &Uuid,
+        pool: &PgPool,
+    ) -> Result<PgQueryResult, AppError> {
+        Ok(sqlx::query!(
+            r#"UPDATE users
+            SET email_verified = TRUE, status = 'active' WHERE id = $1
+            "#,
+            id
+        )
+        .execute(pool)
         .await?)
     }
 
