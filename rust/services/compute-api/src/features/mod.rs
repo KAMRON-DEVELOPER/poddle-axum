@@ -4,6 +4,7 @@ pub mod models;
 pub mod repository;
 pub mod schemas;
 pub mod see;
+pub mod webhook;
 pub mod websocket;
 
 use crate::utilities::app_state::AppState;
@@ -42,4 +43,5 @@ pub fn get_routes() -> Router<AppState> {
             "/api/v1/projects/{project_id}/metrics/see",
             get(see::stream_metrics),
         )
+        .route("/api/v1/github/webhook", get(webhook::github_webhook))
 }
