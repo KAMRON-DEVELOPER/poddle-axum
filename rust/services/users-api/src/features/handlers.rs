@@ -10,11 +10,12 @@ use crate::{
         },
     },
     services::build_oauth::{GithubOAuthClient, GoogleOAuthClient},
+    utilities::generators::generate_password,
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
 use http_contracts::message::MessageResponse;
-use serde_json::{Value, json};
+use serde_json::json;
 use std::net::SocketAddr;
 use users_core::jwt::{Claims, TokenType, create_token, verify_token};
 
@@ -36,12 +37,17 @@ use oauth2::{
 };
 use object_store::{ObjectStore, aws::AmazonS3, path::Path as ObjectStorePath};
 use reqwest::Client;
-use tracing::{debug, error, info, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 use uuid::Uuid;
 
 // -- =====================
 // -- GOOGLE OAUTH
 // -- =====================
+#[tracing::instrument(
+    name = "google_oauth_handler",
+    skip(jar, config, google_oauth_client),
+    err
+)]
 pub async fn google_oauth_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
@@ -72,6 +78,11 @@ pub async fn google_oauth_handler(
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
 }
 
+#[tracing::instrument(
+    name = "google_oauth_callback_handler",
+    skip(jar, http_client, database, config, query, google_oauth_client),
+    err
+)]
 pub async fn google_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
@@ -137,6 +148,11 @@ pub async fn google_oauth_callback_handler(
 // -- =====================
 // -- GITHUB OAUTH
 // -- =====================
+#[tracing::instrument(
+    name = "github_oauth_handler",
+    skip(jar, config, github_oauth_client),
+    err
+)]
 pub async fn github_oauth_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
@@ -162,11 +178,22 @@ pub async fn github_oauth_handler(
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
 }
 
+#[tracing::instrument(
+    name = "github_oauth_callback_handler",
+    skip(jar, http_client, database, config, user_agent, addr, query, github_oauth_client),
+    fields(
+        oauth_user_id = tracing::field::Empty,
+        user_id = tracing::field::Empty,
+    ),
+    err
+)]
 pub async fn github_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
     State(database): State<Database>,
     State(config): State<Config>,
+    TypedHeader(user_agent): TypedHeader<UserAgent>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Query(query): Query<OAuthCallback>,
     State(github_oauth_client): State<GithubOAuthClient>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -179,6 +206,7 @@ pub async fn github_oauth_callback_handler(
         .exchange_code(AuthorizationCode::new(query.code))
         .set_pkce_verifier(pkce_verifier)
         .request_async(&http_client)
+        .instrument(info_span!("exchange_code_request"))
         .await?;
 
     let access_token = token_response.access_token().secret();
@@ -188,22 +216,23 @@ pub async fn github_oauth_callback_handler(
         .header("User-Agent", "Poddle Dev")
         .bearer_auth(access_token.clone())
         .send()
+        .instrument(info_span!("get_github_oauth_user_request"))
         .await?;
     debug!(
         "get_github_oauth_user_response: {:#?}",
         get_github_oauth_user_response
     );
 
-    let github_oauth_user_text = get_github_oauth_user_response.text().await?;
-    debug!("github_oauth_user_text: {:#?}", github_oauth_user_text);
-    let github_oauth_user_json = serde_json::from_str::<Value>(&github_oauth_user_text)?;
-    debug!("github_oauth_user_json: {:#?}", github_oauth_user_json);
-
-    // let github_oauth_user = get_github_oauth_user_response.json::<GithubOAuthUser>().await?;
-    let github_oauth_user = serde_json::from_str::<GithubOAuthUser>(&github_oauth_user_text)?;
+    let github_oauth_user = get_github_oauth_user_response
+        .json::<GithubOAuthUser>()
+        .await?;
     debug!("github_oauth_user: {:#?}", github_oauth_user);
     let oauth_user: OAuthUser = github_oauth_user.into();
     debug!("oauth_user: {:#?}", oauth_user);
+
+    // let user = UsersRepository::upsert_user_from_oauth(&oauth_user, &database.pool).await?;
+
+    let mut tx = database.pool.begin().await?;
 
     let github_oauth_user_id = UsersRepository::create_oauth_user(
         &oauth_user.id,
@@ -212,20 +241,52 @@ pub async fn github_oauth_callback_handler(
         oauth_user.picture.as_deref(),
         None,
         oauth_user.provider,
-        &database.pool,
+        &mut *tx,
     )
     .await?;
 
-    let github_oauth_user_sub_cookie =
-        Cookie::build(("github_oauth_user_id", github_oauth_user_id))
-            .http_only(true)
-            .path("/")
-            .same_site(SameSite::Lax)
-            .max_age(CookieDuration::days(365))
-            .secure(config.cookie_secure);
-    let jar = jar.add(github_oauth_user_sub_cookie);
+    let hash_password = hash(generate_password(), DEFAULT_COST)?;
+    let user = UsersRepository::create_user(
+        oauth_user.username.unwrap_or_default(),
+        oauth_user.email.unwrap_or_default(),
+        hash_password,
+        github_oauth_user_id.clone(),
+        &mut tx,
+    )
+    .await?;
 
-    let redirect = Redirect::to(&format!("{}/complete-profile", config.frontend_endpoint));
+    tx.commit().await?;
+
+    tracing::Span::current().record("oauth_user_id", &github_oauth_user_id);
+    tracing::Span::current().record("user_id", &user.id.to_string());
+
+    let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
+    let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
+        .http_only(true)
+        .path("/")
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::days(config.refresh_token_expire_in_days))
+        .secure(config.cookie_secure);
+    let jar = jar.add(refresh_cookie);
+
+    UsersRepository::create_session(
+        &database.pool,
+        &user.id,
+        &user_agent.to_string(),
+        &addr.ip().to_string(),
+        &refresh_token,
+    )
+    .await?;
+
+    // let github_oauth_user_id_cookie = Cookie::build(("github_oauth_user_id", github_oauth_user_id))
+    //     .http_only(true)
+    //     .path("/")
+    //     .same_site(SameSite::Lax)
+    //     .max_age(CookieDuration::days(365))
+    //     .secure(config.cookie_secure);
+    // let jar = jar.add(github_oauth_user_id_cookie);
+
+    let redirect = Redirect::to(&format!("{}/dashboard", config.frontend_endpoint));
     Ok((jar, redirect).into_response())
 }
 
@@ -266,11 +327,11 @@ pub async fn continue_with_email_handler(
             ));
         }
 
-        let new_access = create_token(&config, user.id, TokenType::Access)?;
-        let new_refresh = create_token(&config, user.id, TokenType::Refresh)?;
+        let access_token = create_token(&config, user.id, TokenType::Access)?;
+        let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
 
         let max_age_days = config.refresh_token_expire_in_days;
-        let refresh_cookie = Cookie::build(("refresh_token", new_refresh.clone()))
+        let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
             .http_only(true)
             .path("/")
             .same_site(SameSite::Lax)
@@ -279,8 +340,8 @@ pub async fn continue_with_email_handler(
         let jar = jar.add(refresh_cookie);
 
         let tokens = Tokens {
-            access_token: new_access,
-            refresh_token: Some(new_refresh.clone()),
+            access_token: access_token,
+            refresh_token: Some(refresh_token.clone()),
         };
 
         UsersRepository::create_session(
@@ -288,7 +349,7 @@ pub async fn continue_with_email_handler(
             &user.id,
             &user_agent.to_string(),
             &addr.ip().to_string(),
-            &new_refresh,
+            &refresh_token,
         )
         .await?;
 
@@ -347,11 +408,11 @@ pub async fn continue_with_email_handler(
         Ok(_) => {
             tx.commit().await?;
             tracing::Span::current().record("user_id", &user.id.to_string());
-            let new_access = create_token(&config, user.id, TokenType::Access)?;
-            let new_refresh = create_token(&config, user.id, TokenType::Refresh)?;
+            let access_token = create_token(&config, user.id, TokenType::Access)?;
+            let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
 
             let max_age_days = config.refresh_token_expire_in_days;
-            let refresh_cookie = Cookie::build(("refresh_token", new_refresh.clone()))
+            let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
                 .http_only(true)
                 .path("/")
                 .same_site(SameSite::Lax)
@@ -360,8 +421,8 @@ pub async fn continue_with_email_handler(
             let jar = jar.add(refresh_cookie);
 
             let tokens = Tokens {
-                access_token: new_access,
-                refresh_token: Some(new_refresh.clone()),
+                access_token: access_token,
+                refresh_token: Some(refresh_token.clone()),
             };
 
             UsersRepository::create_session(
@@ -369,11 +430,11 @@ pub async fn continue_with_email_handler(
                 &user.id,
                 &user_agent.to_string(),
                 &addr.ip().to_string(),
-                &new_refresh,
+                &refresh_token,
             )
             .await?;
 
-            // 8. Return the new user and tokens
+            // Return the new user and tokens
             let response = Json(AuthOut { user, tokens });
             Ok((jar, response).into_response())
         }
@@ -536,14 +597,14 @@ pub async fn refresh_handler(
 
     let now = Utc::now().timestamp();
     let threshold_secs = config.refresh_token_renewal_threshold_days * 24 * 60 * 60;
-    let new_refresh = if claims.exp.saturating_sub(now) < threshold_secs {
+    let refresh_token = if claims.exp.saturating_sub(now) < threshold_secs {
         Some(create_token(&config, claims.sub, TokenType::Refresh)?)
     } else {
         None
     };
 
     let jar = if is_web {
-        if let Some(ref refresh) = new_refresh {
+        if let Some(ref refresh) = refresh_token {
             let max_age_days = config.refresh_token_expire_in_days;
             let cookie = Cookie::build(("refresh_token", refresh.clone()))
                 .http_only(true)
@@ -558,11 +619,11 @@ pub async fn refresh_handler(
         jar
     };
 
-    let new_access = create_token(&config, claims.sub, TokenType::Access)?;
+    let access_token = create_token(&config, claims.sub, TokenType::Access)?;
 
     let response = Json(Tokens {
-        access_token: new_access,
-        refresh_token: new_refresh,
+        access_token: access_token,
+        refresh_token: refresh_token,
     });
 
     Ok((jar, response))
