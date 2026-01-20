@@ -262,6 +262,7 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
     }
 }
 
+#[tracing::instrument(name = "consumer.handle_update_messages", skip_all)]
 async fn handle_update_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("📏 update consumer started");
 
@@ -278,7 +279,7 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                 );
 
                 // Create a span and link it to the parent context
-                let span = info_span!("consumer.handle_create_messages");
+                let span = info_span!("consumer.handle_update_messages");
                 let _ = span.set_parent(parent_cx);
 
                 let k8s_svc = kubernetes_service.clone();
@@ -341,6 +342,7 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
     }
 }
 
+#[tracing::instrument(name = "consumer.handle_delete_messages", skip_all)]
 async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("🗑️ Delete consumer started");
 
@@ -357,7 +359,7 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                 );
 
                 // Create a span and link it to the parent context
-                let span = info_span!("consumer.handle_create_messages");
+                let span = info_span!("consumer.handle_delete_messages");
                 let _ = span.set_parent(parent_cx);
 
                 let k8s_svc = kubernetes_service.clone();
