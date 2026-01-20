@@ -1,7 +1,10 @@
 use compute_core::schemas::{
     CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage,
 };
-use factory::factories::{amqp::Amqp, redis::Redis};
+use factory::factories::{
+    amqp::{Amqp, AmqpPropagator},
+    redis::Redis,
+};
 use futures::StreamExt;
 use kube::Client;
 use lapin::{
@@ -15,7 +18,8 @@ use lapin::{
 
 use sqlx::{Pool, Postgres};
 use tokio::task::JoinSet;
-use tracing::{error, info, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{
     error::AppError,
@@ -164,75 +168,92 @@ pub async fn start_consumer(
     Ok(())
 }
 
-#[tracing::instrument(
-    name = "consumer.handle_create_messages",
-    skip(kubernetes_service, consumer)
-)]
-async fn handle_create_messages(mut kubernetes_service: KubernetesService, mut consumer: Consumer) {
+#[tracing::instrument(name = "consumer.handle_create_messages", skip_all)]
+async fn handle_create_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
     info!("🎯 Create consumer started");
 
     while let Some(delivery) = consumer.next().await {
         match delivery {
             Ok(delivery) => {
+                // Extract context from headers
+                let parent_cx = AmqpPropagator::extract_context(
+                    delivery
+                        .properties
+                        .headers()
+                        .as_ref()
+                        .unwrap_or(&FieldTable::default()),
+                );
+
+                // Create a span and link it to the parent context
+                let span = info_span!("consumer.handle_create_messages");
+                let _ = span.set_parent(parent_cx);
+
+                let k8s_svc = kubernetes_service.clone();
+
                 // Try to deserialize into structured message
-                match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
-                    Ok(message) => {
-                        info!("🎯 Create deployment");
-                        info!("    name: {:?}", message.name);
-                        info!("    image: {:?}", message.image);
-                        info!("    port: {:?}", message.port);
-                        info!("    resources: {:?}", message.resources);
-                        info!("    subdomain: {:?}", message.subdomain);
-                        info!("    replicas: {:?}", message.replicas);
-                        info!("    labels: {:?}", message.labels);
-                        info!("    secrets: {:?}", message.secrets);
-                        info!(
-                            "    environment_variables: {:?}\n",
-                            message.environment_variables
-                        );
+                async move {
+                    match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
+                        Ok(message) => {
+                            debug!("🎯 Create deployment");
+                            debug!("    name: {:?}", message.name);
+                            debug!("    image: {:?}", message.image);
+                            debug!("    port: {:?}", message.port);
+                            debug!("    resources: {:?}", message.resources);
+                            debug!("    subdomain: {:?}", message.subdomain);
+                            debug!("    replicas: {:?}", message.replicas);
+                            debug!("    labels: {:?}", message.labels);
+                            debug!("    secrets: {:?}", message.secrets);
+                            debug!(
+                                "    environment_variables: {:?}\n",
+                                message.environment_variables
+                            );
 
-                        // Now we have ALL the data we need without a database query!
-                        match kubernetes_service.create(message.clone()).await {
-                            Ok(_) => {
-                                info!(
-                                    "✅ Deployment {} created successfully",
-                                    message.deployment_id
-                                );
+                            // Now we have ALL the data we need without a database query!
+                            match k8s_svc.create(message.clone()).await {
+                                Ok(_) => {
+                                    info!(
+                                        "✅ Deployment {} created successfully",
+                                        message.deployment_id
+                                    );
 
-                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!("Failed to ack message: {}", e);
+                                    if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                        error!("Failed to ack message: {}", e);
+                                    }
                                 }
-                            }
-                            Err(e) => {
-                                error!(
-                                    "❌ Failed to create deployment {}: {}",
-                                    message.deployment_id, e
-                                );
+                                Err(e) => {
+                                    error!(
+                                        "❌ Failed to create deployment {}: {}",
+                                        message.deployment_id, e
+                                    );
 
-                                // Requeue for retry (up to max retries handled by RabbitMQ TTL/DLX)
-                                if let Err(e) = delivery
-                                    .nack(BasicNackOptions {
-                                        requeue: true,
-                                        multiple: false,
-                                    })
-                                    .await
-                                {
-                                    error!("Failed to nack message: {}", e);
+                                    // Requeue for retry (up to max retries handled by RabbitMQ TTL/DLX)
+                                    if let Err(e) = delivery
+                                        .nack(BasicNackOptions {
+                                            requeue: true,
+                                            multiple: false,
+                                        })
+                                        .await
+                                    {
+                                        error!("Failed to nack message: {}", e);
+                                    }
                                 }
                             }
                         }
-                    }
-                    Err(e) => {
-                        error!("❌ Failed to parse CreateDeploymentMessage: {}", e);
-                        warn!("Payload: {}", String::from_utf8_lossy(&delivery.data));
+                        Err(e) => {
+                            error!("❌ Failed to parse CreateDeploymentMessage: {}", e);
+                            warn!("Payload: {}", String::from_utf8_lossy(&delivery.data));
 
-                        // Don't requeue malformed messages
-                        if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await
-                        {
-                            error!("Failed to reject message: {}", e);
+                            // Don't requeue malformed messages
+                            if let Err(e) =
+                                delivery.reject(BasicRejectOptions { requeue: false }).await
+                            {
+                                error!("Failed to reject message: {}", e);
+                            }
                         }
                     }
                 }
+                .instrument(span)
+                .await;
             }
             Err(e) => {
                 error!("Consumer error: {}", e);
@@ -247,54 +268,73 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
     while let Some(delivery) = consumer.next().await {
         match delivery {
             Ok(delivery) => {
-                match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
-                    Ok(message) => {
-                        info!("📏 Updating deployment");
-                        info!("    name: {:?}", message.name);
-                        info!("    image: {:?}", message.image);
-                        info!("    port: {:?}", message.port);
-                        info!("    resources: {:?}", message.resources);
-                        info!("    subdomain: {:?}", message.subdomain);
-                        info!("    replicas: {:?}", message.replicas);
-                        info!("    labels: {:?}", message.labels);
-                        info!("    secrets: {:?}", message.secrets);
-                        info!(
-                            "    environment_variables: {:?}\n",
-                            message.environment_variables
-                        );
+                // Extract context from headers
+                let parent_cx = AmqpPropagator::extract_context(
+                    delivery
+                        .properties
+                        .headers()
+                        .as_ref()
+                        .unwrap_or(&FieldTable::default()),
+                );
 
-                        match kubernetes_service.update(message.clone()).await {
-                            Ok(_) => {
-                                info!(
-                                    "✅ Deployment {:?} updated successfully",
-                                    message.deployment_id
-                                );
+                // Create a span and link it to the parent context
+                let span = info_span!("consumer.handle_create_messages");
+                let _ = span.set_parent(parent_cx);
 
-                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!("Failed to ack message: {}", e);
+                let k8s_svc = kubernetes_service.clone();
+
+                async move {
+                    match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
+                        Ok(message) => {
+                            info!("📏 Updating deployment");
+                            info!("    name: {:?}", message.name);
+                            info!("    image: {:?}", message.image);
+                            info!("    port: {:?}", message.port);
+                            info!("    resources: {:?}", message.resources);
+                            info!("    subdomain: {:?}", message.subdomain);
+                            info!("    replicas: {:?}", message.replicas);
+                            info!("    labels: {:?}", message.labels);
+                            info!("    secrets: {:?}", message.secrets);
+                            info!(
+                                "    environment_variables: {:?}\n",
+                                message.environment_variables
+                            );
+
+                            match k8s_svc.update(message.clone()).await {
+                                Ok(_) => {
+                                    info!(
+                                        "✅ Deployment {:?} updated successfully",
+                                        message.deployment_id
+                                    );
+
+                                    if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                        error!("Failed to ack message: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to update deployment: {}", e);
+
+                                    delivery
+                                        .nack(BasicNackOptions {
+                                            requeue: true,
+                                            multiple: false,
+                                        })
+                                        .await
+                                        .ok();
                                 }
                             }
-                            Err(e) => {
-                                error!("Failed to update deployment: {}", e);
-
-                                delivery
-                                    .nack(BasicNackOptions {
-                                        requeue: true,
-                                        multiple: false,
-                                    })
-                                    .await
-                                    .ok();
-                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to parse updateDeploymentMessage: {}", e);
+                            delivery
+                                .reject(BasicRejectOptions { requeue: false })
+                                .await
+                                .ok();
                         }
                     }
-                    Err(e) => {
-                        error!("Failed to parse updateDeploymentMessage: {}", e);
-                        delivery
-                            .reject(BasicRejectOptions { requeue: false })
-                            .await
-                            .ok();
-                    }
                 }
+                .instrument(span)
+                .await;
             }
             Err(e) => error!("update consumer error: {}", e),
         }
@@ -307,39 +347,58 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
     while let Some(delivery) = consumer.next().await {
         match delivery {
             Ok(delivery) => {
-                match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
-                    Ok(message) => {
-                        info!("🗑️ Deleting deployment {}", message.deployment_id);
+                // Extract context from headers
+                let parent_cx = AmqpPropagator::extract_context(
+                    delivery
+                        .properties
+                        .headers()
+                        .as_ref()
+                        .unwrap_or(&FieldTable::default()),
+                );
 
-                        match kubernetes_service.delete(message.clone()).await {
-                            Ok(_) => {
-                                info!("✅ Deployment {} deleted", message.deployment_id);
+                // Create a span and link it to the parent context
+                let span = info_span!("consumer.handle_create_messages");
+                let _ = span.set_parent(parent_cx);
 
-                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!("Failed to ack message: {}", e);
+                let k8s_svc = kubernetes_service.clone();
+
+                async move {
+                    match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
+                        Ok(message) => {
+                            info!("🗑️ Deleting deployment {}", message.deployment_id);
+
+                            match k8s_svc.delete(message.clone()).await {
+                                Ok(_) => {
+                                    info!("✅ Deployment {} deleted", message.deployment_id);
+
+                                    if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                        error!("Failed to ack message: {}", e);
+                                    }
+                                }
+                                Err(e) => {
+                                    error!("Failed to delete deployment: {}", e);
+
+                                    delivery
+                                        .nack(BasicNackOptions {
+                                            requeue: true,
+                                            multiple: false,
+                                        })
+                                        .await
+                                        .ok();
                                 }
                             }
-                            Err(e) => {
-                                error!("Failed to delete deployment: {}", e);
-
-                                delivery
-                                    .nack(BasicNackOptions {
-                                        requeue: true,
-                                        multiple: false,
-                                    })
-                                    .await
-                                    .ok();
-                            }
+                        }
+                        Err(e) => {
+                            error!("Failed to parse DeleteDeploymentMessage: {}", e);
+                            delivery
+                                .reject(BasicRejectOptions { requeue: false })
+                                .await
+                                .ok();
                         }
                     }
-                    Err(e) => {
-                        error!("Failed to parse DeleteDeploymentMessage: {}", e);
-                        delivery
-                            .reject(BasicRejectOptions { requeue: false })
-                            .await
-                            .ok();
-                    }
                 }
+                .instrument(span)
+                .await;
             }
             Err(e) => error!("Delete consumer error: {}", e),
         }

@@ -3,6 +3,7 @@ use opentelemetry_otlp::{MetricExporter, SpanExporter, WithExportConfig, WithTon
 use opentelemetry_sdk::{
     Resource,
     metrics::{PeriodicReader, SdkMeterProvider},
+    propagation::TraceContextPropagator,
     trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
 };
 use opentelemetry_semantic_conventions::{
@@ -38,6 +39,8 @@ impl Observability {
         cargo_pkg_version: &str,
         tracing_level: Level,
     ) -> Observability {
+        global::set_text_map_propagator(TraceContextPropagator::new());
+
         let resource = Self::get_resource(cargo_crate_name, cargo_pkg_version);
 
         let tracer_provider =

@@ -124,7 +124,7 @@ impl KubernetesService {
         fields(deployment_id = %message.deployment_id, project_id = %message.project_id, user_id = %message.user_id),
         err
     )]
-    pub async fn create(&mut self, message: CreateDeploymentMessage) -> Result<(), AppError> {
+    pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
         let project_id = message.project_id;
         let deployment_id = message.deployment_id;
@@ -147,6 +147,7 @@ impl KubernetesService {
         });
         let _ = self
             .redis
+            .clone()
             .connection
             .publish(channel, json_message.to_string())
             .await;

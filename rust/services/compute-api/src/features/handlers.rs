@@ -17,7 +17,11 @@ use compute_core::schemas::{
     DeleteDeploymentMessage, DeploymentResponse, UpdateDeploymentMessage, UpdateDeploymentRequest,
     UpdateProjectRequest,
 };
-use factory::factories::{amqp::Amqp, database::Database, redis::Redis};
+use factory::factories::{
+    amqp::{Amqp, AmqpPropagator},
+    database::Database,
+    redis::Redis,
+};
 use http_contracts::{
     list::schema::ListResponse, message::MessageResponse, pagination::schema::Pagination,
 };
@@ -323,6 +327,9 @@ pub async fn create_deployment_handler(
 
     let payload = serde_json::to_vec(&message)?;
 
+    let mut headers = FieldTable::default();
+    AmqpPropagator::inject_context(&mut headers);
+
     // Publish message
     channel
         .basic_publish(
@@ -335,7 +342,8 @@ pub async fn create_deployment_handler(
             &payload,
             BasicProperties::default()
                 .with_delivery_mode(2)
-                .with_content_type("application/json".into()),
+                .with_content_type("application/json".into())
+                .with_headers(headers),
         )
         .instrument(info_span!("basic_publish.compute.create"))
         .await?
@@ -387,6 +395,9 @@ pub async fn update_deployment_handler(
 
     let payload = serde_json::to_vec(&message)?;
 
+    let mut headers = FieldTable::default();
+    AmqpPropagator::inject_context(&mut headers);
+
     // Publish message
     channel
         .basic_publish(
@@ -396,7 +407,8 @@ pub async fn update_deployment_handler(
             &payload,
             BasicProperties::default()
                 .with_delivery_mode(2)
-                .with_content_type("application/json".into()),
+                .with_content_type("application/json".into())
+                .with_headers(headers),
         )
         .instrument(info_span!("basic_publish.compute.update"))
         .await?
@@ -446,6 +458,9 @@ pub async fn delete_deployment_handler(
 
     let payload = serde_json::to_vec(&message)?;
 
+    let mut headers = FieldTable::default();
+    AmqpPropagator::inject_context(&mut headers);
+
     // Publish message
     channel
         .basic_publish(
@@ -455,7 +470,8 @@ pub async fn delete_deployment_handler(
             &payload,
             BasicProperties::default()
                 .with_delivery_mode(2)
-                .with_content_type("application/json".into()),
+                .with_content_type("application/json".into())
+                .with_headers(headers),
         )
         .instrument(info_span!("basic_publish.compute.delete"))
         .await?

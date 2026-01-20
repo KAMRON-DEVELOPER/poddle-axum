@@ -7,6 +7,8 @@ use lapin::Connection;
 
 use crate::factories::tls::TlsConfig;
 
+pub struct AmqpPropagator;
+
 pub trait AmqpConfig {
     type Tls: TlsConfig;
 

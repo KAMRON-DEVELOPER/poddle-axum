@@ -1,5 +1,5 @@
 use crate::factories::amqp::error::AmqpError;
-use crate::factories::amqp::{Amqp, AmqpConfig};
+use crate::factories::amqp::{Amqp, AmqpConfig, AmqpPropagator};
 use crate::factories::tls::TlsConfig;
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
 use lapin::tcp::OwnedIdentity;
@@ -7,10 +7,17 @@ use lapin::{
     BasicProperties, Channel, Connection, ConnectionProperties, options::BasicPublishOptions,
     tcp::OwnedTLSConfig,
 };
+use opentelemetry::Context;
 use serde::Serialize;
 use serde_json::json;
 use std::sync::Arc;
-use tracing::{error, info};
+use tracing::{Span, error, info};
+
+use lapin::types::{AMQPValue, FieldTable, ShortString};
+use opentelemetry::propagation::TextMapPropagator;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
+use std::collections::HashMap;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 impl Amqp {
     pub async fn new<T: AmqpConfig>(cfg: &T) -> Self {
@@ -144,5 +151,35 @@ impl IntoResponse for AmqpError {
         let body = Json(json!({"error": msg}));
 
         (status, body).into_response()
+    }
+}
+
+impl AmqpPropagator {
+    // Inject current tracing context into lapin FieldTable
+    pub fn inject_context(headers: &mut FieldTable) {
+        let propagator = TraceContextPropagator::new();
+        let mut injector = HashMap::new();
+
+        // Get current span context from tracing
+        let cx = Span::current().context();
+        propagator.inject_context(&cx, &mut injector);
+
+        for (key, value) in injector {
+            headers.insert(ShortString::from(key), AMQPValue::LongString(value.into()));
+        }
+    }
+
+    // Extract context from lapin FieldTable and return an OTel Context
+    pub fn extract_context(headers: &FieldTable) -> Context {
+        let propagator = TraceContextPropagator::new();
+        let mut extractor = HashMap::new();
+
+        for (key, value) in headers.inner() {
+            if let AMQPValue::LongString(val) = value {
+                extractor.insert(key.to_string(), val.to_string());
+            }
+        }
+
+        propagator.extract(&extractor)
     }
 }
