@@ -218,14 +218,14 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
                 if retry_count > 3 {
                     error!("❌ Max retries reached for create deployment. Dropping message."); 
                     if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!("❌ Failed to ack for create deployment for max retries: {}", e);
-                                }
+                        error!("❌ Failed to ack for create deployment for max retries: {}", e);
+                    }
                     return;
                 }
 
                 match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
-                        debug!(payload = ?message, "🎯 Create deployment request received");
+                        debug!(deployment_id = %message.deployment_id, "🎯 Create deployment request received");
 
                         match k8s_svc.create(message.clone()).await {
                             Ok(_) => {
@@ -252,11 +252,9 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
                     }
                     Err(e) => {
                         error!("❌ Failed to parse CreateDeploymentMessage: {}", e);
-                        if let Err(e) = delivery
-                            .reject(BasicRejectOptions { requeue: false })
-                            .await {
-                                    error!("❌ Failed to reject for create deployment: {}", e);
-                                }
+                        if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await {
+                            error!("❌ Failed to reject for create deployment: {}", e);
+                        }
                     }
                 }
             }
@@ -300,14 +298,14 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                 if retry_count > 3 {
                     error!("❌ Max retries reached for update deployment. Dropping message."); 
                     if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!("❌ Failed to ack for update deployment for max retries: {}", e);
-                                }
+                        error!("❌ Failed to ack for update deployment for max retries: {}", e);
+                    }
                     return;
                 }
 
                 match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
                     Ok(message) => {
-                        debug!(payload = ?message, "📏 Update deployment request received");
+                        debug!(deployment_id = %message.deployment_id, "📏 Update deployment request received");
 
                         match k8s_svc.update(message.clone()).await {
                             Ok(_) => {
@@ -316,18 +314,11 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                                     error!(deployment_id = %message.deployment_id, "❌ Failed to ack for update deployment: {}", e);
                                 }
                             }
-                            Err(e) =>          {
-                                error!(deployment_id = %message.deployment_id,
-                                    "❌ Failed to update deployment: {}",e
-                                );
+                            Err(e) => {
+                                error!(deployment_id = %message.deployment_id, "❌ Failed to update deployment: {}", e);
 
                                 // nack(requeue: false) sends it to the DLX
-                                if let Err(e) = delivery
-                                    .nack(BasicNackOptions {
-                                        requeue: false,
-                                        multiple: false,
-                                    })
-                                    .await {
+                                if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
                                     error!(deployment_id = %message.deployment_id, "❌ Failed to nack for update deployment: {}", e);
                                 }
                             }
@@ -335,11 +326,9 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                     }
                     Err(e) => {
                         error!("❌ Failed to parse updateDeploymentMessage: {}", e);
-                        if let Err(e) = delivery
-                            .reject(BasicRejectOptions { requeue: false })
-                            .await {
-                                    error!( "❌ Failed to reject for update deployment: {}", e);
-                                }
+                        if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await {
+                            error!( "❌ Failed to reject for update deployment: {}", e);
+                        }
                     }
                 }
             }
@@ -383,8 +372,8 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                 if retry_count > 3 {
                     error!("❌ Max retries reached for delete deployment. Dropping message.");  
                     if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!("❌ Failed to ack for delete deployment for max retries: {}", e);
-                                }
+                        error!("❌ Failed to ack for delete deployment for max retries: {}", e);
+                    }
                     return;
                 }
 
@@ -400,17 +389,10 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                                 }
                             }
                             Err(e) => {
-                                error!(
-                                    deployment_id = %message.deployment_id, "❌ Failed to delete deployment: {}", e
-                                );
+                                error!(deployment_id = %message.deployment_id, "❌ Failed to delete deployment: {}", e);
 
                                 // nack(requeue: false) sends it to the DLX
-                                if let Err(e) = delivery
-                                    .nack(BasicNackOptions {
-                                        requeue: false,
-                                        multiple: false,
-                                    })
-                                    .await {
+                                if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
                                     error!(deployment_id = %message.deployment_id, "❌ Failed to nack for delete deployment: {}", e);
                                 }
                             }
@@ -418,11 +400,9 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                     }
                     Err(e) => {
                         error!("❌ Failed to parse DeleteDeploymentMessage: {}", e);
-                        if let Err(e) = delivery
-                            .reject(BasicRejectOptions { requeue: false })
-                            .await {
-                                    error!("❌ Failed to reject for delete deployment: {}", e);
-                                }
+                        if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await {
+                            error!("❌ Failed to reject for delete deployment: {}", e);
+                        }
                     }
                 }
             }
