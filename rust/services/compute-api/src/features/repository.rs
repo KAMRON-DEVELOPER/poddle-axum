@@ -178,8 +178,10 @@ pub struct DeploymentRepository;
 
 impl DeploymentRepository {
     #[tracing::instrument(name = "deployment_repository.get_user_namespace")]
-    pub async fn get_user_namespace(user_id: Uuid) -> String {
-        format!("user-{}", &user_id.to_string().replace("-", "")[..16])
+    pub fn get_user_namespace(user_id: &Uuid) -> String {
+        // as_simple() produces a hyphen-free, lowercase hex representation
+        let short = user_id.as_simple().to_string();
+        format!("user-{}", &short[..16])
     }
 
     #[tracing::instrument(
@@ -302,17 +304,18 @@ impl DeploymentRepository {
         Ok((total, deployments))
     }
 
+    #[tracing::instrument(name = "deployment_repository.get_by_id", skip(pool), err)]
     pub async fn get_by_id(
-        pool: &PgPool,
         user_id: Uuid,
         deployment_id: Uuid,
+        pool: &PgPool,
     ) -> Result<Deployment, sqlx::Error> {
         sqlx::query_as::<_, Deployment>(
             r#"
-                SELECT d.*
-                FROM deployments d
-                INNER JOIN projects p ON d.project_id = p.id
-                WHERE d.id = $1 AND p.owner_id = $2
+            SELECT d.*
+            FROM deployments d
+            INNER JOIN projects p ON d.project_id = p.id
+            WHERE d.id = $1 AND p.owner_id = $2
             "#,
         )
         .bind(deployment_id)
@@ -321,13 +324,14 @@ impl DeploymentRepository {
         .await
     }
 
+    #[tracing::instrument(name = "deployment_repository.create", skip(req, tx), err)]
     pub async fn create(
         user_id: Uuid,
         project_id: Uuid,
         req: CreateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
-        let namespace = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
+        let namespace = DeploymentRepository::get_user_namespace(&user_id);
         let deployment_name = format!(
             "{}-{}",
             req.name.to_lowercase().replace("_", "-"),
@@ -345,12 +349,12 @@ impl DeploymentRepository {
 
         sqlx::query_as::<_, Deployment>(
             r#"
-                INSERT INTO deployments (
-                    user_id, project_id, name, image, replicas, port, environment_variables, resources,
-                    labels, subdomain, cluster_namespace, cluster_deployment_name
-                )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-                RETURNING *
+            INSERT INTO deployments (
+                user_id, project_id, name, image, replicas, port, environment_variables, resources,
+                labels, subdomain, cluster_namespace, cluster_deployment_name
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            RETURNING *
             "#,
         )
         .bind(user_id)
@@ -369,6 +373,7 @@ impl DeploymentRepository {
         .await
     }
 
+    #[tracing::instrument(name = "deployment_repository.update_status", skip(pool), err)]
     pub async fn update_status(
         deployment_id: Uuid,
         status: DeploymentStatus,
@@ -376,9 +381,9 @@ impl DeploymentRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-                UPDATE deployments
-                SET status = $2
-                WHERE id = $1
+            UPDATE deployments
+            SET status = $2
+            WHERE id = $1
             "#,
         )
         .bind(deployment_id)
@@ -389,6 +394,7 @@ impl DeploymentRepository {
         Ok(())
     }
 
+    #[tracing::instrument(name = "deployment_repository.update", skip(req, tx), err)]
     pub async fn update(
         user_id: Uuid,
         deployment_id: Uuid,
@@ -410,20 +416,20 @@ impl DeploymentRepository {
 
         sqlx::query_as::<_, Deployment>(
             r#"
-                UPDATE deployments d
-                SET
-                    name = COALESCE($3, d.name),
-                    image = COALESCE($4, d.image),
-                    port = COALESCE($5, d.port),
-                    replicas = COALESCE($6, d.replicas),
-                    resources = COALESCE($7, d.resources),
-                    labels = COALESCE($8, d.labels),
-                    environment_variables = COALESCE($9, d.environment_variables),
-                    subdomain = COALESCE($10, d.subdomain),
-                    custom_domain = COALESCE($11, d.custom_domain)
-                FROM projects p
-                WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
-                RETURNING d.*
+            UPDATE deployments d
+            SET
+                name = COALESCE($3, d.name),
+                image = COALESCE($4, d.image),
+                port = COALESCE($5, d.port),
+                replicas = COALESCE($6, d.replicas),
+                resources = COALESCE($7, d.resources),
+                labels = COALESCE($8, d.labels),
+                environment_variables = COALESCE($9, d.environment_variables),
+                subdomain = COALESCE($10, d.subdomain),
+                custom_domain = COALESCE($11, d.custom_domain)
+            FROM projects p
+            WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
+            RETURNING d.*
             "#,
         )
         .bind(deployment_id)
@@ -441,6 +447,7 @@ impl DeploymentRepository {
         .await
     }
 
+    #[tracing::instrument(name = "deployment_repository.delete", skip(tx), err)]
     pub async fn delete(
         user_id: Uuid,
         deployment_id: Uuid,
@@ -448,9 +455,9 @@ impl DeploymentRepository {
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
-                DELETE FROM deployments d
-                USING projects p
-                WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
+            DELETE FROM deployments d
+            USING projects p
+            WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
             "#,
         )
         .bind(deployment_id)
@@ -465,17 +472,18 @@ impl DeploymentRepository {
 pub struct DeploymentEventRepository;
 
 impl DeploymentEventRepository {
+    #[tracing::instrument(name = "deployment_event_repository.create", skip(message, pool), err)]
     pub async fn create(
-        pool: &PgPool,
         deployment_id: Uuid,
         event_type: &str,
         message: Option<&str>,
+        pool: &PgPool,
     ) -> Result<DeploymentEvent, sqlx::Error> {
         sqlx::query_as::<_, DeploymentEvent>(
             r#"
-                INSERT INTO deployment_events (deployment_id, event_type, message)
-                VALUES ($1, $2, $3)
-                RETURNING *
+            INSERT INTO deployment_events (deployment_id, event_type, message)
+            VALUES ($1, $2, $3)
+            RETURNING *
             "#,
         )
         .bind(deployment_id)
@@ -485,17 +493,22 @@ impl DeploymentEventRepository {
         .await
     }
 
+    #[tracing::instrument(
+        name = "deployment_event_repository.get_recent_by_deployment",
+        skip(pool),
+        err
+    )]
     pub async fn get_recent_by_deployment(
-        pool: &PgPool,
         deployment_id: Uuid,
         limit: i64,
+        pool: &PgPool,
     ) -> Result<Vec<DeploymentEvent>, sqlx::Error> {
         sqlx::query_as::<_, DeploymentEvent>(
             r#"
-                SELECT * FROM deployment_events
-                WHERE deployment_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2
+            SELECT * FROM deployment_events
+            WHERE deployment_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
             "#,
         )
         .bind(deployment_id)
@@ -508,6 +521,11 @@ impl DeploymentEventRepository {
 pub struct CacheRepository;
 
 impl CacheRepository {
+    #[tracing::instrument(
+        name = "cache_repository.get_deployment_metrics",
+        skip(points_count, deployment_ids, connection),
+        err
+    )]
     pub async fn get_deployment_metrics(
         points_count: u64,
         deployment_ids: Vec<&str>,
