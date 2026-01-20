@@ -239,12 +239,7 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
                                     "❌ Failed to create deployment: {}", e
                                 );
 
-                                if let Err(e) = delivery
-                                    .nack(BasicNackOptions {
-                                        requeue: false,
-                                        multiple: false,
-                                    })
-                                    .await {
+                                if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
                                     error!(deployment_id = %message.deployment_id, "❌ Failed to nack for create deployment: {}", e);
                                 }
                             }
