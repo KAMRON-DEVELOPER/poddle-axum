@@ -312,7 +312,6 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                             Err(e) => {
                                 error!(deployment_id = %message.deployment_id, "❌ Failed to update deployment: {}", e);
 
-                                // nack(requeue: false) sends it to the DLX
                                 if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
                                     error!(deployment_id = %message.deployment_id, "❌ Failed to nack for update deployment: {}", e);
                                 }
@@ -386,7 +385,6 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                             Err(e) => {
                                 error!(deployment_id = %message.deployment_id, "❌ Failed to delete deployment: {}", e);
 
-                                // nack(requeue: false) sends it to the DLX
                                 if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
                                     error!(deployment_id = %message.deployment_id, "❌ Failed to nack for delete deployment: {}", e);
                                 }
