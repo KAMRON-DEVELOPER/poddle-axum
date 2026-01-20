@@ -214,75 +214,65 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
         let _ = span.set_parent(parent_cx);
 
         // Try to deserialize into structured message
-        async move {
-            if retry_count > 5 {
-                error!("❌ Max retries reached for deployment. Dropping message.");
-                // Acking tells RabbitMQ "I'm done with this," even though it failed.
-                // This prevents the infinite loop.
-                let _ = delivery.ack(BasicAckOptions::default()).await;
-                return;
-            }
+        tokio::spawn(
+            async move {
+                if retry_count > 5 {
+                    error!("❌ Max retries reached for deployment. Dropping message.");
+                    // Acking tells RabbitMQ "I'm done with this," even though it failed.
+                    // This prevents the infinite loop.
+                    let _ = delivery.ack(BasicAckOptions::default()).await;
+                    return;
+                }
 
-            match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
-                Ok(message) => {
-                    debug!("🎯 Create deployment");
-                    debug!("    name: {:?}", message.name);
-                    debug!("    image: {:?}", message.image);
-                    debug!("    port: {:?}", message.port);
-                    debug!("    resources: {:?}", message.resources);
-                    debug!("    subdomain: {:?}", message.subdomain);
-                    debug!("    replicas: {:?}", message.replicas);
-                    debug!("    labels: {:?}", message.labels);
-                    debug!("    secrets: {:?}", message.secrets);
-                    debug!(
-                        "    environment_variables: {:?}\n",
-                        message.environment_variables
-                    );
+                match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
+                    Ok(message) => {
+                        debug!(payload = ?message, "🎯 Create deployment request received");
 
-                    // Now we have ALL the data we need without a database query!
-                    match k8s_svc.create(message.clone()).await {
-                        Ok(_) => {
-                            info!(
-                                "✅ Deployment {} created successfully",
-                                message.deployment_id
-                            );
+                        // Now we have ALL the data we need without a database query!
+                        match k8s_svc.create(message.clone()).await {
+                            Ok(_) => {
+                                info!(
+                                    "✅ Deployment {} created successfully",
+                                    message.deployment_id
+                                );
 
-                            if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                error!("Failed to ack message: {}", e);
+                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                    error!("Failed to ack message: {}", e);
+                                }
                             }
-                        }
-                        Err(e) => {
-                            error!(
-                                "❌ Failed to create deployment: {}, (Retry {}), error: {}",
-                                message.deployment_id, retry_count, e
-                            );
+                            Err(e) => {
+                                error!(
+                                    "❌ Failed to create deployment: {}, (Retry {}), error: {}",
+                                    message.deployment_id, retry_count, e
+                                );
 
-                            // nack(requeue: false) sends it to the DLX
-                            if let Err(e) = delivery
-                                .nack(BasicNackOptions {
-                                    requeue: false,
-                                    multiple: false,
-                                })
-                                .await
-                            {
-                                error!("Failed to nack message: {}", e);
+                                // nack(requeue: false) sends it to the DLX
+                                if let Err(e) = delivery
+                                    .nack(BasicNackOptions {
+                                        requeue: false,
+                                        multiple: false,
+                                    })
+                                    .await
+                                {
+                                    error!("Failed to nack message: {}", e);
+                                }
                             }
                         }
                     }
-                }
-                Err(e) => {
-                    error!("❌ Failed to parse CreateDeploymentMessage: {}", e);
-                    warn!("Payload: {}", String::from_utf8_lossy(&delivery.data));
+                    Err(e) => {
+                        error!("❌ Failed to parse CreateDeploymentMessage: {}", e);
+                        warn!("Payload: {}", String::from_utf8_lossy(&delivery.data));
 
-                    // Don't requeue malformed messages
-                    if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await {
-                        error!("Failed to reject message: {}", e);
+                        // Don't requeue malformed messages
+                        if let Err(e) = delivery.reject(BasicRejectOptions { requeue: false }).await
+                        {
+                            error!("Failed to reject message: {}", e);
+                        }
                     }
                 }
             }
-        }
-        .instrument(span)
-        .await;
+            .instrument(span),
+        );
     }
 }
 
@@ -316,70 +306,60 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
         let span = info_span!("consumer.handle_update_messages", retry_count = retry_count);
         let _ = span.set_parent(parent_cx);
 
-        async move {
-            if retry_count > 5 {
-                error!("❌ Max retries reached for deployment. Dropping message.");
-                // Acking tells RabbitMQ "I'm done with this," even though it failed.
-                // This prevents the infinite loop.
-                let _ = delivery.ack(BasicAckOptions::default()).await;
-                return;
-            }
+        tokio::spawn(
+            async move {
+                if retry_count > 5 {
+                    error!("❌ Max retries reached for deployment. Dropping message.");
+                    // Acking tells RabbitMQ "I'm done with this," even though it failed.
+                    // This prevents the infinite loop.
+                    let _ = delivery.ack(BasicAckOptions::default()).await;
+                    return;
+                }
 
-            match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
-                Ok(message) => {
-                    debug!("📏 Updating deployment");
-                    debug!("    name: {:?}", message.name);
-                    debug!("    image: {:?}", message.image);
-                    debug!("    port: {:?}", message.port);
-                    debug!("    resources: {:?}", message.resources);
-                    debug!("    subdomain: {:?}", message.subdomain);
-                    debug!("    replicas: {:?}", message.replicas);
-                    debug!("    labels: {:?}", message.labels);
-                    debug!("    secrets: {:?}", message.secrets);
-                    debug!(
-                        "    environment_variables: {:?}\n",
-                        message.environment_variables
-                    );
+                match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
+                    Ok(message) => {
+                        debug!("📏 Updating deployment");
+                        debug!(payload = ?message, "📏 Update deployment request received");
 
-                    match k8s_svc.update(message.clone()).await {
-                        Ok(_) => {
-                            info!(
-                                "✅ Deployment {:?} updated successfully",
-                                message.deployment_id
-                            );
+                        match k8s_svc.update(message.clone()).await {
+                            Ok(_) => {
+                                info!(
+                                    "✅ Deployment {:?} updated successfully",
+                                    message.deployment_id
+                                );
 
-                            if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                error!("Failed to ack message: {}", e);
+                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                    error!("Failed to ack message: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                error!(
+                                    "❌ Failed to update deployment: {}, (Retry {}), error: {}",
+                                    message.deployment_id, retry_count, e
+                                );
+
+                                // nack(requeue: false) sends it to the DLX
+                                delivery
+                                    .nack(BasicNackOptions {
+                                        requeue: false,
+                                        multiple: false,
+                                    })
+                                    .await
+                                    .ok();
                             }
                         }
-                        Err(e) => {
-                            error!(
-                                "❌ Failed to update deployment: {}, (Retry {}), error: {}",
-                                message.deployment_id, retry_count, e
-                            );
-
-                            // nack(requeue: false) sends it to the DLX
-                            delivery
-                                .nack(BasicNackOptions {
-                                    requeue: false,
-                                    multiple: false,
-                                })
-                                .await
-                                .ok();
-                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to parse updateDeploymentMessage: {}", e);
+                        delivery
+                            .reject(BasicRejectOptions { requeue: false })
+                            .await
+                            .ok();
                     }
                 }
-                Err(e) => {
-                    error!("Failed to parse updateDeploymentMessage: {}", e);
-                    delivery
-                        .reject(BasicRejectOptions { requeue: false })
-                        .await
-                        .ok();
-                }
             }
-        }
-        .instrument(span)
-        .await;
+            .instrument(span),
+        );
     }
 }
 
@@ -413,54 +393,55 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
         let span = info_span!("consumer.handle_delete_messages", retry_count = retry_count);
         let _ = span.set_parent(parent_cx);
 
-        async move {
-            if retry_count > 5 {
-                error!("❌ Max retries reached for deployment. Dropping message.");
-                // Acking tells RabbitMQ "I'm done with this," even though it failed.
-                // This prevents the infinite loop.
-                let _ = delivery.ack(BasicAckOptions::default()).await;
-                return;
-            }
+        tokio::spawn(
+            async move {
+                if retry_count > 5 {
+                    error!("❌ Max retries reached for deployment. Dropping message.");
+                    // Acking tells RabbitMQ "I'm done with this," even though it failed.
+                    // This prevents the infinite loop.
+                    let _ = delivery.ack(BasicAckOptions::default()).await;
+                    return;
+                }
 
-            match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
-                Ok(message) => {
-                    info!("🗑️ Deleting deployment {}", message.deployment_id);
+                match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
+                    Ok(message) => {
+                        debug!(payload = ?message, "🗑️ Delete deployment request received");
 
-                    match k8s_svc.delete(message.clone()).await {
-                        Ok(_) => {
-                            info!("✅ Deployment {} deleted", message.deployment_id);
+                        match k8s_svc.delete(message.clone()).await {
+                            Ok(_) => {
+                                info!("✅ Deployment {} deleted", message.deployment_id);
 
-                            if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                error!("Failed to ack message: {}", e);
+                                if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
+                                    error!("Failed to ack message: {}", e);
+                                }
+                            }
+                            Err(e) => {
+                                error!(
+                                    "❌ Failed to delete deployment: {}, (Retry {}), error: {}",
+                                    message.deployment_id, retry_count, e
+                                );
+
+                                // nack(requeue: false) sends it to the DLX
+                                delivery
+                                    .nack(BasicNackOptions {
+                                        requeue: false,
+                                        multiple: false,
+                                    })
+                                    .await
+                                    .ok();
                             }
                         }
-                        Err(e) => {
-                            error!(
-                                "❌ Failed to delete deployment: {}, (Retry {}), error: {}",
-                                message.deployment_id, retry_count, e
-                            );
-
-                            // nack(requeue: false) sends it to the DLX
-                            delivery
-                                .nack(BasicNackOptions {
-                                    requeue: false,
-                                    multiple: false,
-                                })
-                                .await
-                                .ok();
-                        }
+                    }
+                    Err(e) => {
+                        error!("Failed to parse DeleteDeploymentMessage: {}", e);
+                        delivery
+                            .reject(BasicRejectOptions { requeue: false })
+                            .await
+                            .ok();
                     }
                 }
-                Err(e) => {
-                    error!("Failed to parse DeleteDeploymentMessage: {}", e);
-                    delivery
-                        .reject(BasicRejectOptions { requeue: false })
-                        .await
-                        .ok();
-                }
             }
-        }
-        .instrument(span)
-        .await;
+            .instrument(span),
+        );
     }
 }
