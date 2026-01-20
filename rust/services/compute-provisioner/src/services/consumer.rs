@@ -286,16 +286,16 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                 async move {
                     match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
                         Ok(message) => {
-                            info!("📏 Updating deployment");
-                            info!("    name: {:?}", message.name);
-                            info!("    image: {:?}", message.image);
-                            info!("    port: {:?}", message.port);
-                            info!("    resources: {:?}", message.resources);
-                            info!("    subdomain: {:?}", message.subdomain);
-                            info!("    replicas: {:?}", message.replicas);
-                            info!("    labels: {:?}", message.labels);
-                            info!("    secrets: {:?}", message.secrets);
-                            info!(
+                            debug!("📏 Updating deployment");
+                            debug!("    name: {:?}", message.name);
+                            debug!("    image: {:?}", message.image);
+                            debug!("    port: {:?}", message.port);
+                            debug!("    resources: {:?}", message.resources);
+                            debug!("    subdomain: {:?}", message.subdomain);
+                            debug!("    replicas: {:?}", message.replicas);
+                            debug!("    labels: {:?}", message.labels);
+                            debug!("    secrets: {:?}", message.secrets);
+                            debug!(
                                 "    environment_variables: {:?}\n",
                                 message.environment_variables
                             );
