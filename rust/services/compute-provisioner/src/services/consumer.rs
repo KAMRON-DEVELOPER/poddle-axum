@@ -253,14 +253,14 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
                         }
                         Err(e) => {
                             error!(
-                                "❌ Failed to create deployment {}: {}",
-                                message.deployment_id, e
+                                "❌ Failed to create deployment: {}, (Retry {}), error: {}",
+                                message.deployment_id, retry_count, e
                             );
 
-                            // Requeue for retry (up to max retries handled by RabbitMQ TTL/DLX)
+                            // nack(requeue: false) sends it to the DLX
                             if let Err(e) = delivery
                                 .nack(BasicNackOptions {
-                                    requeue: true,
+                                    requeue: false,
                                     multiple: false,
                                 })
                                 .await
@@ -353,11 +353,15 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                             }
                         }
                         Err(e) => {
-                            error!("Failed to update deployment: {}", e);
+                            error!(
+                                "❌ Failed to update deployment: {}, (Retry {}), error: {}",
+                                message.deployment_id, retry_count, e
+                            );
 
+                            // nack(requeue: false) sends it to the DLX
                             delivery
                                 .nack(BasicNackOptions {
-                                    requeue: true,
+                                    requeue: false,
                                     multiple: false,
                                 })
                                 .await
@@ -431,11 +435,15 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                             }
                         }
                         Err(e) => {
-                            error!("Failed to delete deployment: {}", e);
+                            error!(
+                                "❌ Failed to delete deployment: {}, (Retry {}), error: {}",
+                                message.deployment_id, retry_count, e
+                            );
 
+                            // nack(requeue: false) sends it to the DLX
                             delivery
                                 .nack(BasicNackOptions {
-                                    requeue: true,
+                                    requeue: false,
                                     multiple: false,
                                 })
                                 .await
