@@ -88,6 +88,8 @@ pub async fn google_oauth_callback_handler(
     State(http_client): State<Client>,
     State(database): State<Database>,
     State(config): State<Config>,
+    TypedHeader(user_agent): TypedHeader<UserAgent>,
+    ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Query(query): Query<OAuthCallback>,
     State(google_oauth_client): State<GoogleOAuthClient>,
 ) -> Result<impl IntoResponse, AppError> {
@@ -100,6 +102,7 @@ pub async fn google_oauth_callback_handler(
         .exchange_code(AuthorizationCode::new(query.code))
         .set_pkce_verifier(pkce_verifier)
         .request_async(&http_client)
+        .instrument(info_span!("exchange_code_request"))
         .await?;
 
     let access_token = token_response.access_token().secret();
@@ -108,6 +111,7 @@ pub async fn google_oauth_callback_handler(
         .get("https://openidconnect.googleapis.com/v1/userinfo")
         .bearer_auth(access_token.clone())
         .send()
+        .instrument(info_span!("get_google_oauth_user_request"))
         .await?;
     debug!(
         "get_google_oauth_user_response: {:#?}",
@@ -121,6 +125,10 @@ pub async fn google_oauth_callback_handler(
     let oauth_user: OAuthUser = google_oauth_user.into();
     debug!("oauth_user: {:#?}", oauth_user);
 
+    // let user = UsersRepository::upsert_user_from_oauth(&oauth_user, &database.pool).await?;
+
+    let mut tx = database.pool.begin().await?;
+
     let google_oauth_user_sub = UsersRepository::create_oauth_user(
         &oauth_user.id,
         oauth_user.username.as_deref(),
@@ -128,20 +136,53 @@ pub async fn google_oauth_callback_handler(
         oauth_user.picture.as_deref(),
         None,
         oauth_user.provider,
-        &database.pool,
+        &mut *tx,
     )
     .await?;
 
-    let google_oauth_user_sub_cookie =
-        Cookie::build(("google_oauth_user_sub", google_oauth_user_sub))
-            .http_only(true)
-            .path("/")
-            .same_site(SameSite::Lax)
-            .max_age(CookieDuration::days(365))
-            .secure(config.cookie_secure);
-    let jar = jar.add(google_oauth_user_sub_cookie);
+    let hash_password = hash(generate_password(), DEFAULT_COST)?;
+    let user = UsersRepository::create_user(
+        oauth_user.username.unwrap_or_default(),
+        oauth_user.email.unwrap_or_default(),
+        hash_password,
+        google_oauth_user_sub.clone(),
+        &mut tx,
+    )
+    .await?;
 
-    let redirect = Redirect::to(&format!("{}/complete-profile", config.frontend_endpoint));
+    tx.commit().await?;
+
+    tracing::Span::current().record("oauth_user_id", &google_oauth_user_sub);
+    tracing::Span::current().record("user_id", &user.id.to_string());
+
+    let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
+    let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
+        .http_only(true)
+        .path("/")
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::days(config.refresh_token_expire_in_days))
+        .secure(config.cookie_secure);
+    let jar = jar.add(refresh_cookie);
+
+    UsersRepository::create_session(
+        &database.pool,
+        &user.id,
+        &user_agent.to_string(),
+        &addr.ip().to_string(),
+        &refresh_token,
+    )
+    .await?;
+
+    // let google_oauth_user_sub_cookie =
+    //     Cookie::build(("google_oauth_user_sub", google_oauth_user_sub))
+    //         .http_only(true)
+    //         .path("/")
+    //         .same_site(SameSite::Lax)
+    //         .max_age(CookieDuration::days(365))
+    //         .secure(config.cookie_secure);
+    // let jar = jar.add(google_oauth_user_sub_cookie);
+
+    let redirect = Redirect::to(&format!("{}/dashboard", config.frontend_endpoint));
     Ok((jar, redirect).into_response())
 }
 
