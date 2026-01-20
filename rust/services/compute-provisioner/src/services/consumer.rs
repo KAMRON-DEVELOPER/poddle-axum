@@ -215,6 +215,14 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
 
         // Try to deserialize into structured message
         async move {
+            if retry_count > 5 {
+                error!("❌ Max retries reached for deployment. Dropping message.");
+                // Acking tells RabbitMQ "I'm done with this," even though it failed.
+                // This prevents the infinite loop.
+                let _ = delivery.ack(BasicAckOptions::default()).await;
+                return;
+            }
+
             match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
                 Ok(message) => {
                     debug!("🎯 Create deployment");
@@ -309,6 +317,14 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
         let _ = span.set_parent(parent_cx);
 
         async move {
+            if retry_count > 5 {
+                error!("❌ Max retries reached for deployment. Dropping message.");
+                // Acking tells RabbitMQ "I'm done with this," even though it failed.
+                // This prevents the infinite loop.
+                let _ = delivery.ack(BasicAckOptions::default()).await;
+                return;
+            }
+
             match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
                 Ok(message) => {
                     debug!("📏 Updating deployment");
@@ -394,6 +410,14 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
         let _ = span.set_parent(parent_cx);
 
         async move {
+            if retry_count > 5 {
+                error!("❌ Max retries reached for deployment. Dropping message.");
+                // Acking tells RabbitMQ "I'm done with this," even though it failed.
+                // This prevents the infinite loop.
+                let _ = delivery.ack(BasicAckOptions::default()).await;
+                return;
+            }
+
             match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
                 Ok(message) => {
                     info!("🗑️ Deleting deployment {}", message.deployment_id);
