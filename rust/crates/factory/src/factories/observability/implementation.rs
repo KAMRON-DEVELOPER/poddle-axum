@@ -53,7 +53,6 @@ impl Observability {
         let metrics_layer = MetricsLayer::new(meter_provider.clone());
 
         // Filters
-        let level_filter = tracing_subscriber::filter::LevelFilter::from_level(tracing_level);
         let env_filter = EnvFilter::try_from_default_env()
             .unwrap_or_else(|_| EnvFilter::new(tracing_level.as_str().to_lowercase()));
 
@@ -75,7 +74,6 @@ impl Observability {
 
         // Registry
         tracing_subscriber::registry()
-            .with(level_filter)
             .with(env_filter)
             .with(fmt_layer)
             .with(metrics_layer)
