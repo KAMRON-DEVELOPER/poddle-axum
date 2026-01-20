@@ -16,24 +16,24 @@ pub fn get_routes() -> Router<AppState> {
         // Projects
         .route(
             "/api/v1/projects",
-            get(handlers::get_projects).post(handlers::create_project),
+            get(handlers::get_projects).post(handlers::create_project_handler),
         )
         .route(
             "/api/v1/projects/{project_id}",
-            get(handlers::get_project)
-                .patch(handlers::update_project)
-                .delete(handlers::delete_project),
+            get(handlers::get_project_handler)
+                .patch(handlers::update_project_handler)
+                .delete(handlers::delete_project_handler),
         )
         // Deployments
         .route(
             "/api/v1/projects/{project_id}/deployments",
-            get(handlers::get_deployments).post(handlers::create_deployment),
+            get(handlers::get_deployments_handler).post(handlers::create_deployment_handler),
         )
         .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}",
-            get(handlers::get_deployment)
-                .patch(handlers::update_deployment)
-                .delete(handlers::delete_deployment),
+            get(handlers::get_deployment_handler)
+                .patch(handlers::update_deployment_handler)
+                .delete(handlers::delete_deployment_handler),
         )
         .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/ws",

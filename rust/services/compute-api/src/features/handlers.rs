@@ -27,7 +27,7 @@ use lapin::{
     types::FieldTable,
 };
 
-use tracing::{debug, info, instrument};
+use tracing::{Instrument, debug, info, info_span};
 use users_core::jwt::Claims;
 use uuid::Uuid;
 use validator::Validate;
@@ -36,7 +36,14 @@ use validator::Validate;
 // PROJECT HANDLERS
 // ============================================
 
-#[tracing::instrument(name = "get_projects", skip(claims, pagination, database), err)]
+#[tracing::instrument(
+    name = "get_projects",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+    ),
+    err
+)]
 pub async fn get_projects(
     claims: Claims,
     Query(pagination): Query<Pagination>,
@@ -49,10 +56,16 @@ pub async fn get_projects(
     Ok(Json(ListResponse { data, total }))
 }
 
-#[tracing::instrument(name = "get_project", skip(claims, database),fields(
+#[tracing::instrument(
+    name = "get_project_handler",
+    skip_all,
+    fields(
         user_id = %claims.sub,
-    ), err)]
-pub async fn get_project(
+        project_id = %project_id
+    ),
+    err
+)]
+pub async fn get_project_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
@@ -64,10 +77,15 @@ pub async fn get_project(
     Ok(Json(project))
 }
 
-#[tracing::instrument(name = "create_project", skip(claims, database, req),fields(
+#[tracing::instrument(
+    name = "create_project_handler",
+    skip_all,
+    fields(
         user_id = %claims.sub,
-    ), err)]
-pub async fn create_project(
+    ),
+    err
+)]
+pub async fn create_project_handler(
     claims: Claims,
     State(database): State<Database>,
     Json(req): Json<CreateProjectRequest>,
@@ -81,10 +99,16 @@ pub async fn create_project(
     Ok((StatusCode::CREATED, Json(project)))
 }
 
-#[tracing::instrument(name = "update_project", skip(claims, database, req),fields(
+#[tracing::instrument(
+    name = "update_project_handler",
+    skip_all,
+    fields(
         user_id = %claims.sub,
-    ), err)]
-pub async fn update_project(
+        project_id = %project_id
+    ),
+    err
+)]
+pub async fn update_project_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
@@ -106,10 +130,16 @@ pub async fn update_project(
     Ok(Json(project))
 }
 
-#[tracing::instrument(name = "delete_project", skip(claims, database),fields(
+#[tracing::instrument(
+    name = "delete_project_handler",
+    skip_all,
+    fields(
         user_id = %claims.sub,
-    ), err)]
-pub async fn delete_project(
+        project_id = %project_id
+    )
+    err
+)]
+pub async fn delete_project_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
@@ -128,7 +158,16 @@ pub async fn delete_project(
 // DEPLOYMENT HANDLERS
 // ============================================
 
-pub async fn get_deployments(
+#[tracing::instrument(
+    name = "get_deployments_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id
+    ),
+    err
+)]
+pub async fn get_deployments_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     Query(ProjectPageWithPaginationQuery {
@@ -180,9 +219,19 @@ pub async fn get_deployments(
     Ok(Json(ListResponse { data, total }))
 }
 
-pub async fn get_deployment(
+#[tracing::instrument(
+    name = "get_deployment_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+        deployment_id = %deployment_id
+    ),
+    err
+)]
+pub async fn get_deployment_handler(
     claims: Claims,
-    Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
@@ -193,8 +242,16 @@ pub async fn get_deployment(
     Ok(Json(deployment))
 }
 
-#[instrument(skip(claims, project_id, database, amqp), fields(req = %req))]
-pub async fn create_deployment(
+#[tracing::instrument(
+    name = "create_deployment_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+    ),
+    err
+)]
+pub async fn create_deployment_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
@@ -280,6 +337,7 @@ pub async fn create_deployment(
                 .with_delivery_mode(2)
                 .with_content_type("application/json".into()),
         )
+        .instrument(info_span!("basic_publish.compute.create"))
         .await?
         .await?;
 
@@ -294,7 +352,16 @@ pub async fn create_deployment(
     Ok((StatusCode::CREATED, Json(deployment)))
 }
 
-pub async fn update_deployment(
+#[tracing::instrument(
+    name = "update_deployment_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+    ),
+    err
+)]
+pub async fn update_deployment_handler(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(amqp): State<Amqp>,
@@ -331,6 +398,7 @@ pub async fn update_deployment(
                 .with_delivery_mode(2)
                 .with_content_type("application/json".into()),
         )
+        .instrument(info_span!("basic_publish.compute.update"))
         .await?
         .await?;
 
@@ -342,7 +410,16 @@ pub async fn update_deployment(
     Ok(Json(deployment))
 }
 
-pub async fn delete_deployment(
+#[tracing::instrument(
+    name = "delete_deployment_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+    ),
+    err
+)]
+pub async fn delete_deployment_handler(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
@@ -380,6 +457,7 @@ pub async fn delete_deployment(
                 .with_delivery_mode(2)
                 .with_content_type("application/json".into()),
         )
+        .instrument(info_span!("basic_publish.compute.delete"))
         .await?
         .await?;
 
