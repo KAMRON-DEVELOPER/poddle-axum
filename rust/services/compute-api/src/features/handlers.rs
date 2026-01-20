@@ -188,7 +188,7 @@ pub async fn get_deployment(
     let user_id: Uuid = claims.sub;
 
     let deployment =
-        DeploymentRepository::get_by_id(&database.pool, user_id, deployment_id).await?;
+        DeploymentRepository::get_by_id(user_id, deployment_id, &database.pool).await?;
 
     Ok(Json(deployment))
 }
