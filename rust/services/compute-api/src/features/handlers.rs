@@ -33,6 +33,7 @@ use validator::Validate;
 // PROJECT HANDLERS
 // ============================================
 
+#[tracing::instrument(name = "get_projects", skip(claims, pagination, database), err)]
 pub async fn get_projects(
     claims: Claims,
     Query(pagination): Query<Pagination>,
@@ -41,7 +42,7 @@ pub async fn get_projects(
     let user_id: Uuid = claims.sub;
 
     let (projects, total) =
-        ProjectRepository::get_many(&database.pool, user_id, pagination).await?;
+        ProjectRepository::get_many(user_id, pagination, &database.pool).await?;
 
     Ok(Json(ListResponse {
         data: projects,

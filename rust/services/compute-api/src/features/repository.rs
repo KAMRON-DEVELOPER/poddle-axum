@@ -17,39 +17,72 @@ use crate::error::AppError;
 pub struct ProjectRepository;
 
 impl ProjectRepository {
+    #[tracing::instrument(name = "get_many", skip(user_id, pagination, pool), err)]
     pub async fn get_many(
-        pool: &PgPool,
         user_id: Uuid,
         pagination: Pagination,
+        pool: &PgPool,
     ) -> Result<(Vec<Project>, i64), sqlx::Error> {
-        let projects = sqlx::query_as::<_, Project>(
+        // let projects = sqlx::query_as::<_, Project>(
+        //     r#"
+        //     SELECT id, owner_id, name, description, created_at, updated_at
+        //     FROM projects
+        //     WHERE owner_id = $1
+        //     ORDER BY created_at DESC
+        //     LIMIT $2
+        //     OFFSET $3
+        //     "#,
+        // )
+        // .bind(user_id)
+        // .bind(pagination.limit)
+        // .bind(pagination.offset)
+        // .fetch_all(pool)
+        // .await?;
+
+        // let row = sqlx::query!(
+        //     r#"
+        //         SELECT COUNT(*) as count
+        //         FROM projects d
+        //         WHERE owner_id = $1
+        //     "#,
+        //     user_id
+        // )
+        // .fetch_one(pool)
+        // .await?;
+
+        // let total = row.count.unwrap_or(0);
+
+        let rows = sqlx::query!(
             r#"
-                SELECT id, owner_id, name, description, created_at, updated_at
-                FROM projects
-                WHERE owner_id = $1
-                ORDER BY created_at DESC
-                LIMIT $2
-                OFFSET $3
+            SELECT 
+                id, owner_id, name, description, created_at, updated_at,
+                COUNT(*) OVER() as total
+            FROM projects
+            WHERE owner_id = $1
+            ORDER BY created_at DESC
+            LIMIT $2
+            OFFSET $3
             "#,
+            user_id,
+            pagination.limit,
+            pagination.offset
         )
-        .bind(user_id)
-        .bind(pagination.limit)
-        .bind(pagination.offset)
         .fetch_all(pool)
         .await?;
 
-        let row = sqlx::query!(
-            r#"
-                SELECT COUNT(*) as count
-                FROM projects d
-                WHERE owner_id = $1
-            "#,
-            user_id
-        )
-        .fetch_one(pool)
-        .await?;
+        let total = rows.get(0).map(|r| r.total.unwrap_or(0)).unwrap_or(0);
 
-        let total = row.count.unwrap_or(0);
+        let projects = rows
+            .into_iter()
+            .map(|r| Project {
+                id: r.id,
+                owner_id: r.owner_id,
+                name: r.name,
+                description: r.description,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
+            .collect();
 
         Ok((projects, total))
     }
