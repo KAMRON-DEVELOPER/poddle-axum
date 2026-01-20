@@ -1,7 +1,10 @@
 use crate::{
     config::Config,
     error::AppError,
-    features::repository::{CacheRepository, DeploymentRepository, ProjectRepository},
+    features::{
+        repository::{CacheRepository, DeploymentRepository, ProjectRepository},
+        schemas::ProjectPageWithPaginationQuery,
+    },
 };
 use axum::{
     Json,
@@ -11,8 +14,8 @@ use axum::{
 };
 use compute_core::schemas::{
     CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-    DeleteDeploymentMessage, DeploymentResponse, ProjectPageQuery, UpdateDeploymentMessage,
-    UpdateDeploymentRequest, UpdateProjectRequest,
+    DeleteDeploymentMessage, DeploymentResponse, UpdateDeploymentMessage, UpdateDeploymentRequest,
+    UpdateProjectRequest,
 };
 use factory::factories::{amqp::Amqp, database::Database, redis::Redis};
 use http_contracts::{
@@ -41,15 +44,14 @@ pub async fn get_projects(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let (projects, total) =
-        ProjectRepository::get_many(user_id, pagination, &database.pool).await?;
+    let (data, total) = ProjectRepository::get_many(user_id, pagination, &database.pool).await?;
 
-    Ok(Json(ListResponse {
-        data: projects,
-        total,
-    }))
+    Ok(Json(ListResponse { data, total }))
 }
 
+#[tracing::instrument(name = "get_project", skip(claims, database),fields(
+        user_id = %claims.sub,
+    ), err)]
 pub async fn get_project(
     claims: Claims,
     Path(project_id): Path<Uuid>,
@@ -57,11 +59,14 @@ pub async fn get_project(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let project = ProjectRepository::get_one_by_id(&database.pool, project_id, user_id).await?;
+    let project = ProjectRepository::get_one_by_id(project_id, user_id, &database.pool).await?;
 
     Ok(Json(project))
 }
 
+#[tracing::instrument(name = "create_project", skip(claims, database, req),fields(
+        user_id = %claims.sub,
+    ), err)]
 pub async fn create_project(
     claims: Claims,
     State(database): State<Database>,
@@ -71,11 +76,14 @@ pub async fn create_project(
 
     let user_id: Uuid = claims.sub;
 
-    let project = ProjectRepository::create(&database.pool, user_id, req).await?;
+    let project = ProjectRepository::create(user_id, req, &database.pool).await?;
 
     Ok((StatusCode::CREATED, Json(project)))
 }
 
+#[tracing::instrument(name = "update_project", skip(claims, database, req),fields(
+        user_id = %claims.sub,
+    ), err)]
 pub async fn update_project(
     claims: Claims,
     Path(project_id): Path<Uuid>,
@@ -87,17 +95,20 @@ pub async fn update_project(
     let user_id: Uuid = claims.sub;
 
     let project = ProjectRepository::update(
-        &database.pool,
-        project_id,
         user_id,
+        project_id,
         req.name.as_deref(),
         req.description.as_deref(),
+        &database.pool,
     )
     .await?;
 
     Ok(Json(project))
 }
 
+#[tracing::instrument(name = "delete_project", skip(claims, database),fields(
+        user_id = %claims.sub,
+    ), err)]
 pub async fn delete_project(
     claims: Claims,
     Path(project_id): Path<Uuid>,
@@ -105,7 +116,7 @@ pub async fn delete_project(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    ProjectRepository::delete(&database.pool, project_id, user_id).await?;
+    ProjectRepository::delete(user_id, project_id, &database.pool).await?;
 
     Ok((
         StatusCode::OK,
@@ -120,16 +131,22 @@ pub async fn delete_project(
 pub async fn get_deployments(
     claims: Claims,
     Path(project_id): Path<Uuid>,
-    Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
+    Query(ProjectPageWithPaginationQuery {
+        pagination,
+        project_page_query,
+    }): Query<ProjectPageWithPaginationQuery>,
+    // Query(pagination): Query<Pagination>,
+    // Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
+    State(config): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
-    State(config): State<Config>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let points_count = minutes * 60 / config.scrape_interval_seconds;
+    let points_count = project_page_query.minutes * 60 / config.scrape_interval_seconds;
 
     let (total, deployments) =
-        DeploymentRepository::get_all_by_project(user_id, project_id, &database.pool).await?;
+        DeploymentRepository::get_all_by_project(user_id, project_id, pagination, &database.pool)
+            .await?;
 
     if total == 0 {
         return Ok(Json(ListResponse {
@@ -190,7 +207,7 @@ pub async fn create_deployment(
     let user_id = claims.sub;
 
     // Verify project exists
-    ProjectRepository::get_one_by_id(&database.pool, project_id, user_id).await?;
+    ProjectRepository::get_one_by_id(user_id, project_id, &database.pool).await?;
 
     // Start database transaction
     let mut tx = database.pool.begin().await?;

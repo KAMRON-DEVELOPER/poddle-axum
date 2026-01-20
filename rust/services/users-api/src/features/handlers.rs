@@ -81,6 +81,10 @@ pub async fn google_oauth_handler(
 #[tracing::instrument(
     name = "google_oauth_callback_handler",
     skip(jar, http_client, database, config, query, google_oauth_client),
+    fields(
+        oauth_user_id = tracing::field::Empty,
+        user_id = tracing::field::Empty,
+    ),
     err
 )]
 pub async fn google_oauth_callback_handler(

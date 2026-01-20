@@ -8,6 +8,8 @@ use compute_core::{
 };
 use http_contracts::pagination::schema::Pagination;
 use redis::{aio::MultiplexedConnection, pipe};
+use sqlx::types::Json;
+use std::collections::HashMap;
 
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -17,7 +19,11 @@ use crate::error::AppError;
 pub struct ProjectRepository;
 
 impl ProjectRepository {
-    #[tracing::instrument(name = "get_many", skip(user_id, pagination, pool), err)]
+    #[tracing::instrument(
+        name = "project_repository.get_many",
+        skip(user_id, pagination, pool),
+        err
+    )]
     pub async fn get_many(
         user_id: Uuid,
         pagination: Pagination,
@@ -87,16 +93,17 @@ impl ProjectRepository {
         Ok((projects, total))
     }
 
+    #[tracing::instrument(name = "project_repository.get_one_by_id", skip(pool), err)]
     pub async fn get_one_by_id(
-        pool: &PgPool,
-        project_id: Uuid,
         user_id: Uuid,
+        project_id: Uuid,
+        pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
         sqlx::query_as::<_, Project>(
             r#"
-                SELECT id, owner_id, name, description, created_at, updated_at
-                FROM projects
-                WHERE id = $1 AND owner_id = $2
+            SELECT id, owner_id, name, description, created_at, updated_at
+            FROM projects
+            WHERE id = $1 AND owner_id = $2
             "#,
         )
         .bind(project_id)
@@ -105,16 +112,17 @@ impl ProjectRepository {
         .await
     }
 
+    #[tracing::instrument(name = "project_repository.create", skip(req, pool), err)]
     pub async fn create(
-        pool: &PgPool,
         user_id: Uuid,
         req: CreateProjectRequest,
+        pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
         sqlx::query_as::<_, Project>(
             r#"
-                INSERT INTO projects (owner_id, name, description)
-                VALUES ($1, $2, $3)
-                RETURNING id, owner_id, name, description, created_at, updated_at
+            INSERT INTO projects (owner_id, name, description)
+            VALUES ($1, $2, $3)
+            RETURNING id, owner_id, name, description, created_at, updated_at
             "#,
         )
         .bind(user_id)
@@ -124,20 +132,21 @@ impl ProjectRepository {
         .await
     }
 
+    #[tracing::instrument(name = "project_repository.update", skip(name, description, pool), err)]
     pub async fn update(
-        pool: &PgPool,
-        project_id: Uuid,
         user_id: Uuid,
+        project_id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
+        pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
         sqlx::query_as::<_, Project>(
             r#"
-                UPDATE projects
-                SET name = COALESCE($3, name),
-                    description = COALESCE($4, description)
-                WHERE id = $1 AND owner_id = $2
-                RETURNING id, owner_id, name, description, created_at, updated_at
+            UPDATE projects
+            SET name = COALESCE($3, name),
+                description = COALESCE($4, description)
+            WHERE id = $1 AND owner_id = $2
+            RETURNING id, owner_id, name, description, created_at, updated_at
             "#,
         )
         .bind(project_id)
@@ -148,12 +157,13 @@ impl ProjectRepository {
         .await
     }
 
-    pub async fn delete(pool: &PgPool, project_id: Uuid, user_id: Uuid) -> Result<(), sqlx::Error> {
+    #[tracing::instrument(name = "project_repository.delete", skip(pool), err)]
+    pub async fn delete(user_id: Uuid, project_id: Uuid, pool: &PgPool) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
                 DELETE FROM projects
                 WHERE id = $1 AND owner_id = $2
-            "#,
+                "#,
         )
         .bind(project_id)
         .bind(user_id)
@@ -167,43 +177,127 @@ impl ProjectRepository {
 pub struct DeploymentRepository;
 
 impl DeploymentRepository {
+    #[tracing::instrument(name = "deployment_repository.get_user_namespace")]
     pub async fn get_user_namespace(user_id: Uuid) -> String {
         format!("user-{}", &user_id.to_string().replace("-", "")[..16])
     }
 
+    #[tracing::instrument(
+        name = "deployment_repository.get_all_by_project",
+        skip(pagination, pool),
+        err
+    )]
     pub async fn get_all_by_project(
         user_id: Uuid,
         project_id: Uuid,
+        pagination: Pagination,
         pool: &PgPool,
     ) -> Result<(i64, Vec<Deployment>), sqlx::Error> {
-        let deployments = sqlx::query_as::<_, Deployment>(
+        // let deployments = sqlx::query_as::<_, Deployment>(
+        //     r#"
+        //     SELECT d.*
+        //     FROM deployments d
+        //     INNER JOIN projects p ON d.project_id = p.id
+        //     WHERE p.owner_id = $1 AND d.project_id = $2
+        //     ORDER BY d.created_at DESC
+        //     LIMIT $2
+        //     OFFSET $3
+        //     "#,
+        // )
+        // .bind(user_id)
+        // .bind(project_id)
+        // .bind(pagination.limit)
+        // .bind(pagination.offset)
+        // .fetch_all(pool)
+        // .await?;
+
+        // let row = sqlx::query!(
+        //     r#"
+        //         SELECT COUNT(*) as count
+        //         FROM deployments d
+        //         INNER JOIN projects p ON d.project_id = p.id
+        //         WHERE p.owner_id = $1 AND d.project_id = $2
+        //     "#,
+        //     user_id,
+        //     project_id
+        // )
+        // .fetch_one(pool)
+        // .await?;
+
+        // let total = row.count.unwrap_or(0);
+
+        // In standard SQL, if you use COUNT(*), the database "collapses" all your rows into a single number.
+        // You lose your individual deployment data.
+        // OVER() turns the count into a Window Function.
+        // It tells Postgres: "Calculate the total count of all rows that match the WHERE clause, but don't collapse them."
+        // The exclamation mark (!) is specific to the sqlx::query! macro in Rust. It is called a `Force Non-Null Override`.
+        let rows = sqlx::query!(
             r#"
-                SELECT d.*
-                FROM deployments d
-                INNER JOIN projects p ON d.project_id = p.id
-                WHERE p.owner_id = $1 AND d.project_id = $2
-                ORDER BY d.created_at DESC
+            SELECT 
+                d.id,
+                d.user_id,
+                d.project_id,
+                d.cluster_namespace,
+                d.cluster_deployment_name,
+                d.name,
+                d.image,
+                d.port,
+                d.replicas,
+                d.resources AS "resources: Json<ResourceSpec>",
+                d.vault_secret_path,
+                d.secret_keys,
+                d.environment_variables AS "environment_variables: Json<Option<HashMap<String, String>>>",
+                d.labels AS "labels: Json<Option<HashMap<String, String>>>",
+                d.status AS "status: DeploymentStatus",
+                d.subdomain,
+                d.custom_domain,
+                d.created_at,
+                d.updated_at,
+                COUNT(*) OVER() as "total!"
+            FROM deployments d
+            INNER JOIN projects p ON d.project_id = p.id
+            WHERE p.owner_id = $1 AND d.project_id = $2
+            ORDER BY d.created_at DESC
+            LIMIT $3
+            OFFSET $4
             "#,
+            user_id,
+            project_id,
+            pagination.limit,
+            pagination.offset
         )
-        .bind(user_id)
-        .bind(project_id)
         .fetch_all(pool)
         .await?;
 
-        let row = sqlx::query!(
-            r#"
-                SELECT COUNT(*) as count
-                FROM deployments d
-                INNER JOIN projects p ON d.project_id = p.id
-                WHERE p.owner_id = $1 AND d.project_id = $2
-            "#,
-            user_id,
-            project_id
-        )
-        .fetch_one(pool)
-        .await?;
+        // Without that !, your code would have to look like this
+        // let total = rows.get(0).map(|r| r.total.unwrap_or(0)).unwrap_or(0);
+        // With the !, it's much cleaner
+        let total = rows.get(0).map(|r| r.total).unwrap_or(0);
 
-        let total = row.count.unwrap_or(0);
+        let deployments = rows
+            .into_iter()
+            .map(|r| Deployment {
+                id: r.id,
+                user_id: r.user_id,
+                project_id: r.project_id,
+                cluster_namespace: r.cluster_namespace,
+                cluster_deployment_name: r.cluster_deployment_name,
+                name: r.name,
+                image: r.image,
+                port: r.port,
+                replicas: r.replicas,
+                resources: r.resources,
+                vault_secret_path: r.vault_secret_path,
+                secret_keys: r.secret_keys,
+                environment_variables: r.environment_variables,
+                labels: r.labels,
+                status: r.status,
+                subdomain: r.subdomain,
+                custom_domain: r.custom_domain,
+                created_at: r.created_at,
+                updated_at: r.updated_at,
+            })
+            .collect();
 
         Ok((total, deployments))
     }
