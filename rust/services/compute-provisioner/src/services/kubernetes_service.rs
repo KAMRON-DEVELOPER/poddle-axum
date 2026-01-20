@@ -1,32 +1,33 @@
-use std::collections::BTreeMap;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use chrono::Utc;
-use compute_core::channel_names::ChannelNames;
-use compute_core::models::ResourceSpec;
-use compute_core::schemas::CreateDeploymentMessage;
-use compute_core::schemas::DeleteDeploymentMessage;
-use compute_core::schemas::UpdateDeploymentMessage;
+use compute_core::models::{DeploymentStatus, ResourceSpec};
+use compute_core::{
+    channel_names::ChannelNames,
+    schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
+};
 use factory::factories::redis::Redis;
-use k8s_openapi::api::apps::v1::{Deployment as K8sDeployment, DeploymentSpec};
-use k8s_openapi::api::core::v1::Namespace;
-use k8s_openapi::api::core::v1::TypedLocalObjectReference;
-use k8s_openapi::api::core::v1::{
-    Container, ContainerPort, EnvVar, PodSpec, PodTemplateSpec, ResourceRequirements,
-    Secret as K8sSecret, Service, ServicePort, ServiceSpec,
-};
-use k8s_openapi::api::networking::v1::{
-    HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule,
-    IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
-};
-use k8s_openapi::apimachinery::pkg::{
-    api::resource::Quantity, apis::meta::v1::LabelSelector, util::intstr::IntOrString,
+use k8s_openapi::{
+    api::{
+        apps::v1::{Deployment as K8sDeployment, DeploymentSpec},
+        core::v1::{
+            Container, ContainerPort, EnvVar, Namespace, PodSpec, PodTemplateSpec,
+            ResourceRequirements, Secret as K8sSecret, Service, ServicePort, ServiceSpec,
+            TypedLocalObjectReference,
+        },
+        networking::v1::{
+            HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule,
+            IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
+        },
+    },
+    apimachinery::pkg::{
+        api::resource::Quantity, apis::meta::v1::LabelSelector, util::intstr::IntOrString,
+    },
 };
 use kcr_cert_manager_io::v1::{certificates::Certificate, clusterissuers::ClusterIssuer};
-use kcr_secrets_hashicorp_com::v1beta1::vaultconnections::VaultConnection;
-use kcr_secrets_hashicorp_com::v1beta1::vaultconnections::VaultConnectionSpec;
 use kcr_secrets_hashicorp_com::v1beta1::{
     vaultauths::{VaultAuth, VaultAuthKubernetes, VaultAuthMethod, VaultAuthSpec},
+    vaultconnections::{VaultConnection, VaultConnectionSpec},
     vaultstaticsecrets::{
         VaultStaticSecret, VaultStaticSecretDestination, VaultStaticSecretRolloutRestartTargets,
         VaultStaticSecretRolloutRestartTargetsKind, VaultStaticSecretSpec,
@@ -34,20 +35,20 @@ use kcr_secrets_hashicorp_com::v1beta1::{
     },
 };
 use kcr_traefik_io::v1alpha1::ingressroutes::{IngressRoute, IngressRouteSpec};
-use kcr_traefik_io::v1alpha1::middlewares::Middleware;
-use kube::api::DeleteParams;
-use kube::api::ObjectMeta;
-use kube::api::Patch;
-use kube::api::PatchParams;
-use kube::api::PostParams;
-use kube::{Api, Client};
+
+use kube::{
+    api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
+    {Api, Client},
+};
+
 use redis::AsyncTypedCommands;
 use serde_json::json;
 use sqlx::PgPool;
-use tracing::info;
+use tracing::{Instrument, error, info, info_span, warn};
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::services::repository::DeploymentRepository;
 use crate::services::vault_service::VaultService;
 
 #[derive(Clone)]
@@ -73,9 +74,9 @@ impl KubernetesService {
         match cluster_issuer_api.get(&self.cluster_issuer_name).await {
             Ok(_) => info!("✅ ClusterIssuer '{}' found.", self.cluster_issuer_name),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
-                // FAIL FAST: Do not try to create it.
+                error!("❌ ClusterIssuer '{}' is missing", self.cluster_issuer_name);
                 return Err(AppError::InternalServerError(format!(
-                    "CRITICAL: ClusterIssuer '{}' is missing. Please apply infrastructure configuration.",
+                    "ClusterIssuer '{}' is missing. Please apply infrastructure configuration.",
                     self.cluster_issuer_name
                 )));
             }
@@ -91,24 +92,13 @@ impl KubernetesService {
                 self.wildcard_certificate_name
             ),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
-                return Err(AppError::InternalServerError(format!(
-                    "CRITICAL: Wildcard Certificate '{}' is missing in namespace '{}'.",
+                error!(
+                    "❌ Wildcard Certificate '{}' is missing in namespace '{}'.",
                     self.wildcard_certificate_name, self.traefik_namespace
-                )));
-            }
-            Err(e) => return Err(e.into()),
-        }
-
-        // Check for Middleware
-        let middleware_api: Api<Middleware> =
-            Api::namespaced(self.client.clone(), &self.traefik_namespace);
-        let middleware_name = "redirect-to-https";
-        match middleware_api.get(middleware_name).await {
-            Ok(_) => info!("✅ Middleware '{}' found.", middleware_name),
-            Err(kube::Error::Api(ae)) if ae.code == 404 => {
+                );
                 return Err(AppError::InternalServerError(format!(
-                    "CRITICAL: Traefik Middleware '{}' is missing.",
-                    middleware_name
+                    "Wildcard Certificate '{}' is missing in namespace '{}'.",
+                    self.wildcard_certificate_name, self.traefik_namespace
                 )));
             }
             Err(e) => return Err(e.into()),
@@ -119,24 +109,38 @@ impl KubernetesService {
     }
 
     #[tracing::instrument(
-        name = "deployment.create",
-        skip(self, message),
-        fields(deployment_id = %message.deployment_id, project_id = %message.project_id, user_id = %message.user_id),
+        name = "kubernetes_service.create",
+        skip_all,
+        fields(user_id = %message.user_id, project_id = %message.project_id, deployment_id = %message.deployment_id),
         err
     )]
     pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
         let user_id = message.user_id;
         let project_id = message.project_id;
         let deployment_id = message.deployment_id;
-        info!("🚀 Creating K8s resources for deployment {}", deployment_id);
+        info!(
+            user_id = %message.user_id,
+            project_id = %message.project_id,
+            deployment_id = %message.deployment_id,
+            "🚀 Creating K8s resources"
+        );
 
         // Update status to 'provisioning'
-        sqlx::query!(
-            r#"UPDATE deployments SET status = 'provisioning' WHERE id = $1"#,
-            deployment_id
+        let query_result = DeploymentRepository::update_status(
+            &deployment_id,
+            DeploymentStatus::Provisioning,
+            &self.pool,
         )
-        .execute(&self.pool)
         .await?;
+
+        if query_result.rows_affected() == 0 {
+            warn!(
+                user_id = %user_id,
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                "❌ Update deployment status affected zero rows"
+            );
+        }
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
         let now = Utc::now().timestamp();
@@ -150,6 +154,7 @@ impl KubernetesService {
             .clone()
             .connection
             .publish(channel, json_message.to_string())
+            .instrument(info_span!("pubsub.status_update"))
             .await;
 
         let deployment_namespace = self.get_namespace_or_create(&self.client, user_id).await?;
@@ -180,19 +185,11 @@ impl KubernetesService {
         )
         .await?;
 
-        sqlx::query!(
-            r#"
-                UPDATE deployments
-                SET status = 'starting',
-                    cluster_namespace = $2,
-                    cluster_deployment_name = $3
-                WHERE id = $1
-            "#,
-            deployment_id,
-            deployment_namespace,
-            deployment_name
+        let query_result = DeploymentRepository::update_status(
+            &deployment_id,
+            DeploymentStatus::Starting,
+            &self.pool,
         )
-        .execute(&self.pool)
         .await?;
 
         info!("✅ K8s resources created for deployment {}", deployment_id);
@@ -680,21 +677,11 @@ impl KubernetesService {
     }
 
     pub async fn update(&self, message: UpdateDeploymentMessage) -> Result<(), AppError> {
-        let deployment_id = message.deployment_id;
         let user_id = message.user_id;
+        let project_id = message.project_id;
+        let deployment_id = message.deployment_id;
 
-        let deployment = sqlx::query!(
-            r#"
-                SELECT cluster_namespace, cluster_deployment_name
-                FROM deployments
-                WHERE id = $1 AND user_id = $2
-            "#,
-            deployment_id,
-            user_id
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| AppError::NotFoundError("Deployment not found".to_string()))?;
+        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &self.pool).await?;
 
         // ! We can send pubsub message to notify users via SEE
 
@@ -719,13 +706,17 @@ impl KubernetesService {
 
             // ! We can send pubsub message to notify users via SEE
 
-            sqlx::query!(
-                r#"UPDATE deployments SET replicas = $1 WHERE id = $2"#,
-                replicas,
-                deployment_id
-            )
-            .execute(&self.pool)
-            .await?;
+            let query_result =
+                DeploymentRepository::update_replicas(&deployment_id, replicas, &self.pool).await?;
+
+            if query_result.rows_affected() == 0 {
+                warn!(
+                    user_id = %user_id,
+                    project_id = %project_id,
+                    deployment_id = %deployment_id,
+                    "❌ Update deployment replicas affected zero rows"
+                );
+            }
 
             // ! We can send pubsub message to notify users via SEE
 
@@ -736,21 +727,9 @@ impl KubernetesService {
     }
 
     pub async fn delete(&self, message: DeleteDeploymentMessage) -> Result<(), AppError> {
-        let user_id = message.user_id;
         let deployment_id = message.deployment_id;
 
-        let deployment = sqlx::query!(
-            r#"
-                SELECT cluster_namespace, cluster_deployment_name
-                FROM deployments
-                WHERE id = $1 AND user_id = $2
-            "#,
-            deployment_id,
-            user_id
-        )
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or_else(|| AppError::NotFoundError("Deployment not found".to_string()))?;
+        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &self.pool).await?;
         // ! We can send pubsub message to notify users via SEE
 
         let namespace = deployment.cluster_namespace;

@@ -159,8 +159,6 @@ CREATE TABLE IF NOT EXISTS deployments (
     image VARCHAR(500) NOT NULL,
     replicas INTEGER NOT NULL DEFAULT 1 CHECK (replicas >= 1),
     port INT NOT NULL,
-    cluster_namespace VARCHAR(63) NOT NULL,
-    cluster_deployment_name VARCHAR(63) NOT NULL,
     vault_secret_path VARCHAR(250),
     secret_keys VARCHAR(64) [],
     -- environment_variables JSONB DEFAULT '{}'::jsonb
@@ -172,8 +170,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     subdomain VARCHAR(63),
     custom_domain VARCHAR(253),
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    UNIQUE(cluster_namespace, cluster_deployment_name)
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_deployments_user_id ON deployments(user_id);
 CREATE INDEX IF NOT EXISTS idx_deployments_project_id ON deployments(project_id);
@@ -306,3 +303,18 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER after_user_created
 AFTER
 INSERT ON users FOR EACH ROW EXECUTE PROCEDURE on_user_created_balance();
+--
+--
+-- ==============================================
+-- EXAMPLES
+-- ==============================================
+CREATE TABLE resource_presets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(50) NOT NULL,
+    -- "Nano", "Micro", "Small"
+    cpu_millicores INTEGER NOT NULL,
+    memory_mb INTEGER NOT NULL,
+    description TEXT,
+    is_default BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);

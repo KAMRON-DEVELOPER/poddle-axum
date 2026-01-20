@@ -61,8 +61,6 @@ pub struct Deployment {
     pub id: Uuid,
     pub user_id: Uuid,
     pub project_id: Uuid,
-    pub cluster_namespace: String,
-    pub cluster_deployment_name: String,
     pub name: String,
     pub image: String,
     pub port: i32,
