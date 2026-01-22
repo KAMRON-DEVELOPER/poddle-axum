@@ -264,9 +264,17 @@ CREATE TABLE IF NOT EXISTS billings (
     addon_memory_mb INTEGER NOT NULL DEFAULT 0,
     addon_cpu_millicores_hourly_price NUMERIC(18, 6) NOT NULL,
     addon_memory_mb_hourly_price NUMERIC(18, 6) NOT NULL,
-    -- TOTAL USAGE
-    cpu_millicores_used INTEGER NOT NULL,
-    memory_mb_used INTEGER NOT NULL,
+    -- TOTAL USAGE  
+    cpu_millicores_used INTEGER GENERATED ALWAYS AS (
+        (
+            preset_cpu_millicores + addon_cpu_millicores
+        ) * replica_count
+    ) STORED,
+    memory_mb_used INTEGER GENERATED ALWAYS AS (
+        (
+            preset_memory_mb + addon_memory_mb
+        ) * replica_count
+    ) STORED,
     -- TIME SLICE
     hours_used NUMERIC(18, 6) NOT NULL,
     -- TOTAL
