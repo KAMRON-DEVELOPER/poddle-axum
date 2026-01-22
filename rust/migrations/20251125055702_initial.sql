@@ -152,29 +152,28 @@ CREATE TRIGGER set_projects_timestamp BEFORE UPDATE ON projects FOR EACH ROW EXE
 -- ==============================================
 -- DEPLOYMENTS
 -- ==============================================
+
 CREATE TABLE IF NOT EXISTS deployments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    preset_id UUID REFERENCES deployment_presets(id) ON DELETE CASCADE,
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    project_id UUID NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+    preset_id UUID REFERENCES deployment_presets (id) ON DELETE CASCADE,
     name VARCHAR(128) NOT NULL,
     image VARCHAR(500) NOT NULL,
     port INT NOT NULL,
     domain VARCHAR(253),
     subdomain VARCHAR(63),
-    replicas INTEGER NOT NULL DEFAULT 1 CHECK (replicas >= 1),
-    vault_secret_path VARCHAR(250),
-    secret_keys VARCHAR(64) [],
-    environment_variables JSONB, -- environment_variables JSONB DEFAULT '{}'::jsonb
-    resources JSONB NOT NULL, -- resources JSONB NOT NULL DEFAULT '{"cpuRequestMillicores":250,"cpuLimitMillicores":500,"memoryRequestMb":256,"memoryLimitMb":512}'::jsonb
-    -- Customizations (Add-ons)
-    addon_cpu_millicores INTEGER NOT NULL DEFAULT 0 CHECK (addon_cpu_millicores >= 0),
-    addon_memory_mb INTEGER NOT NULL DEFAULT 0 CHECK (addon_memory_mb >= 0),
-    desired_replicas INTEGER NOT NULL,
+    desired_replicas INTEGER NOT NULL DEFAULT 1 CHECK (desired_replicas >= 1),
     ready_replicas INTEGER NOT NULL,
     available_replicas INTEGER NOT NULL,
+    vault_secret_path VARCHAR(250),
+    secret_keys VARCHAR(64) [],
+    environment_variables JSONB,
+    -- resources JSONB NOT NULL,
     status deployment_status NOT NULL DEFAULT 'queued',
     labels JSONB,
+    addon_cpu_millicores INTEGER NOT NULL DEFAULT 0 CHECK (addon_cpu_millicores >= 0),
+    addon_memory_mb INTEGER NOT NULL DEFAULT 0 CHECK (addon_memory_mb >= 0),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -221,7 +220,7 @@ CREATE TABLE IF NOT EXISTS deployment_presets (
     hourly_price NUMERIC(18, 6) NOT NULL CHECK GENERATED ALWAYS AS (monthly_price / 720.0) STORED,
     -- Guardrails (Thresholds for Add-ons)
     max_addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
-    max_addon_memory_mib INTEGER NOT NULL DEFAULT 0,
+    max_addon_memory_mb INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -269,14 +268,11 @@ CREATE TABLE IF NOT EXISTS billings (
     memory_mb_used INTEGER NOT NULL,
     -- TIME SLICE
     hours_used NUMERIC(18, 6) NOT NULL,
+    -- TOTAL
     total_cost NUMERIC(18, 6) GENERATED ALWAYS AS (
         (
-            preset_hourly_price + (
-                addon_cpu_millicores * addon_cpu_millicores_hourly_price
-            ) + (
-                addon_memory_mb * addon_memory_mb_hourly_price
-            )
-        ) * hours_used
+            preset_hourly_price + addon_cpu_millicores * addon_cpu_millicores_hourly_price + addon_memory_mb * addon_memory_mb_hourly_price
+        ) * replica_count * hours_used
     ) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -380,7 +376,7 @@ INSERT INTO
         memory_mb,
         description,
         currency,
-        price_per_month,
+        monthly_price,
     )
 VALUES (
         'Starter',
