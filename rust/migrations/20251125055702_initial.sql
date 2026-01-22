@@ -156,7 +156,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
-    preset_id UUID REFERENCES deploymentpresets(id) ON DELETE CASCADE,
+    preset_id UUID REFERENCES deployment_presets(id) ON DELETE CASCADE,
     name VARCHAR(128) NOT NULL,
     image VARCHAR(500) NOT NULL,
     port INT NOT NULL,
@@ -218,7 +218,7 @@ CREATE TABLE IF NOT EXISTS deployment_presets (
     -- Pricing
     currency CHAR(3) NOT NULL DEFAULT 'UZS',
     monthly_price NUMERIC(18, 2) NOT NULL CHECK,
-    hourly_price NUMERIC(18, 6) NOT NULL CHECK GENERATED ALWAYS AS (price_per_month / 720.0) STORED,
+    hourly_price NUMERIC(18, 6) NOT NULL CHECK GENERATED ALWAYS AS (monthly_price / 720.0) STORED,
     -- Guardrails (Thresholds for Add-ons)
     max_addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
     max_addon_memory_mib INTEGER NOT NULL DEFAULT 0,
@@ -254,7 +254,7 @@ CREATE TABLE IF NOT EXISTS billings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE SET NULL,
     deployment_id UUID REFERENCES deployments (id) ON DELETE SET NULL,
-    replica_count INTEGER NOT NULL DEFAULT 1
+    replica_count INTEGER NOT NULL DEFAULT 1,
     -- PRESET SNAPSHOT
     preset_cpu_millicores INTEGER NOT NULL,
     preset_memory_mb INTEGER NOT NULL,
