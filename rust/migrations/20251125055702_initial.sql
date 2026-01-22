@@ -253,6 +253,7 @@ CREATE TABLE IF NOT EXISTS billings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE SET NULL,
     deployment_id UUID REFERENCES deployments (id) ON DELETE SET NULL,
+    -- Scaling Factor
     replica_count INTEGER NOT NULL DEFAULT 1,
     -- PRESET SNAPSHOT
     preset_cpu_millicores INTEGER NOT NULL,
