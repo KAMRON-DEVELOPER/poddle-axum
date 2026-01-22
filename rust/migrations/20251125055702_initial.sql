@@ -153,7 +153,7 @@ CREATE TRIGGER set_projects_timestamp BEFORE UPDATE ON projects FOR EACH ROW EXE
 -- DEPLOYMENTS
 -- ==============================================
 CREATE TABLE IF NOT EXISTS deployments (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
     preset_id UUID REFERENCES deploymentpresets(id) ON DELETE CASCADE,
@@ -167,8 +167,9 @@ CREATE TABLE IF NOT EXISTS deployments (
     secret_keys VARCHAR(64) [],
     environment_variables JSONB, -- environment_variables JSONB DEFAULT '{}'::jsonb
     resources JSONB NOT NULL, -- resources JSONB NOT NULL DEFAULT '{"cpuRequestMillicores":250,"cpuLimitMillicores":500,"memoryRequestMb":256,"memoryLimitMb":512}'::jsonb
-    addon_cpu_millicores INTEGER DEFAULT 0,
-    addon_memory_mb INTEGER DEFAULT 0,
+    -- Customizations (Add-ons)
+    addon_cpu_millicores INTEGER NOT NULL DEFAULT 0 CHECK (addon_cpu_millicores >= 0),
+    addon_memory_mb INTEGER NOT NULL DEFAULT 0 CHECK (addon_memory_mb >= 0),
     desired_replicas INTEGER NOT NULL,
     ready_replicas INTEGER NOT NULL,
     available_replicas INTEGER NOT NULL,
@@ -211,11 +212,16 @@ CREATE TABLE IF NOT EXISTS deployment_presets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
+    -- Resources (What is included in the plan)
     cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
     memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
+    -- Pricing
     currency CHAR(3) NOT NULL DEFAULT 'UZS',
-    price_per_month NUMERIC(18, 2) NOT NULL CHECK (price_per_month >= 0),
-    price_per_hour NUMERIC(18, 6) NOT NULL CHECK (price_per_hour >= 0) GENERATED ALWAYS AS (price_per_month / 720.0) STORED,
+    monthly_price NUMERIC(18, 2) NOT NULL CHECK,
+    hourly_price NUMERIC(18, 6) NOT NULL CHECK GENERATED ALWAYS AS (price_per_month / 720.0) STORED,
+    -- Guardrails (Thresholds for Add-ons)
+    max_addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
+    max_addon_memory_mib INTEGER NOT NULL DEFAULT 0,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -224,27 +230,17 @@ CREATE TABLE IF NOT EXISTS deployment_presets (
 CREATE TRIGGER set_deployment_presets_timestamp BEFORE UPDATE ON deployment_presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ==============================================
--- PRESET LIMITS
+-- ADDON PRICES
 -- ==============================================
-CREATE TABLE IF NOT EXISTS preset_limits (
-    preset_id UUID NOT NULL REFERENCES deployment_presets (id) ON DELETE CASCADE,
-    max_addon_cpu_millicores INTEGER,
-    max_addon_memory_mb INTEGER
-);
-
--- ==============================================
--- RESOURCE RATES
--- ==============================================
-CREATE TABLE resource_rates (
+CREATE TABLE addon_prices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    resource_type VARCHAR(32) NOT NULL,
-    cpu_millicores_price_per_month NUMERIC(18, 6) NOT NULL,
-    cpu_millicores_price_per_hour NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
-        cpu_millicores_price_per_month / 720.0
+    cpu_monthly_unit_price NUMERIC(18, 6) NOT NULL,
+    cpu_hourly_unit_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
+        cpu_monthly_unit_price / 720.0
     ) STORED,
-    memory_mb_price_per_month NUMERIC(18, 6) NOT NULL,
-    memory_mb_price_per_hour NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
-        memory_mb_price_per_month / 720.0
+    memory_monthly_unit_price NUMERIC(18, 6) NOT NULL,
+    memory_hourly_unit_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
+        memory_monthly_unit_price / 720.0
     ) STORED,
     currency CHAR(3) NOT NULL DEFAULT 'UZS',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -258,13 +254,30 @@ CREATE TABLE IF NOT EXISTS billings (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE SET NULL,
     deployment_id UUID REFERENCES deployments (id) ON DELETE SET NULL,
-    -- WHAT was consumed (preset + add-ons)
+    replica_count INTEGER NOT NULL DEFAULT 1
+    -- PRESET SNAPSHOT
+    preset_cpu_millicores INTEGER NOT NULL,
+    preset_memory_mb INTEGER NOT NULL,
+    preset_hourly_price NUMERIC(18, 6) NOT NULL,
+    -- ADDON SNAPSHOT
+    addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
+    addon_memory_mb INTEGER NOT NULL DEFAULT 0,
+    addon_cpu_millicores_hourly_price NUMERIC(18, 6) NOT NULL,
+    addon_memory_mb_hourly_price NUMERIC(18, 6) NOT NULL,
+    -- TOTAL USAGE
     cpu_millicores_used INTEGER NOT NULL,
     memory_mb_used INTEGER NOT NULL,
-    hours_used NUMERIC(12, 6) NOT NULL DEFAULT 1.0,
-    -- cost_per_hour NUMERIC(18, 6) NOT NULL,
-    price_per_hour NUMERIC(18, 6) NOT NULL,
-    total_cost NUMERIC(20, 6) GENERATED ALWAYS AS (cost_per_hour * hours_used) STORED,
+    -- TIME SLICE
+    hours_used NUMERIC(18, 6) NOT NULL,
+    total_cost NUMERIC(18, 6) GENERATED ALWAYS AS (
+        (
+            preset_hourly_price + (
+                addon_cpu_millicores * addon_cpu_millicores_hourly_price
+            ) + (
+                addon_memory_mb * addon_memory_mb_hourly_price
+            )
+        ) * hours_used
+    ) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -358,7 +371,7 @@ $$ LANGUAGE plpgsql;
 CREATE TRIGGER after_transaction_insert AFTER INSERT ON transactions FOR EACH ROW EXECUTE PROCEDURE on_transaction_insert_deduct_balance();
 
 -- ==============================================
--- SEED DATA
+-- SEED DEPLOYMENT PRESETS DATA
 -- ==============================================
 INSERT INTO
     deployment_presets (
@@ -426,3 +439,13 @@ and staging environments',
         'UZS',
         210000
     );
+
+-- ==============================================
+-- SEED RESOURCE RATES DATA
+-- ==============================================
+INSERT INTO
+    addon_prices (
+        cpu_monthly_unit_price,
+        memory_monthly_unit_price
+    )
+VALUES (20000, 15000);
