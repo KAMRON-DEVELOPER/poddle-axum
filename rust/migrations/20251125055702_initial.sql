@@ -150,53 +150,6 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TRIGGER set_projects_timestamp BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ==============================================
--- DEPLOYMENT PRESETS
--- ==============================================
-CREATE TABLE IF NOT EXISTS deployment_presets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    name VARCHAR(50) NOT NULL UNIQUE,
-    description TEXT,
-    cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
-    memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
-    currency CHAR(3) NOT NULL DEFAULT 'UZS',
-    price_per_month NUMERIC(18, 2) NOT NULL CHECK (price_per_month >= 0),
-    price_per_hour NUMERIC(18, 6) NOT NULL CHECK (price_per_hour >= 0) GENERATED ALWAYS AS (price_per_month / 720.0) STORED,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER set_deployment_presets_timestamp BEFORE UPDATE ON deployment_presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
-
--- ==============================================
--- PRESET LIMITS
--- ==============================================
-CREATE TABLE IF NOT EXISTS preset_limits (
-    preset_id UUID NOT NULL REFERENCES deployment_presets (id) ON DELETE CASCADE,
-    max_addon_cpu_millicores INTEGER,
-    max_addon_memory_mb INTEGER
-);
-
--- ==============================================
--- RESOURCE RATES
--- ==============================================
-CREATE TABLE resource_rates (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    resource_type VARCHAR(32) NOT NULL,
-    cpu_millicores_price_per_month NUMERIC(18, 6) NOT NULL,
-    cpu_millicores_price_per_hour NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
-        cpu_millicores_price_per_month / 720.0
-    ) STORED,
-    memory_mb_price_per_month NUMERIC(18, 6) NOT NULL,
-    memory_mb_price_per_hour NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
-        memory_mb_price_per_month / 720.0
-    ) STORED,
-    currency CHAR(3) NOT NULL DEFAULT 'UZS',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
--- ==============================================
 -- DEPLOYMENTS
 -- ==============================================
 CREATE TABLE IF NOT EXISTS deployments (
@@ -250,6 +203,53 @@ CREATE TRIGGER set_deployment_events_timestamp BEFORE UPDATE ON deployment_event
 CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_events (deployment_id);
 
 CREATE INDEX IF NOT EXISTS idx_deployment_events_created ON deployment_events (created_at DESC);
+
+-- ==============================================
+-- DEPLOYMENT PRESETS
+-- ==============================================
+CREATE TABLE IF NOT EXISTS deployment_presets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
+    memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
+    price_per_month NUMERIC(18, 2) NOT NULL CHECK (price_per_month >= 0),
+    price_per_hour NUMERIC(18, 6) NOT NULL CHECK (price_per_hour >= 0) GENERATED ALWAYS AS (price_per_month / 720.0) STORED,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER set_deployment_presets_timestamp BEFORE UPDATE ON deployment_presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+
+-- ==============================================
+-- PRESET LIMITS
+-- ==============================================
+CREATE TABLE IF NOT EXISTS preset_limits (
+    preset_id UUID NOT NULL REFERENCES deployment_presets (id) ON DELETE CASCADE,
+    max_addon_cpu_millicores INTEGER,
+    max_addon_memory_mb INTEGER
+);
+
+-- ==============================================
+-- RESOURCE RATES
+-- ==============================================
+CREATE TABLE resource_rates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    resource_type VARCHAR(32) NOT NULL,
+    cpu_millicores_price_per_month NUMERIC(18, 6) NOT NULL,
+    cpu_millicores_price_per_hour NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
+        cpu_millicores_price_per_month / 720.0
+    ) STORED,
+    memory_mb_price_per_month NUMERIC(18, 6) NOT NULL,
+    memory_mb_price_per_hour NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
+        memory_mb_price_per_month / 720.0
+    ) STORED,
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- ==============================================
 -- BILLINGS
