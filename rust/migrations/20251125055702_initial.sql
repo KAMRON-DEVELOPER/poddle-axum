@@ -267,9 +267,7 @@ CREATE TABLE IF NOT EXISTS billings (
     -- TOTAL USAGE
     cpu_millicores_used INTEGER NOT NULL,
     memory_mb_used INTEGER NOT NULL,
-    -- USAGE
-    cpu_millicores_used INTEGER NOT NULL,
-    memory_mb_used INTEGER NOT NULL,
+    -- TIME SLICE
     hours_used NUMERIC(18, 6) NOT NULL,
     -- TOTAL
     total_cost NUMERIC(18, 6) GENERATED ALWAYS AS (
