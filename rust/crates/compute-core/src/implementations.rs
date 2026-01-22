@@ -26,8 +26,6 @@ impl DeploymentResponse {
             resources: d.resources.0,
             labels: d.labels.and_then(|j| j.0).or_else(|| None),
             status: d.status,
-            cluster_namespace: d.cluster_namespace,
-            cluster_deployment_name: d.cluster_deployment_name,
             subdomain: d.subdomain,
             custom_domain: d.custom_domain,
             created_at: d.created_at,

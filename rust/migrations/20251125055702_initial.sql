@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS oauth_users (
     password TEXT,
     picture TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT uq_oauth_email UNIQUE(email)
 );
 CREATE TRIGGER set_oauth_users_timestamp BEFORE
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS users (
     oauth_user_id VARCHAR(255) REFERENCES oauth_users(id) ON DELETE
     SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         UNIQUE (username)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_lower_email ON users (lower(email));
@@ -111,7 +111,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     refresh_token TEXT UNIQUE,
     is_active BOOLEAN NOT NULL DEFAULT TRUE,
     last_activity_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_active ON sessions(is_active);
@@ -124,9 +125,9 @@ CREATE TABLE IF NOT EXISTS balances (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
     amount NUMERIC(18, 6) NOT NULL DEFAULT 0.000000,
-    currency CHAR(3) NOT NULL DEFAULT 'USD',
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE TRIGGER set_balances_timestamp BEFORE
 UPDATE ON balances FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
@@ -141,7 +142,7 @@ CREATE TABLE IF NOT EXISTS projects (
     name VARCHAR(150) NOT NULL,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     UNIQUE (owner_id, name)
 );
 CREATE TRIGGER set_projects_timestamp BEFORE
@@ -221,12 +222,17 @@ CREATE TABLE IF NOT EXISTS transactions (
     balance_id UUID NOT NULL REFERENCES balances(id) ON DELETE CASCADE,
     amount NUMERIC(18, 6) NOT NULL,
     type transaction_type NOT NULL,
+    -- ID from Payme / Click / Uzum
+    external_transaction_id VARCHAR(255),
     detail TEXT,
     billing_id UUID REFERENCES billings(id) ON DELETE
     SET NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_transactions_balance_id ON transactions(balance_id);
+-- Create a unique index so the same payment ID from Payme/Click/uzum can never be inserted twice
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_external_transaction_id ON transactions(external_transaction_id)
+WHERE external_transaction_id IS NOT NULL;
 --
 --
 -- ==============================================
@@ -268,14 +274,15 @@ CREATE TABLE IF NOT EXISTS system_config (
     free_credit_enabled BOOLEAN NOT NULL DEFAULT FALSE,
     free_credit_amount NUMERIC(18, 6) NOT NULL DEFAULT 0.00,
     free_credit_detail TEXT DEFAULT 'Free credit',
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 --
 --
 -- ==============================================
 -- AUTO-BALANCE CREATION + OPTIONAL FREE CREDIT
 -- ==============================================
-CREATE OR REPLACE FUNCTION on_user_created_balance() RETURNS TRIGGER AS $$
+CREATE OR REPLACE FUNCTION on_user_insert_create_balance() RETURNS TRIGGER AS $$
 DECLARE cfg RECORD;
 balance_id UUID;
 BEGIN -- Create empty balance for user
@@ -300,21 +307,113 @@ END IF;
 RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
-CREATE TRIGGER after_user_created
+CREATE TRIGGER after_user_inserted
 AFTER
-INSERT ON users FOR EACH ROW EXECUTE PROCEDURE on_user_created_balance();
+INSERT ON users FOR EACH ROW EXECUTE PROCEDURE on_user_insert_create_balance();
 --
 --
 -- ==============================================
--- EXAMPLES
+-- DEPLOYMENT PRESETS (Plans)
 -- ==============================================
-CREATE TABLE resource_presets (
+CREATE TABLE deployment_presets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name VARCHAR(50) NOT NULL,
-    -- "Nano", "Micro", "Small"
-    cpu_millicores INTEGER NOT NULL,
-    memory_mb INTEGER NOT NULL,
+    cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
+    memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
     description TEXT,
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
+    price_per_month NUMERIC(18, 2) NOT NULL CHECK (price_per_month >= 0),
+    price_per_hour NUMERIC(10, 4) NOT NULL CHECK (price_per_hour >= 0) GENERATED ALWAYS AS (price_per_month / 720) STORED,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
     is_default BOOLEAN NOT NULL DEFAULT FALSE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+-- ensure only one default preset
+CREATE UNIQUE INDEX IF NOT EXISTS idx_deployment_presets_one_default ON deployment_presets(is_default)
+WHERE is_default = TRUE;
+--
+--
+-- ==============================================
+-- RESOURCE RATE
+-- ==============================================
+CREATE TABLE resource_rates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    resource_type VARCHAR(32) NOT NULL,
+    price_per_unit_hour NUMERIC(18, 8) NOT NULL,
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
+    effective_from TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    effective_to TIMESTAMPTZ,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+--
+--
+-- ==============================================
+-- SEED DATA (Plans)
+-- ==============================================
+INSERT INTO deployment_presets (
+        name,
+        cpu_millicores,
+        memory_mb,
+        description,
+        currency,
+        price_per_month,
+    )
+VALUES (
+        'Starter',
+        100,
+        128,
+        'Perfect for testing and small projects',
+        'UZS',
+        12000
+    ),
+    (
+        'Sandbox',
+        200,
+        256,
+        'Development
+and staging environments',
+        'UZS',
+        20000
+    ),
+    (
+        'Standard',
+        500,
+        512,
+        'Small production workloads',
+        'UZS',
+        35000
+    ),
+    (
+        'Growth',
+        1000,
+        1024,
+        'Growing applications',
+        'UZS',
+        50000
+    ),
+    (
+        'Business',
+        2000,
+        2048,
+        'Business applications',
+        'UZS',
+        85000
+    ),
+    (
+        'Pro',
+        4000,
+        4096,
+        'High - performance applications',
+        'UZS',
+        180000
+    ),
+    (
+        'Enterprise',
+        4000,
+        8192,
+        'High - Enterprise workloads',
+        'UZS',
+        210000
+    );
