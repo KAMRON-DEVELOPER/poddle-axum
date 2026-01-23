@@ -191,17 +191,24 @@ impl KubernetesService {
         labels.insert("deployment-id".to_string(), msg.deployment_id.to_string());
         labels.insert("managed-by".to_string(), "poddle".to_string());
 
-        let mut secret_name = self.create_vso_resources(msg.secrets).await?;
+        let mut secret_name = self
+            .create_vso_resources(
+                &deployment_namespace,
+                &deployment_name,
+                &msg.deployment_id.to_string(),
+                msg.secrets,
+            )
+            .await?;
 
         self.create_k8s_deployment(
-            deployment_namespace,
-            deployment_name,
-            &image,
-            port,
-            replicas,
+            &deployment_namespace,
+            &deployment_name,
+            &msg.image,
+            msg.port,
+            msg.desired_replicas,
             &msg.resource_spec,
             secret_name.as_deref(),
-            &msg.environment_variables,
+            msg.environment_variables,
             &labels,
         )
         .await?;
@@ -229,7 +236,6 @@ impl KubernetesService {
         deployment_name: &str,
         deployment_id: &str,
         secrets: Option<HashMap<String, String>>,
-        refresh_after: Option<String>,
     ) -> Result<Option<String>, AppError> {
         // Option::filter is essentially a way to apply an additional condition to an Option that is already known to be Some
         // We are checking to be empty as additional condition
@@ -254,8 +260,7 @@ impl KubernetesService {
                 ..Default::default()
             },
             spec: VaultStaticSecretSpec {
-                // ! TODO we could define vault-auth first...
-                vault_auth_ref: Some("vault-auth".to_string()),
+                vault_auth_ref: self.vault_service.vault_auth,
                 mount: self.vault_service.kv_mount,
                 r#type: VaultStaticSecretType::KvV2,
                 path: secret_path,
@@ -265,7 +270,7 @@ impl KubernetesService {
                     ..Default::default()
                 },
                 // reconcilation interval
-                refresh_after,
+                refresh_after: self.vault_service.refresh_after,
                 // Restart the deployment if secrets change
                 rollout_restart_targets: Some(vec![VaultStaticSecretRolloutRestartTargets {
                     kind: VaultStaticSecretRolloutRestartTargetsKind::Deployment,
@@ -288,11 +293,11 @@ impl KubernetesService {
             .instrument(info_span!("create_vault_static_secret"))
             .await
             .map_err(|e| {
-                error!("Failed to create VSO Secret");
+                error!(deployment_id=%deployment_id, "Failed to create VSO Secret");
                 AppError::InternalServerError(format!("Failed to create VSO Secret: {}", e))
             })?;
 
-        Ok(Some("".to_string()))
+        Ok(Some(secret_name))
     }
 
     async fn _create_k8s_secret(
@@ -338,10 +343,10 @@ impl KubernetesService {
         name: &str,
         image: &str,
         container_port: i32,
-        replicas: i32,
+        desired_replicas: i32,
         resource_spec: &ResourceSpec,
         secret_name: Option<&str>,
-        environment_variables: Option<&HashMap<String, String>>,
+        environment_variables: Option<HashMap<String, String>>,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), namespace);
@@ -396,7 +401,7 @@ impl KubernetesService {
                 ..Default::default()
             },
             spec: Some(DeploymentSpec {
-                replicas: Some(replicas),
+                replicas: Some(desired_replicas),
                 selector: LabelSelector {
                     match_labels: Some(labels.clone()),
                     ..Default::default()
@@ -741,14 +746,10 @@ impl KubernetesService {
         ns_api.create(&PostParams::default(), &new_ns).await?;
         info!("Namespace {} created successfully", ns_string);
 
-        // Create VaultAuth and VaultConnection for the tenant
-        let vault_connection_api: Api<VaultConnection> =
-            Api::namespaced(self.client.clone(), &ns_string);
-        let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns_string);
-
+        // Create VaultAuth and VaultConnection resources for the tenant
         let vault_connection = VaultConnection {
             metadata: ObjectMeta {
-                name: Some(self.vault_service.vault_connection),
+                name: Some(self.vault_service.vault_connection.clone()),
                 namespace: Some(ns_string.clone()),
                 ..Default::default()
             },
@@ -780,6 +781,10 @@ impl KubernetesService {
             ..Default::default()
         };
 
+        let vault_connection_api: Api<VaultConnection> =
+            Api::namespaced(self.client.clone(), &ns_string);
+        let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns_string);
+
         vault_auth_api
             .create(&PostParams::default(), &vault_auth)
             .instrument(info_span!("create_vault_api"))
@@ -801,6 +806,7 @@ impl KubernetesService {
         Ok(ns_string)
     }
 
+    /// creates deployment name from `deployment_id` like `deployment-{deployment_id[:8]}`
     fn get_deployment_name(&self, deployment_id: &Uuid) -> String {
         format!(
             "deployment-{}",

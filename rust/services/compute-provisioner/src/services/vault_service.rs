@@ -16,8 +16,10 @@ pub struct VaultService {
     pub kv_mount: String,
     pub address: String,
     pub skip_tls_verify: bool,
-    pub vault_connection: String,
-    pub vault_auth: String,
+    pub vault_connection: Option<String>,
+    pub vault_auth: Option<String>,
+    /// static secret token reconcilation interval
+    pub refresh_after: Option<String>,
 }
 
 impl VaultService {
@@ -47,6 +49,7 @@ impl VaultService {
             skip_tls_verify: config.vault_skip_tls_verify,
             vault_connection: config.vault_connection.clone(),
             vault_auth: config.vault_auth.clone(),
+            refresh_after: config.refresh_after.clone(),
         })
     }
 
