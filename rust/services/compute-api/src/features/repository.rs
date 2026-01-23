@@ -60,7 +60,7 @@ impl ProjectRepository {
 
         let rows = sqlx::query!(
             r#"
-            SELECT 
+            SELECT
                 id, owner_id, name, description, created_at, updated_at,
                 COUNT(*) OVER() as total
             FROM projects
@@ -227,7 +227,7 @@ impl DeploymentRepository {
         // .await?;
 
         // let total = row.count.unwrap_or(0);
-
+        //
         // In standard SQL, if you use COUNT(*), the database "collapses" all your rows into a single number.
         // You lose your individual deployment data.
         // OVER() turns the count into a Window Function.
@@ -235,24 +235,26 @@ impl DeploymentRepository {
         // The exclamation mark (!) is specific to the sqlx::query! macro in Rust. It is called a `Force Non-Null Override`.
         let rows = sqlx::query!(
             r#"
-            SELECT 
+            SELECT
                 d.id,
                 d.user_id,
                 d.project_id,
-                d.cluster_namespace,
-                d.cluster_deployment_name,
                 d.name,
                 d.image,
                 d.port,
-                d.replicas,
-                d.resources AS "resources: Json<ResourceSpec>",
+                d.desired_replicas,
+                d.ready_replicas,
+                d.available_replicas,
+                d.preset_id,
+                d.addon_cpu_millicores,
+                d.addon_memory_mb,
                 d.vault_secret_path,
                 d.secret_keys,
                 d.environment_variables AS "environment_variables: Json<Option<HashMap<String, String>>>",
                 d.labels AS "labels: Json<Option<HashMap<String, String>>>",
                 d.status AS "status: DeploymentStatus",
+                d.domain,
                 d.subdomain,
-                d.custom_domain,
                 d.created_at,
                 d.updated_at,
                 COUNT(*) OVER() as "total!"
@@ -282,20 +284,22 @@ impl DeploymentRepository {
                 id: r.id,
                 user_id: r.user_id,
                 project_id: r.project_id,
-                cluster_namespace: r.cluster_namespace,
-                cluster_deployment_name: r.cluster_deployment_name,
                 name: r.name,
                 image: r.image,
                 port: r.port,
-                replicas: r.replicas,
-                resources: r.resources,
+                desired_replicas: r.desired_replicas,
+                ready_replicas: r.ready_replicas,
+                available_replicas: r.available_replicas,
+                preset_id: r.preset_id,
+                addon_cpu_millicores: r.addon_cpu_millicores,
+                addon_memory_mb: r.addon_memory_mb,
                 vault_secret_path: r.vault_secret_path,
                 secret_keys: r.secret_keys,
                 environment_variables: r.environment_variables,
                 labels: r.labels,
                 status: r.status,
+                domain: r.domain,
                 subdomain: r.subdomain,
-                custom_domain: r.custom_domain,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             })

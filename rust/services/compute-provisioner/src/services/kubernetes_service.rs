@@ -157,7 +157,7 @@ impl KubernetesService {
             .instrument(info_span!("pubsub.status_update"))
             .await;
 
-        let deployment_namespace = self.get_namespace_or_create(&self.client, user_id).await?;
+        let deployment_namespace = self.get_namespace_or_create(user_id).await?;
 
         let deployment_name = format!(
             "{}-{}",
@@ -685,7 +685,7 @@ impl KubernetesService {
 
         // ! We can send pubsub message to notify users via SEE
 
-        let namespace = deployment.cluster_namespace;
+        let namespace = self.get_namespace_or_create(user_id).await?;
         let name = deployment.cluster_deployment_name;
 
         let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &namespace);
@@ -727,12 +727,14 @@ impl KubernetesService {
     }
 
     pub async fn delete(&self, message: DeleteDeploymentMessage) -> Result<(), AppError> {
+        let user_id = message.user_id;
+        let project_id = message.project_id;
         let deployment_id = message.deployment_id;
 
         let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &self.pool).await?;
         // ! We can send pubsub message to notify users via SEE
 
-        let namespace = deployment.cluster_namespace;
+        let namespace = self.get_namespace_or_create(user_id).await?;
         let name = deployment.cluster_deployment_name;
 
         let delete_params = DeleteParams::default();
@@ -754,13 +756,10 @@ impl KubernetesService {
         Ok(())
     }
 
-    async fn get_namespace_or_create(
-        &self,
-        client: &Client,
-        user_id: Uuid,
-    ) -> Result<String, AppError> {
-        let ns_string = format!("user-{}", &user_id.to_string().replace("-", "")[..16]);
-        let ns_api: Api<Namespace> = Api::all(client.clone());
+    async fn get_namespace_or_create(&self, user_id: Uuid) -> Result<String, AppError> {
+        let user_id: String = user_id.as_simple().to_string().chars().take(16).collect();
+        let ns_string = format!("user-{}", &user_id);
+        let ns_api: Api<Namespace> = Api::all(self.client.clone());
 
         if ns_api.get(&ns_string).await.is_ok() {
             return Ok(ns_string);
@@ -787,8 +786,8 @@ impl KubernetesService {
 
         // Create VaultAuth and VaultConnection for the tenant
         let vault_connection_api: Api<VaultConnection> =
-            Api::namespaced(client.clone(), &ns_string);
-        let vault_auth_api: Api<VaultAuth> = Api::namespaced(client.clone(), &ns_string);
+            Api::namespaced(self.client.clone(), &ns_string);
+        let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns_string);
 
         let vault_connection = VaultConnection {
             metadata: ObjectMeta {

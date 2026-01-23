@@ -19,18 +19,21 @@ impl DeploymentResponse {
             name: d.name,
             image: d.image,
             port: d.port,
+            desired_replicas: d.desired_replicas,
+            ready_replicas: d.ready_replicas,
+            available_replicas: d.available_replicas,
+            preset_id: d.preset_id,
+            addon_cpu_millicores: d.addon_cpu_millicores,
+            addon_memory_mb: d.addon_memory_mb,
             vault_secret_path: d.vault_secret_path,
             secret_keys: d.secret_keys,
             environment_variables: d.environment_variables.and_then(|j| j.0).or_else(|| None),
-            replicas: d.replicas,
-            resources: d.resources.0,
             labels: d.labels.and_then(|j| j.0).or_else(|| None),
             status: d.status,
+            domain: d.domain,
             subdomain: d.subdomain,
-            custom_domain: d.custom_domain,
             created_at: d.created_at,
             updated_at: d.updated_at,
-
             history: dm.history,
         }
     }
@@ -45,17 +48,19 @@ impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
             name: d.name,
             image: d.image,
             port: d.port,
+            desired_replicas: d.desired_replicas,
+            ready_replicas: d.ready_replicas,
+            available_replicas: d.available_replicas,
+            preset_id: d.preset_id,
+            addon_cpu_millicores: d.addon_cpu_millicores,
+            addon_memory_mb: d.addon_memory_mb,
             vault_secret_path: d.vault_secret_path,
             secret_keys: d.secret_keys,
             environment_variables: d.environment_variables.and_then(|j| j.0).or_else(|| None),
-            replicas: d.replicas,
-            resources: d.resources.0,
             labels: d.labels.and_then(|j| j.0).or_else(|| None),
             status: d.status,
-            cluster_namespace: d.cluster_namespace,
-            cluster_deployment_name: d.cluster_deployment_name,
+            domain: d.domain,
             subdomain: d.subdomain,
-            custom_domain: d.custom_domain,
             created_at: d.created_at,
             updated_at: d.updated_at,
 
@@ -72,17 +77,18 @@ impl From<(Uuid, Uuid, Uuid, CreateDeploymentRequest)> for CreateDeploymentMessa
             user_id,
             project_id,
             deployment_id,
-
             name: req.name,
             image: req.image,
-            replicas: req.replicas,
+            desired_replicas: req.desired_replicas,
             port: req.port,
+            preset_id: req.preset_id,
+            addon_cpu_millicores: req.addon_cpu_millicores,
+            addon_memory_mb: req.addon_memory_mb,
             environment_variables: req.environment_variables,
             secrets: req.secrets,
-            resources: req.resources,
             labels: req.labels,
+            domain: req.domain,
             subdomain: req.subdomain,
-            custom_domain: req.custom_domain,
             timestamp: chrono::Utc::now().timestamp(),
         }
     }
@@ -96,17 +102,18 @@ impl From<(Uuid, Uuid, Uuid, UpdateDeploymentRequest)> for UpdateDeploymentMessa
             user_id,
             project_id,
             deployment_id,
-
             name: req.name,
             image: req.image,
-            replicas: req.replicas,
+            desired_replicas: req.desired_replicas,
             port: req.port,
+            preset_id: req.preset_id,
+            addon_cpu_millicores: req.addon_cpu_millicores,
+            addon_memory_mb: req.addon_memory_mb,
             environment_variables: req.environment_variables,
             secrets: req.secrets,
-            resources: req.resources,
             labels: req.labels,
+            domain: req.domain,
             subdomain: req.subdomain,
-            custom_domain: req.custom_domain,
             timestamp: chrono::Utc::now().timestamp(),
         }
     }
@@ -131,8 +138,10 @@ impl fmt::Display for CreateDeploymentRequest {
         writeln!(f, "  name: \"{}\"", self.name)?;
         writeln!(f, "  image: \"{}\"", self.image)?;
         writeln!(f, "  port: {}", self.port)?;
-        writeln!(f, "  replicas: {}", self.replicas)?;
-        writeln!(f, "  resources: {}", self.resources)?;
+        writeln!(f, "  desired_replicas: {}", self.desired_replicas)?;
+        writeln!(f, "  preset_id: {}", self.preset_id)?;
+        writeln!(f, "  addon_cpu_millicores: {:?}", self.addon_cpu_millicores)?;
+        writeln!(f, "  addon_memory_mb: {:?}", self.addon_memory_mb)?;
 
         if let Some(secrets) = &self.secrets {
             writeln!(f, "  secrets: {{")?;
@@ -164,16 +173,16 @@ impl fmt::Display for CreateDeploymentRequest {
             writeln!(f, "  labels: None")?;
         }
 
+        if let Some(domain) = &self.domain {
+            writeln!(f, "  domain: \"{}\"", domain)?;
+        } else {
+            writeln!(f, "  domain: None")?;
+        }
+
         if let Some(subdomain) = &self.subdomain {
             writeln!(f, "  subdomain: \"{}\"", subdomain)?;
         } else {
             writeln!(f, "  subdomain: None")?;
-        }
-
-        if let Some(custom_domain) = &self.custom_domain {
-            writeln!(f, "  custom_domain: \"{}\"", custom_domain)?;
-        } else {
-            writeln!(f, "  custom_domain: None")?;
         }
 
         write!(f, "}}")

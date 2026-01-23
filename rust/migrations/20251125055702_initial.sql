@@ -199,7 +199,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
-    preset_id UUID REFERENCES deployment_presets (id) ON DELETE CASCADE,
+    preset_id UUID NOT NULL REFERENCES deployment_presets (id) ON DELETE CASCADE,
     name VARCHAR(128) NOT NULL,
     image VARCHAR(500) NOT NULL,
     port INT NOT NULL,

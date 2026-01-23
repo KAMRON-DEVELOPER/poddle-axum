@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::{DeploymentStatus, ResourceSpec};
+use crate::models::DeploymentStatus;
 
 // -----------------------------------------------
 // PROJECT SCHEMAS
@@ -54,22 +54,24 @@ pub struct CreateDeploymentRequest {
     pub image: String,
     #[validate(range(min = 1, max = 65535))]
     pub port: i32,
-    #[validate(range(min = 1, max = 10))]
-    pub replicas: i32,
-    pub resources: ResourceSpec,
+    #[validate(range(min = 1, max = 25))]
+    pub desired_replicas: i32,
+    pub preset_id: Uuid,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
     pub secrets: Option<HashMap<String, String>>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub labels: Option<HashMap<String, String>>,
+    #[validate(length(min = 3, max = 253), regex(path = *DOMAIN))]
+    pub domain: Option<String>,
     #[validate(length(min = 3, max = 63), regex(path = *SUBDOMAIN))]
     pub subdomain: Option<String>,
-    #[validate(length(min = 3, max = 253), regex(path = *CUSTOM_DOMAIN))]
-    pub custom_domain: Option<String>,
 }
 
 static SUBDOMAIN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^[a-z0-9]([-a-z0-9]*[a-z0-9])?$").unwrap());
 
-static CUSTOM_DOMAIN: Lazy<Regex> =
+static DOMAIN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$").unwrap());
 
 #[derive(Deserialize, Validate, Clone, Debug)]
@@ -78,14 +80,17 @@ pub struct UpdateDeploymentRequest {
     pub name: Option<String>,
     pub image: Option<String>,
     pub port: Option<i32>,
-    #[validate(range(min = 0, max = 100))]
-    pub replicas: Option<i32>,
-    pub resources: Option<ResourceSpec>,
+    #[validate(range(min = 0, max = 25))]
+    pub desired_replicas: Option<i32>,
+    pub preset_id: Option<Uuid>,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
     pub secrets: Option<HashMap<String, String>>,
+    pub secrets_to_delete: Option<Vec<String>>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub labels: Option<Option<HashMap<String, String>>>,
+    pub domain: Option<String>,
     pub subdomain: Option<String>,
-    pub custom_domain: Option<String>,
 }
 
 #[derive(Serialize, Debug)]
@@ -94,20 +99,22 @@ pub struct DeploymentResponse {
     pub id: Uuid,
     pub user_id: Uuid,
     pub project_id: Uuid,
-    pub cluster_namespace: String,
-    pub cluster_deployment_name: String,
     pub name: String,
     pub image: String,
     pub port: i32,
-    pub replicas: i32,
-    pub resources: ResourceSpec,
+    pub desired_replicas: i32,
+    pub ready_replicas: i32,
+    pub available_replicas: i32,
+    pub preset_id: Uuid,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
     pub secret_keys: Option<Vec<String>>,
     pub vault_secret_path: Option<String>,
     pub environment_variables: Option<HashMap<String, String>>,
-    pub status: DeploymentStatus,
     pub labels: Option<HashMap<String, String>>,
+    pub status: DeploymentStatus,
+    pub domain: Option<String>,
     pub subdomain: Option<String>,
-    pub custom_domain: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 
@@ -134,17 +141,18 @@ pub struct CreateDeploymentMessage {
     pub user_id: Uuid,
     pub project_id: Uuid,
     pub deployment_id: Uuid,
-
     pub name: String,
     pub image: String,
     pub port: i32,
-    pub replicas: i32,
-    pub resources: ResourceSpec,
+    pub desired_replicas: i32,
+    pub preset_id: Uuid,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
     pub secrets: Option<HashMap<String, String>>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub labels: Option<HashMap<String, String>>,
+    pub domain: Option<String>,
     pub subdomain: Option<String>,
-    pub custom_domain: Option<String>,
     pub timestamp: i64,
 }
 
@@ -155,17 +163,18 @@ pub struct UpdateDeploymentMessage {
     pub user_id: Uuid,
     pub project_id: Uuid,
     pub deployment_id: Uuid,
-
     pub name: Option<String>,
     pub image: Option<String>,
     pub port: Option<i32>,
-    pub replicas: Option<i32>,
-    pub resources: Option<ResourceSpec>,
+    pub desired_replicas: Option<i32>,
+    pub preset_id: Option<Uuid>,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
     pub secrets: Option<HashMap<String, String>>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub labels: Option<Option<HashMap<String, String>>>,
+    pub domain: Option<String>,
     pub subdomain: Option<String>,
-    pub custom_domain: Option<String>,
     pub timestamp: i64,
 }
 
