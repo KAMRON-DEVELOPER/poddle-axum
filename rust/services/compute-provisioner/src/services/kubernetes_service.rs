@@ -30,8 +30,7 @@ use kcr_secrets_hashicorp_com::v1beta1::{
     vaultconnections::{VaultConnection, VaultConnectionSpec},
     vaultstaticsecrets::{
         VaultStaticSecret, VaultStaticSecretDestination, VaultStaticSecretRolloutRestartTargets,
-        VaultStaticSecretRolloutRestartTargetsKind, VaultStaticSecretSpec,
-        VaultStaticSecretSyncConfig, VaultStaticSecretType,
+        VaultStaticSecretRolloutRestartTargetsKind, VaultStaticSecretSpec, VaultStaticSecretType,
     },
 };
 use kcr_traefik_io::v1alpha1::ingressroutes::{IngressRoute, IngressRouteSpec};
@@ -67,7 +66,7 @@ pub struct KubernetesService {
 
 impl KubernetesService {
     pub async fn init(&self) -> Result<(), AppError> {
-        info!("Performing pre-flight infrastructure checks...");
+        info!("🏁Performing pre-flight infrastructure checks...");
 
         // Check for ClusterIssuer
         let cluster_issuer_api: Api<ClusterIssuer> = Api::all(self.client.clone());
@@ -111,17 +110,18 @@ impl KubernetesService {
     #[tracing::instrument(
         name = "kubernetes_service.create",
         skip_all,
-        fields(user_id = %message.user_id, project_id = %message.project_id, deployment_id = %message.deployment_id),
+        fields(user_id = %msg.user_id, project_id = %msg.project_id, deployment_id = %msg.deployment_id),
         err
     )]
-    pub async fn create(&self, message: CreateDeploymentMessage) -> Result<(), AppError> {
-        let user_id = message.user_id;
-        let project_id = message.project_id;
-        let deployment_id = message.deployment_id;
+    pub async fn create(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
+        let user_id = msg.user_id.clone();
+        let project_id = msg.project_id.clone();
+        let deployment_id = msg.deployment_id.clone();
+
         info!(
-            user_id = %message.user_id,
-            project_id = %message.project_id,
-            deployment_id = %message.deployment_id,
+            user_id = %user_id,
+            project_id = %project_id,
+            deployment_id = %deployment_id,
             "🚀 Creating K8s resources"
         );
 
@@ -144,46 +144,21 @@ impl KubernetesService {
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
         let now = Utc::now().timestamp();
-        let json_message = json!({
+        let message = json!({
             "type": "status_update",
+            "status": "provisioning",
+            "deployment_id": &deployment_id,
             "timestamp": now,
-            "status": "provisioning"
         });
         let _ = self
             .redis
             .clone()
             .connection
-            .publish(channel, json_message.to_string())
+            .publish(channel, message.to_string())
             .instrument(info_span!("pubsub.status_update"))
             .await;
 
-        let deployment_namespace = self.get_namespace_or_create(user_id).await?;
-
-        let deployment_name = format!(
-            "{}-{}",
-            message
-                .name
-                .to_lowercase()
-                .replace("_", "-")
-                .replace(" ", "-"),
-            &deployment_id.to_string()[..8]
-        );
-
-        self.create_k8s_resources(
-            &project_id,
-            &deployment_id,
-            &deployment_namespace,
-            &deployment_name,
-            message.image,
-            message.port,
-            message.replicas,
-            message.resources,
-            message.secrets,
-            message.environment_variables,
-            message.subdomain.as_deref(),
-            message.custom_domain.as_deref(),
-        )
-        .await?;
+        self.create_k8s_resources(msg).await?;
 
         let query_result = DeploymentRepository::update_status(
             &deployment_id,
@@ -192,123 +167,31 @@ impl KubernetesService {
         )
         .await?;
 
+        if query_result.rows_affected() == 0 {
+            warn!(
+                user_id = %user_id,
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                "❌ Update deployment status affected zero rows"
+            );
+        }
+
         info!("✅ K8s resources created for deployment {}", deployment_id);
 
         Ok(())
     }
 
-    async fn create_k8s_resources(
-        &self,
-        project_id: &Uuid,
-        deployment_id: &Uuid,
-        deployment_namespace: &str,
-        deployment_name: &str,
-        image: String,
-        port: i32,
-        replicas: i32,
-        resources: ResourceSpec,
-        secrets: Option<HashMap<String, String>>,
-        environment_variables: Option<HashMap<String, String>>,
-        subdomain: Option<&str>,
-        custom_domain: Option<&str>,
-    ) -> Result<(), AppError> {
+    async fn create_k8s_resources(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
+        let deployment_namespace = self.get_namespace_or_create(&msg.user_id).await?;
+        let deployment_name = self.get_deployment_name(&msg.deployment_id);
+
         let mut labels = BTreeMap::new();
         labels.insert("app".to_string(), deployment_name.to_string());
-        labels.insert("project-id".to_string(), project_id.to_string());
-        labels.insert("deployment-id".to_string(), deployment_id.to_string());
+        labels.insert("project-id".to_string(), msg.project_id.to_string());
+        labels.insert("deployment-id".to_string(), msg.deployment_id.to_string());
         labels.insert("managed-by".to_string(), "poddle".to_string());
 
-        let mut secret_name: Option<String> = None;
-        if let Some(secrets) = secrets.filter(|s| !s.is_empty()) {
-            // Write to Vault
-            self.vault_service
-                .store_secrets(deployment_namespace.to_string(), *deployment_id, secrets)
-                .await?;
-
-            // Define the VSO Resource
-            let vso_resource_name = format!("{}-vso", deployment_name);
-            let destination_k8s_secret_name = format!("{}-secrets", deployment_name); // This is what Deployment will use
-            secret_name = Some(destination_k8s_secret_name.clone());
-
-            let vault_static_secret_api: Api<VaultStaticSecret> =
-                Api::namespaced(self.client.clone(), deployment_namespace);
-
-            let vault_static_secret = VaultStaticSecret {
-                metadata: ObjectMeta {
-                    name: Some(vso_resource_name),
-                    namespace: Some(deployment_namespace.to_string()),
-                    ..Default::default()
-                },
-                spec: VaultStaticSecretSpec {
-                    // Reference the VaultAuth we created in Step B
-                    vault_auth_ref: Some("vault-auth".to_string()),
-                    mount: "kvv2".to_string(),
-                    r#type: VaultStaticSecretType::KvV2,
-                    path: format!("deployments/{}", deployment_id),
-                    destination: VaultStaticSecretDestination {
-                        create: Some(true),
-                        name: destination_k8s_secret_name, // VSO will create this K8s Secret
-                        ..Default::default()
-                    },
-                    refresh_after: Some("60s".to_string()), // Sync every minute
-
-                    // OPTIONAL: Restart the deployment if secrets change
-                    rollout_restart_targets: Some(vec![VaultStaticSecretRolloutRestartTargets {
-                        kind: VaultStaticSecretRolloutRestartTargetsKind::Deployment,
-                        name: deployment_name.to_string(),
-                    }]),
-                    hmac_secret_data: todo!(),
-                    namespace: todo!(),
-                    sync_config: todo!(),
-                    version: Some(2),
-                },
-                status: None,
-            };
-
-            // 3. APPLY the VSO CRD
-            vault_static_secret_api
-                .create(&PostParams::default(), &vault_static_secret)
-                .await
-                .map_err(|e| {
-                    AppError::InternalServerError(format!("Failed to create VSO Secret: {}", e))
-                })?;
-
-            let vault_static_secret = VaultStaticSecret {
-                metadata: ObjectMeta {
-                    name: Some(vso_resource_name),
-                    namespace: Some(deployment_namespace.to_owned()),
-                    ..Default::default()
-                },
-                spec: VaultStaticSecretSpec {
-                    vault_auth_ref: Some("vault-auth".to_string()),
-                    mount: "kvv2".to_string(),
-                    r#type: VaultStaticSecretType::KvV2,
-                    path: format!("deployments/{}", deployment_id),
-                    destination: VaultStaticSecretDestination {
-                        create: Some(true),
-                        name: destination_k8s_secret_name,
-                        ..Default::default()
-                    },
-                    refresh_after: Some("kvv2".to_string()),
-                    /*HMACSecretData determines whether the Operator computes the HMAC of the Secret's data.
-                    The MAC value will be stored in the resource's Status.SecretMac field,
-                    and will be used for drift detection and during incoming Vault secret comparison.
-                    Enabling this feature is recommended to ensure that Secret's data stays consistent with Vault.*/
-                    hmac_secret_data: None,
-                    // Namespace of the secrets engine mount in Vault. If not set, the namespace that's part of VaultAuth resource will be inferred.
-                    namespace: Some("kvv2".to_string()),
-                    // pub rollout_restart_targets: Option<Vec<VaultStaticSecretRolloutRestartTargets, Global>>
-                    rollout_restart_targets: todo!(),
-                    sync_config: Some(VaultStaticSecretSyncConfig {
-                        instant_updates: Some(true),
-                    }),
-                    version: Some(2),
-                },
-                status: None,
-            };
-
-            // ! *******************************
-        }
+        let mut secret_name = self.create_vso_resources(msg.secrets).await?;
 
         self.create_k8s_deployment(
             deployment_namespace,
@@ -316,22 +199,22 @@ impl KubernetesService {
             &image,
             port,
             replicas,
-            &resources,
+            &msg.resource_spec,
             secret_name.as_deref(),
-            environment_variables.as_ref(),
+            &msg.environment_variables,
             &labels,
         )
         .await?;
 
-        self.create_k8s_service(deployment_namespace, deployment_name, port, &labels)
+        self.create_k8s_service(&deployment_namespace, &deployment_name, msg.port, &labels)
             .await?;
 
         // ! ERROR, We use Traefik IngressRoute
         self.create_k8s_ingress(
-            deployment_namespace,
-            deployment_name,
-            subdomain,
-            custom_domain,
+            &deployment_namespace,
+            &deployment_name,
+            msg.domain.as_deref(),
+            msg.subdomain.as_deref(),
             &labels,
         )
         .await?;
@@ -339,7 +222,79 @@ impl KubernetesService {
         Ok(())
     }
 
-    /// Create Kubernetes Secret
+    /// Create VSO resources
+    async fn create_vso_resources(
+        &self,
+        deployment_namespace: &str,
+        deployment_name: &str,
+        deployment_id: &str,
+        secrets: Option<HashMap<String, String>>,
+        refresh_after: Option<String>,
+    ) -> Result<Option<String>, AppError> {
+        // Option::filter is essentially a way to apply an additional condition to an Option that is already known to be Some
+        // We are checking to be empty as additional condition
+        if secrets.filter(|hm| hm.is_empty()).is_none() || secrets.is_none() {
+            return Ok(None);
+        }
+
+        // Write to Vault
+        let secret_path = self
+            .vault_service
+            .store_secrets(deployment_namespace, deployment_id, secrets)
+            .await?;
+
+        // Define the VSO Resource
+        let vault_static_secret_name = format!("{}-vso", deployment_name);
+        let secret_name = format!("{}-secrets", deployment_name);
+
+        let vault_static_secret = VaultStaticSecret {
+            metadata: ObjectMeta {
+                name: Some(vault_static_secret_name),
+                namespace: Some(deployment_namespace.to_owned()),
+                ..Default::default()
+            },
+            spec: VaultStaticSecretSpec {
+                // ! TODO we could define vault-auth first...
+                vault_auth_ref: Some("vault-auth".to_string()),
+                mount: self.vault_service.kv_mount,
+                r#type: VaultStaticSecretType::KvV2,
+                path: secret_path,
+                destination: VaultStaticSecretDestination {
+                    create: Some(true),
+                    name: secret_name,
+                    ..Default::default()
+                },
+                // reconcilation interval
+                refresh_after,
+                // Restart the deployment if secrets change
+                rollout_restart_targets: Some(vec![VaultStaticSecretRolloutRestartTargets {
+                    kind: VaultStaticSecretRolloutRestartTargetsKind::Deployment,
+                    name: deployment_name.to_string(),
+                }]),
+                hmac_secret_data: Some(true),
+                namespace: Some(deployment_namespace.to_owned()),
+                sync_config: None,
+                version: Some(2),
+            },
+            status: None,
+        };
+
+        // APPLY the VSO CRD
+        let vault_static_secret_api: Api<VaultStaticSecret> =
+            Api::namespaced(self.client, deployment_namespace);
+
+        vault_static_secret_api
+            .create(&PostParams::default(), &vault_static_secret)
+            .instrument(info_span!("create_vault_static_secret"))
+            .await
+            .map_err(|e| {
+                error!("Failed to create VSO Secret");
+                AppError::InternalServerError(format!("Failed to create VSO Secret: {}", e))
+            })?;
+
+        Ok(Some("".to_string()))
+    }
+
     async fn _create_k8s_secret(
         &self,
         namespace: &str,
@@ -384,7 +339,7 @@ impl KubernetesService {
         image: &str,
         container_port: i32,
         replicas: i32,
-        resources: &ResourceSpec,
+        resource_spec: &ResourceSpec,
         secret_name: Option<&str>,
         environment_variables: Option<&HashMap<String, String>>,
         labels: &BTreeMap<String, String>,
@@ -416,21 +371,21 @@ impl KubernetesService {
         let mut resource_requests = BTreeMap::new();
         resource_requests.insert(
             "cpu".to_string(),
-            Quantity(format!("{}m", resources.cpu_request_millicores)),
+            Quantity(format!("{}m", resource_spec.cpu_request_millicores)),
         );
         resource_requests.insert(
             "memory".to_string(),
-            Quantity(format!("{}Mi", resources.memory_request_mb)),
+            Quantity(format!("{}Mi", resource_spec.memory_request_mb)),
         );
 
         let mut resource_limits = BTreeMap::new();
         resource_limits.insert(
             "cpu".to_string(),
-            Quantity(format!("{}m", resources.cpu_limit_millicores)),
+            Quantity(format!("{}m", resource_spec.cpu_limit_millicores)),
         );
         resource_limits.insert(
             "memory".to_string(),
-            Quantity(format!("{}Mi", resources.memory_limit_mb)),
+            Quantity(format!("{}Mi", resource_spec.memory_limit_mb)),
         );
 
         let deployment = K8sDeployment {
@@ -541,7 +496,7 @@ impl KubernetesService {
         namespace: &str,
         name: &str,
         subdomain: &str,
-        custom_domain: &str,
+        subdomain: &str,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let ingrees_route = IngressRoute {
@@ -567,7 +522,7 @@ impl KubernetesService {
         deployment_namespace: &str,
         deployment_name: &str,
         subdomain: Option<&str>,
-        custom_domain: Option<&str>,
+        subdomain: Option<&str>,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), deployment_namespace);
@@ -649,8 +604,8 @@ impl KubernetesService {
             ingress_tls.push(tls);
         }
 
-        // * custom_domain
-        if let Some(custom_domain) = custom_domain {
+        // * subdomain
+        if let Some(subdomain) = subdomain {
             // ! we add cert-manager.io/cluster-issuer annotation and secretName to autogenerated
             let ingress_annotations = ingress
                 .metadata
@@ -756,7 +711,9 @@ impl KubernetesService {
         Ok(())
     }
 
-    async fn get_namespace_or_create(&self, user_id: Uuid) -> Result<String, AppError> {
+    /// creates namespace for user like `user-{user_id[:16]}`
+    /// additionally VaultAuth and VaultConnection, default VaultConnection can be used instead namespaced
+    async fn get_namespace_or_create(&self, user_id: &Uuid) -> Result<String, AppError> {
         let user_id: String = user_id.as_simple().to_string().chars().take(16).collect();
         let ns_string = format!("user-{}", &user_id);
         let ns_api: Api<Namespace> = Api::all(self.client.clone());
@@ -791,7 +748,7 @@ impl KubernetesService {
 
         let vault_connection = VaultConnection {
             metadata: ObjectMeta {
-                name: Some("vault-connection".to_string()),
+                name: Some(self.vault_service.vault_connection),
                 namespace: Some(ns_string.clone()),
                 ..Default::default()
             },
@@ -825,18 +782,34 @@ impl KubernetesService {
 
         vault_auth_api
             .create(&PostParams::default(), &vault_auth)
+            .instrument(info_span!("create_vault_api"))
             .await
             .map_err(|e| {
+                error!(user_id=%user_id, "Failed to create VaultAuth");
                 AppError::InternalServerError(format!("Failed to create VaultAuth: {}", e))
             })?;
         vault_connection_api
             .create(&PostParams::default(), &vault_connection)
+            .instrument(info_span!("create_vault_connection"))
             .await
             .map_err(|e| {
+                error!(user_id=%user_id, "Failed to create VaultConnection");
                 AppError::InternalServerError(format!("Failed to create VaultConnection: {}", e))
             })?;
 
-        info!("VaultAuth and VaultConnection created in {}", ns_string);
+        info!(user_id=%user_id, "VaultAuth and VaultConnection created in {}", ns_string);
         Ok(ns_string)
+    }
+
+    fn get_deployment_name(&self, deployment_id: &Uuid) -> String {
+        format!(
+            "deployment-{}",
+            deployment_id
+                .as_simple()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>()
+        )
     }
 }

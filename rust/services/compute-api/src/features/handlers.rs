@@ -2,7 +2,9 @@ use crate::{
     config::Config,
     error::AppError,
     features::{
-        repository::{CacheRepository, DeploymentRepository, ProjectRepository},
+        repository::{
+            CacheRepository, DeploymentPresetRepository, DeploymentRepository, ProjectRepository,
+        },
         schemas::ProjectPageWithPaginationQuery,
     },
 };
@@ -323,7 +325,17 @@ pub async fn create_deployment_handler(
         .await?;
 
     // Prepare message
-    let message: CreateDeploymentMessage = (user_id, project_id, deployment.id, req).into();
+    let preset = DeploymentPresetRepository::get_by_id(&req.preset_id, &mut *tx).await?;
+    if preset.max_addon_cpu_millicores < req.addon_cpu_millicores.unwrap_or_default()
+        || preset.max_addon_memory_mb < req.addon_memory_mb.unwrap_or_default()
+    {
+        return Err(AppError::ValidationError(format!(
+            "Requested add-ons exceed limits for preset '{}'. Max CPU: {}m, Max Memory: {}MB",
+            preset.name, preset.max_addon_cpu_millicores, preset.max_addon_memory_mb
+        )));
+    }
+
+    let message: CreateDeploymentMessage = (user_id, project_id, deployment.id, preset, req).into();
 
     let payload = serde_json::to_vec(&message)?;
 
@@ -391,7 +403,22 @@ pub async fn update_deployment_handler(
     let channel = amqp.channel().await;
 
     // Prepare message
-    let message: UpdateDeploymentMessage = (user_id, project_id, deployment_id, req).into();
+    let preset = if let Some(preset_id) = req.preset_id {
+        let preset = DeploymentPresetRepository::get_by_id(&preset_id, &mut *tx).await?;
+        if preset.max_addon_cpu_millicores < req.addon_cpu_millicores.unwrap_or_default()
+            || preset.max_addon_memory_mb < req.addon_memory_mb.unwrap_or_default()
+        {
+            return Err(AppError::ValidationError(format!(
+                "Requested add-ons exceed limits for preset '{}'. Max CPU: {}m, Max Memory: {}MB",
+                preset.name, preset.max_addon_cpu_millicores, preset.max_addon_memory_mb
+            )));
+        }
+        Some(preset)
+    } else {
+        None
+    };
+
+    let message: UpdateDeploymentMessage = (user_id, project_id, deployment_id, preset, req).into();
 
     let payload = serde_json::to_vec(&message)?;
 

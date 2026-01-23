@@ -7,7 +7,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::DeploymentStatus;
+use crate::models::{DeploymentStatus, ResourceSpec};
 
 // -----------------------------------------------
 // PROJECT SCHEMAS
@@ -141,19 +141,15 @@ pub struct CreateDeploymentMessage {
     pub user_id: Uuid,
     pub project_id: Uuid,
     pub deployment_id: Uuid,
-    pub name: String,
     pub image: String,
     pub port: i32,
     pub desired_replicas: i32,
-    pub preset_id: Uuid,
-    pub addon_cpu_millicores: Option<i32>,
-    pub addon_memory_mb: Option<i32>,
+    pub resource_spec: ResourceSpec,
     pub secrets: Option<HashMap<String, String>>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub labels: Option<HashMap<String, String>>,
     pub domain: Option<String>,
     pub subdomain: Option<String>,
-    pub timestamp: i64,
 }
 
 /// Message sent to `compute.scale` queue
@@ -167,9 +163,7 @@ pub struct UpdateDeploymentMessage {
     pub image: Option<String>,
     pub port: Option<i32>,
     pub desired_replicas: Option<i32>,
-    pub preset_id: Option<Uuid>,
-    pub addon_cpu_millicores: Option<i32>,
-    pub addon_memory_mb: Option<i32>,
+    pub resource_spec: Option<ResourceSpec>,
     pub secrets: Option<HashMap<String, String>>,
     pub environment_variables: Option<HashMap<String, String>>,
     pub labels: Option<Option<HashMap<String, String>>>,

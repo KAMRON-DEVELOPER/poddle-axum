@@ -3,7 +3,7 @@ use std::fmt;
 use uuid::Uuid;
 
 use crate::{
-    models::{Deployment, ResourceSpec},
+    models::{Deployment, DeploymentPreset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentMetrics, DeploymentResponse,
         UpdateDeploymentMessage, UpdateDeploymentRequest,
@@ -63,52 +63,85 @@ impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
             subdomain: d.subdomain,
             created_at: d.created_at,
             updated_at: d.updated_at,
-
             history: dm.history,
         }
     }
 }
 
-impl From<(Uuid, Uuid, Uuid, CreateDeploymentRequest)> for CreateDeploymentMessage {
+impl From<(Uuid, Uuid, Uuid, DeploymentPreset, CreateDeploymentRequest)>
+    for CreateDeploymentMessage
+{
     fn from(
-        (user_id, project_id, deployment_id, req): (Uuid, Uuid, Uuid, CreateDeploymentRequest),
+        (user_id, project_id, deployment_id, preset, req): (
+            Uuid,
+            Uuid,
+            Uuid,
+            DeploymentPreset,
+            CreateDeploymentRequest,
+        ),
     ) -> Self {
+        let resource_spec = ResourceSpec {
+            cpu_request_millicores: preset.cpu_millicores
+                + req.addon_cpu_millicores.unwrap_or_default(),
+            cpu_limit_millicores: preset.cpu_millicores
+                + req.addon_cpu_millicores.unwrap_or_default(),
+            memory_request_mb: preset.memory_mb + req.addon_memory_mb.unwrap_or_default(),
+            memory_limit_mb: preset.memory_mb + req.addon_memory_mb.unwrap_or_default(),
+        };
+
         Self {
             user_id,
             project_id,
             deployment_id,
-            name: req.name,
             image: req.image,
-            desired_replicas: req.desired_replicas,
             port: req.port,
-            preset_id: req.preset_id,
-            addon_cpu_millicores: req.addon_cpu_millicores,
-            addon_memory_mb: req.addon_memory_mb,
+            desired_replicas: req.desired_replicas,
+            resource_spec: resource_spec,
             environment_variables: req.environment_variables,
             secrets: req.secrets,
             labels: req.labels,
             domain: req.domain,
             subdomain: req.subdomain,
-            timestamp: chrono::Utc::now().timestamp(),
         }
     }
 }
 
-impl From<(Uuid, Uuid, Uuid, UpdateDeploymentRequest)> for UpdateDeploymentMessage {
+impl
+    From<(
+        Uuid,
+        Uuid,
+        Uuid,
+        Option<DeploymentPreset>,
+        UpdateDeploymentRequest,
+    )> for UpdateDeploymentMessage
+{
     fn from(
-        (user_id, project_id, deployment_id, req): (Uuid, Uuid, Uuid, UpdateDeploymentRequest),
+        (user_id, project_id, deployment_id, preset, req): (
+            Uuid,
+            Uuid,
+            Uuid,
+            Option<DeploymentPreset>,
+            UpdateDeploymentRequest,
+        ),
     ) -> Self {
+        let resource_spec = preset.map(|preset| ResourceSpec {
+            cpu_request_millicores: preset.cpu_millicores
+                + req.addon_cpu_millicores.unwrap_or_default(),
+            cpu_limit_millicores: preset.cpu_millicores
+                + req.addon_cpu_millicores.unwrap_or_default(),
+            memory_request_mb: preset.memory_mb + req.addon_memory_mb.unwrap_or_default(),
+            memory_limit_mb: preset.memory_mb + req.addon_memory_mb.unwrap_or_default(),
+        });
+
         Self {
             user_id,
             project_id,
             deployment_id,
             name: req.name,
             image: req.image,
-            desired_replicas: req.desired_replicas,
             port: req.port,
-            preset_id: req.preset_id,
-            addon_cpu_millicores: req.addon_cpu_millicores,
-            addon_memory_mb: req.addon_memory_mb,
+            desired_replicas: req.desired_replicas,
+            resource_spec: resource_spec,
             environment_variables: req.environment_variables,
             secrets: req.secrets,
             labels: req.labels,

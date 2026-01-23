@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 
+use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type, types::Json};
@@ -53,6 +54,37 @@ pub struct Project {
     pub description: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentPreset {
+    pub id: Uuid,
+    pub name: String,
+    pub description: Option<String>,
+    pub cpu_millicores: i32,
+    pub memory_mb: i32,
+    pub currency: String,
+    pub monthly_price: BigDecimal,
+    pub hourly_price: BigDecimal,
+    pub max_addon_cpu_millicores: i32,
+    pub max_addon_memory_mb: i32,
+    pub is_active: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AddonPrices {
+    pub id: Uuid,
+    pub cpu_monthly_unit_price: BigDecimal,
+    pub cpu_hourly_unit_price: BigDecimal,
+    pub memory_monthly_unit_price: BigDecimal,
+    pub memory_hourly_unit_price: BigDecimal,
+    pub currency: String,
+    pub created_at: String,
+    pub updated_at: String,
 }
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]

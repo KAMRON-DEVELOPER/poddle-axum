@@ -24,11 +24,11 @@ impl UsersRepository {
         hash_password: Option<&str>,
         provider: Provider,
         executor: E,
-    ) -> Result<String, AppError>
+    ) -> Result<String, sqlx::Error>
     where
         E: Executor<'e, Database = Postgres>,
     {
-        Ok(sqlx::query_scalar!(
+        sqlx::query_scalar!(
             r#"
             INSERT INTO oauth_users (id, username, email, picture, password, provider)
             VALUES ($1, $2, $3, $4, $5, $6)
@@ -42,7 +42,7 @@ impl UsersRepository {
             provider as Provider,
         )
         .fetch_one(executor)
-        .await?)
+        .await
     }
 
     // ----------------------------------------------------------------------------

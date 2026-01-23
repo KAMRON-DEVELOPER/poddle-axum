@@ -202,8 +202,6 @@ CREATE TABLE IF NOT EXISTS deployments (
     name VARCHAR(128) NOT NULL,
     image VARCHAR(500) NOT NULL,
     port INT NOT NULL,
-    domain VARCHAR(253),
-    subdomain VARCHAR(63),
     desired_replicas INTEGER NOT NULL DEFAULT 1 CHECK (desired_replicas >= 1),
     ready_replicas INTEGER NOT NULL,
     available_replicas INTEGER NOT NULL,
@@ -213,9 +211,10 @@ CREATE TABLE IF NOT EXISTS deployments (
     vault_secret_path VARCHAR(250),
     secret_keys VARCHAR(64) [],
     environment_variables JSONB,
-    -- resources JSONB NOT NULL,
-    status deployment_status NOT NULL DEFAULT 'queued',
     labels JSONB,
+    status deployment_status NOT NULL DEFAULT 'queued',
+    domain VARCHAR(253),
+    subdomain VARCHAR(63),
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use tracing::info;
-use uuid::Uuid;
 use vaultrs::client::{Client, VaultClient, VaultClientSettingsBuilder};
 
 use vaultrs::auth::kubernetes;
@@ -17,6 +16,8 @@ pub struct VaultService {
     pub kv_mount: String,
     pub address: String,
     pub skip_tls_verify: bool,
+    pub vault_connection: String,
+    pub vault_auth: String,
 }
 
 impl VaultService {
@@ -44,14 +45,16 @@ impl VaultService {
             kv_mount: config.vault_kv_mount.clone(),
             address: config.vault_address.clone(),
             skip_tls_verify: config.vault_skip_tls_verify,
+            vault_connection: config.vault_connection.clone(),
+            vault_auth: config.vault_auth.clone(),
         })
     }
 
     /// Store deployment secrets in Vault
     pub async fn store_secrets(
         &self,
-        namespace: String,
-        deployment_id: Uuid,
+        namespace: &str,
+        deployment_id: &str,
         secrets: HashMap<String, String>,
     ) -> Result<String, AppError> {
         let path = format!("{}/{}", namespace, deployment_id);
@@ -68,8 +71,8 @@ impl VaultService {
     /// Read deployment secrets from Vault
     pub async fn read_secrets(
         &self,
-        namespace: String,
-        deployment_id: Uuid,
+        namespace: &str,
+        deployment_id: &str,
     ) -> Result<HashMap<String, String>, AppError> {
         let path = format!("{}/{}", namespace, deployment_id);
 
@@ -85,8 +88,8 @@ impl VaultService {
     /// Update deployment secrets
     pub async fn update_secrets(
         &self,
-        namespace: String,
-        deployment_id: Uuid,
+        namespace: &str,
+        deployment_id: &str,
         secrets: HashMap<String, String>,
     ) -> Result<(), AppError> {
         let path = format!("{}/{}", namespace, deployment_id);
@@ -103,8 +106,8 @@ impl VaultService {
     /// Delete deployment secrets
     pub async fn delete_secrets(
         &self,
-        namespace: String,
-        deployment_id: Uuid,
+        namespace: &str,
+        deployment_id: &str,
     ) -> Result<(), AppError> {
         let path = format!("{}/{}", namespace, deployment_id);
 
@@ -120,8 +123,8 @@ impl VaultService {
     /// Get secret keys
     pub async fn get_secret_keys(
         &self,
-        namespace: String,
-        deployment_id: Uuid,
+        namespace: &str,
+        deployment_id: &str,
     ) -> Result<Vec<String>, AppError> {
         let secrets = self.read_secrets(namespace, deployment_id).await?;
         Ok(secrets.keys().cloned().collect())

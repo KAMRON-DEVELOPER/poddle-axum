@@ -35,6 +35,8 @@ pub struct Config {
     pub vault_auth_role: String,
     pub vault_kv_mount: String,
     pub vault_skip_tls_verify: bool,
+    pub vault_connection: String,
+    pub vault_auth: String,
 
     // POSTGRES
     pub database_url: String,
@@ -191,6 +193,20 @@ impl Config {
             Some("VAULT_SKIP_TLS_VERIFY"),
             None,
             Some(true),
+        )
+        .await;
+        let vault_connection = get_config_value(
+            "VAULT_CONNECTION",
+            Some("VAULT_CONNECTION"),
+            None,
+            Some("vault-connection".to_string()),
+        )
+        .await;
+        let vault_auth = get_config_value(
+            "VAULT_AUTH",
+            Some("VAULT_AUTH"),
+            None,
+            Some("vault-auth".to_string()),
         )
         .await;
 
@@ -407,6 +423,8 @@ impl Config {
             vault_auth_role,
             vault_kv_mount,
             vault_skip_tls_verify,
+            vault_connection,
+            vault_auth,
             domain,
             traefik_namespace,
             cluster_issuer_name,

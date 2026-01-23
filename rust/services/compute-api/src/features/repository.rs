@@ -1,6 +1,6 @@
 use compute_core::{
     cache_keys::CacheKeys,
-    models::{Deployment, DeploymentEvent, DeploymentStatus, Project, ResourceSpec},
+    models::{Deployment, DeploymentEvent, DeploymentPreset, DeploymentStatus, Project},
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentMetrics, MetricSnapshot,
         UpdateDeploymentRequest,
@@ -8,7 +8,7 @@ use compute_core::{
 };
 use http_contracts::pagination::schema::Pagination;
 use redis::{aio::MultiplexedConnection, pipe};
-use sqlx::types::Json;
+use sqlx::{Executor, types::Json};
 use std::collections::HashMap;
 
 use sqlx::{PgPool, Postgres, Transaction};
@@ -16,6 +16,9 @@ use uuid::Uuid;
 
 use crate::error::AppError;
 
+// --------------------------------------------------------------------------
+// DeploymentPresetRepository
+// --------------------------------------------------------------------------
 pub struct ProjectRepository;
 
 impl ProjectRepository {
@@ -174,16 +177,39 @@ impl ProjectRepository {
     }
 }
 
+// --------------------------------------------------------------------------
+// DeploymentPresetRepository
+// --------------------------------------------------------------------------
+pub struct DeploymentPresetRepository;
+
+impl DeploymentPresetRepository {
+    #[tracing::instrument(name = "deployment_preset_repository.get_by_id", skip(executor), err)]
+    pub async fn get_by_id<'e, E>(
+        preset_id: &Uuid,
+        executor: E,
+    ) -> Result<DeploymentPreset, sqlx::Error>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        sqlx::query_as::<_, DeploymentPreset>(
+            r#"
+            SELECT *
+            FROM deployment_presets
+            WHERE d.id = $1
+            "#,
+        )
+        .bind(preset_id)
+        .fetch_one(executor)
+        .await
+    }
+}
+
+// --------------------------------------------------------------------------
+// DeploymentRepository
+// --------------------------------------------------------------------------
 pub struct DeploymentRepository;
 
 impl DeploymentRepository {
-    #[tracing::instrument(name = "deployment_repository.get_user_namespace")]
-    pub fn get_user_namespace(user_id: &Uuid) -> String {
-        // as_simple() produces a hyphen-free, lowercase hex representation
-        let short = user_id.as_simple().to_string();
-        format!("user-{}", &short[..16])
-    }
-
     #[tracing::instrument(
         name = "deployment_repository.get_all_by_project",
         skip(pagination, pool),
@@ -335,17 +361,8 @@ impl DeploymentRepository {
         req: CreateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
-        let namespace = DeploymentRepository::get_user_namespace(&user_id);
-        let deployment_name = format!(
-            "{}-{}",
-            req.name.to_lowercase().replace("_", "-"),
-            &Uuid::new_v4().to_string()[..8]
-        );
-
         let environment_variables =
             serde_json::to_value(&req.environment_variables).unwrap_or(serde_json::json!({}));
-        let resources = serde_json::to_value(&req.resources)
-            .unwrap_or_else(|_| serde_json::to_value(&ResourceSpec::default()).unwrap());
         let labels = req
             .labels
             .as_ref()
@@ -354,10 +371,21 @@ impl DeploymentRepository {
         sqlx::query_as::<_, Deployment>(
             r#"
             INSERT INTO deployments (
-                user_id, project_id, name, image, replicas, port, environment_variables, resources,
-                labels, subdomain, cluster_namespace, cluster_deployment_name
+                user_id,
+                project_id,
+                name,
+                image,
+                port,
+                desired_replicas,
+                preset_id,
+                addon_cpu_millicores,
+                addon_memory_mb,
+                environment_variables,
+                labels,
+                domain,
+                subdomain
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING *
             "#,
         )
@@ -365,14 +393,15 @@ impl DeploymentRepository {
         .bind(project_id)
         .bind(&req.name)
         .bind(&req.image)
-        .bind(req.replicas)
         .bind(req.port)
+        .bind(req.desired_replicas)
+        .bind(req.preset_id)
+        .bind(req.addon_cpu_millicores)
+        .bind(req.addon_memory_mb)
         .bind(environment_variables)
-        .bind(resources)
         .bind(labels)
+        .bind(&req.domain)
         .bind(&req.subdomain)
-        .bind(namespace)
-        .bind(deployment_name)
         .fetch_one(&mut **tx)
         .await
     }
@@ -405,18 +434,14 @@ impl DeploymentRepository {
         req: UpdateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
-        let resources = req
-            .resources
+        let environment_variables = req
+            .environment_variables
             .as_ref()
-            .map(|r| serde_json::to_value(r).unwrap());
+            .map(|e| serde_json::to_value(e).unwrap());
         let labels = req
             .labels
             .as_ref()
             .map(|l| l.as_ref().map(|v| serde_json::to_value(v).unwrap()));
-        let env_vars = req
-            .environment_variables
-            .as_ref()
-            .map(|e| serde_json::to_value(e).unwrap());
 
         sqlx::query_as::<_, Deployment>(
             r#"
@@ -425,12 +450,14 @@ impl DeploymentRepository {
                 name = COALESCE($3, d.name),
                 image = COALESCE($4, d.image),
                 port = COALESCE($5, d.port),
-                replicas = COALESCE($6, d.replicas),
-                resources = COALESCE($7, d.resources),
-                labels = COALESCE($8, d.labels),
-                environment_variables = COALESCE($9, d.environment_variables),
-                subdomain = COALESCE($10, d.subdomain),
-                custom_domain = COALESCE($11, d.custom_domain)
+                desired_replicas = COALESCE($6, d.desired_replicas),
+                preset_id = COALESCE($6, d.preset_id),
+                addon_cpu_millicores = COALESCE($7, d.addon_cpu_millicores),
+                addon_memory_mb = COALESCE($7, d.addon_memory_mb),
+                environment_variables = COALESCE($8, d.environment_variables),
+                labels = COALESCE($9, d.labels),
+                domain = COALESCE($10, d.domain)
+                subdomain = COALESCE($11, d.subdomain)
             FROM projects p
             WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
             RETURNING d.*
@@ -441,12 +468,14 @@ impl DeploymentRepository {
         .bind(&req.name)
         .bind(&req.image)
         .bind(req.port)
-        .bind(req.replicas)
-        .bind(resources)
+        .bind(req.desired_replicas)
+        .bind(req.preset_id)
+        .bind(req.addon_cpu_millicores)
+        .bind(req.addon_memory_mb)
+        .bind(environment_variables)
         .bind(labels.flatten())
-        .bind(env_vars)
+        .bind(&req.domain)
         .bind(&req.subdomain)
-        .bind(&req.custom_domain)
         .fetch_one(&mut **tx)
         .await
     }

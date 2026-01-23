@@ -26,19 +26,19 @@ impl DeploymentRepository {
         .await?)
     }
 
-    #[instrument("deployment_repository.update_replicas", skip_all, fields(deployment_id = %deployment_id, replicas = %replicas), err)]
+    #[instrument("deployment_repository.update_replicas", skip_all, fields(deployment_id = %deployment_id, desired_replicas = %desired_replicas), err)]
     pub async fn update_replicas(
         deployment_id: &Uuid,
-        replicas: i32,
+        desired_replicas: i32,
         pool: &PgPool,
     ) -> Result<PgQueryResult, AppError> {
         Ok(sqlx::query!(
             r#"
             UPDATE deployments
-            SET replicas = $1
+            SET desired_replicas = $1
             WHERE id = $2
             "#,
-            replicas,
+            desired_replicas,
             deployment_id
         )
         .execute(pool)

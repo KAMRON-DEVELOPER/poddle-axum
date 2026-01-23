@@ -12,7 +12,7 @@ use tokio_stream::StreamExt;
 
 use compute_core::channel_names::ChannelNames;
 use factory::factories::redis::Redis;
-use tracing::error;
+use tracing::{error, info};
 use uuid::Uuid;
 
 pub async fn stream_metrics(
@@ -34,12 +34,12 @@ pub async fn stream_metrics(
     })?;
 
     let stream = pubsub.into_on_message().map(move |msg| {
-        // let channel = msg.get_channel_name();
+        let channel = msg.get_channel_name();
         let payload: String = msg.get_payload().unwrap_or_default();
-        // info!("payload in pubsub: {}", payload);
+        info!(channel = %channel, payload = %payload, "pubsub payload received");
 
         // Ok(Event::default().event(channel).data(payload))
-        Ok(Event::default().event("metrics").data(payload))
+        Ok(Event::default().event("compute").data(payload))
     });
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
