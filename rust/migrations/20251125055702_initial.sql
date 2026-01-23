@@ -150,6 +150,48 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TRIGGER set_projects_timestamp BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ==============================================
+-- DEPLOYMENT PRESETS
+-- ==============================================
+CREATE TABLE IF NOT EXISTS deployment_presets (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    name VARCHAR(50) NOT NULL UNIQUE,
+    description TEXT,
+    -- Resources (What is included in the plan)
+    cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
+    memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
+    -- Pricing
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
+    monthly_price NUMERIC(18, 2) NOT NULL CHECK (monthly_price >= 0),
+    hourly_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (monthly_price / 720.0) STORED,
+    -- Guardrails (Thresholds for Add-ons)
+    max_addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
+    max_addon_memory_mb INTEGER NOT NULL DEFAULT 0,
+    is_active BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TRIGGER set_deployment_presets_timestamp BEFORE UPDATE ON deployment_presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+
+-- ==============================================
+-- ADDON PRICES
+-- ==============================================
+CREATE TABLE addon_prices (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    cpu_monthly_unit_price NUMERIC(18, 6) NOT NULL,
+    cpu_hourly_unit_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
+        cpu_monthly_unit_price / 720.0
+    ) STORED,
+    memory_monthly_unit_price NUMERIC(18, 6) NOT NULL,
+    memory_hourly_unit_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
+        memory_monthly_unit_price / 720.0
+    ) STORED,
+    currency CHAR(3) NOT NULL DEFAULT 'UZS',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ==============================================
 -- DEPLOYMENTS
 -- ==============================================
 
@@ -202,48 +244,6 @@ CREATE TRIGGER set_deployment_events_timestamp BEFORE UPDATE ON deployment_event
 CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_events (deployment_id);
 
 CREATE INDEX IF NOT EXISTS idx_deployment_events_created ON deployment_events (created_at DESC);
-
--- ==============================================
--- DEPLOYMENT PRESETS
--- ==============================================
-CREATE TABLE IF NOT EXISTS deployment_presets (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    name VARCHAR(50) NOT NULL UNIQUE,
-    description TEXT,
-    -- Resources (What is included in the plan)
-    cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
-    memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
-    -- Pricing
-    currency CHAR(3) NOT NULL DEFAULT 'UZS',
-    monthly_price NUMERIC(18, 2) NOT NULL CHECK (monthly_price >= 0),
-    hourly_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (monthly_price / 720.0) STORED,
-    -- Guardrails (Thresholds for Add-ons)
-    max_addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
-    max_addon_memory_mb INTEGER NOT NULL DEFAULT 0,
-    is_active BOOLEAN NOT NULL DEFAULT TRUE,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TRIGGER set_deployment_presets_timestamp BEFORE UPDATE ON deployment_presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
-
--- ==============================================
--- ADDON PRICES
--- ==============================================
-CREATE TABLE addon_prices (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    cpu_monthly_unit_price NUMERIC(18, 6) NOT NULL,
-    cpu_hourly_unit_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
-        cpu_monthly_unit_price / 720.0
-    ) STORED,
-    memory_monthly_unit_price NUMERIC(18, 6) NOT NULL,
-    memory_hourly_unit_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (
-        memory_monthly_unit_price / 720.0
-    ) STORED,
-    currency CHAR(3) NOT NULL DEFAULT 'UZS',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
 
 -- ==============================================
 -- BILLINGS
