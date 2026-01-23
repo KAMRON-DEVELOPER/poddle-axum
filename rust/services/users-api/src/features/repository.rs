@@ -84,7 +84,7 @@ impl UsersRepository {
     pub async fn create_user(
         username: String,
         email: String,
-        hash_password: String,
+        hash_password: Option<String>,
         oauth_user_id: String,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<User, AppError> {
@@ -153,7 +153,7 @@ impl UsersRepository {
             User,
             r#"
             SELECT
-                id, 
+                id,
                 username,
                 email,
                 password,

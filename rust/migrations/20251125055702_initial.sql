@@ -194,8 +194,7 @@ CREATE TABLE IF NOT EXISTS deployment_events (
     deployment_id UUID NOT NULL REFERENCES deployments (id) ON DELETE CASCADE,
     event_type VARCHAR(128) NOT NULL,
     message TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TRIGGER set_deployment_events_timestamp BEFORE UPDATE ON deployment_events FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
@@ -216,8 +215,8 @@ CREATE TABLE IF NOT EXISTS deployment_presets (
     memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),
     -- Pricing
     currency CHAR(3) NOT NULL DEFAULT 'UZS',
-    monthly_price NUMERIC(18, 2) NOT NULL CHECK,
-    hourly_price NUMERIC(18, 6) NOT NULL CHECK GENERATED ALWAYS AS (monthly_price / 720.0) STORED,
+    monthly_price NUMERIC(18, 2) NOT NULL CHECK (monthly_price >= 0),
+    hourly_price NUMERIC(18, 6) NOT NULL GENERATED ALWAYS AS (monthly_price / 720.0) STORED,
     -- Guardrails (Thresholds for Add-ons)
     max_addon_cpu_millicores INTEGER NOT NULL DEFAULT 0,
     max_addon_memory_mb INTEGER NOT NULL DEFAULT 0,
@@ -283,8 +282,7 @@ CREATE TABLE IF NOT EXISTS billings (
             preset_hourly_price + addon_cpu_millicores * addon_cpu_millicores_hourly_price + addon_memory_mb * addon_memory_mb_hourly_price
         ) * replica_count * hours_used
     ) STORED,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TRIGGER set_billing_timestamp BEFORE UPDATE ON billings FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
@@ -318,8 +316,7 @@ CREATE TABLE IF NOT EXISTS transactions (
     balance_id UUID NOT NULL REFERENCES balances (id) ON DELETE CASCADE,
     billing_id UUID REFERENCES billings (id) ON DELETE SET NULL,
     external_transaction_id VARCHAR(255), -- ID from Payme / Click / Uzum
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TRIGGER set_transactions_timestamp BEFORE UPDATE ON transactions FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
@@ -385,7 +382,7 @@ INSERT INTO
         memory_mb,
         description,
         currency,
-        monthly_price,
+        monthly_price
     )
 VALUES (
         'Starter',

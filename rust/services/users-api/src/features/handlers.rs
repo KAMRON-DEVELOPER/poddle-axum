@@ -10,7 +10,6 @@ use crate::{
         },
     },
     services::build_oauth::{GithubOAuthClient, GoogleOAuthClient},
-    utilities::generators::generate_password,
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
@@ -144,11 +143,10 @@ pub async fn google_oauth_callback_handler(
     )
     .await?;
 
-    let hash_password = hash(generate_password(), DEFAULT_COST)?;
     let user = UsersRepository::create_user(
         oauth_user.username.unwrap_or_default(),
         oauth_user.email.unwrap_or_default(),
-        hash_password,
+        None,
         google_oauth_user_sub.clone(),
         &mut tx,
     )
@@ -290,11 +288,10 @@ pub async fn github_oauth_callback_handler(
     )
     .await?;
 
-    let hash_password = hash(generate_password(), DEFAULT_COST)?;
     let user = UsersRepository::create_user(
         oauth_user.username.unwrap_or_default(),
         oauth_user.email.unwrap_or_default(),
-        hash_password,
+        None,
         github_oauth_user_id.clone(),
         &mut tx,
     )
@@ -364,7 +361,10 @@ pub async fn continue_with_email_handler(
     if let Some(user) = maybe_user {
         tracing::Span::current().record("user_id", &user.id.to_string());
 
-        let same = verify(&auth_in.password, &user.password)?;
+        let same = verify(
+            &auth_in.password,
+            &user.password.clone().unwrap_or_default(),
+        )?;
 
         if !same {
             return Err(AppError::ValidationError(
@@ -429,7 +429,7 @@ pub async fn continue_with_email_handler(
     let user = UsersRepository::create_user(
         username,
         auth_in.email,
-        hash_password,
+        Some(hash_password),
         email_oauth_user_id,
         &mut tx,
     )

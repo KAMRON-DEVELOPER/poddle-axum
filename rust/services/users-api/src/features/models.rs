@@ -55,7 +55,7 @@ pub struct User {
     pub id: Uuid,
     pub username: String,
     pub email: String,
-    pub password: String,
+    pub password: Option<String>,
     pub picture: Option<String>,
     pub email_verified: bool,
     pub role: UserRole,
@@ -77,4 +77,5 @@ pub struct UserSession {
     pub is_active: bool,
     pub last_activity_at: DateTime<Utc>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
