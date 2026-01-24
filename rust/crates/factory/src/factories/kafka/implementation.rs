@@ -5,29 +5,26 @@ use rdkafka::consumer::StreamConsumer;
 use rdkafka::producer::FutureProducer;
 use tracing::info;
 
-use crate::factories::{
-    kafka::{Kafka, KafkaConfig, error::KafkaError},
-    tls::TlsConfig,
-};
+use crate::factories::kafka::{Kafka, KafkaConfig, error::KafkaError};
 
 impl Kafka {
-    pub fn new<T: KafkaConfig>(cfg: &T, group_id: &str) -> Result<Self, KafkaError> {
-        let tls_config = cfg.tls_config();
-
+    pub fn new(cfg: &KafkaConfig, group_id: &str) -> Result<Self, KafkaError> {
         let mut common = ClientConfig::new();
-        common.set("bootstrap.servers", cfg.kafka_bootstrap_servers());
+        common.set("bootstrap.servers", cfg.bootstrap_servers.clone());
 
-        if let (Some(ca), Some(client_cert), Some(client_key)) = (
-            tls_config.ca(),
-            tls_config.client_cert(),
-            tls_config.client_key(),
-        ) {
-            info!("🔐 Kafka SSL/TLS enabled");
-            common
-                .set("security.protocol", "ssl")
-                .set("ssl.ca.pem", ca)
-                .set("ssl.certificate.pem", client_cert)
-                .set("ssl.key.pem", client_key);
+        if let Some(tls_config) = &cfg.tls_config {
+            if let (Some(ca), Some(client_cert), Some(client_key)) = (
+                tls_config.ca.clone(),
+                tls_config.client_cert.clone(),
+                tls_config.client_key.clone(),
+            ) {
+                info!("🔐 Kafka SSL/TLS enabled");
+                common
+                    .set("security.protocol", "ssl")
+                    .set("ssl.ca.pem", ca)
+                    .set("ssl.certificate.pem", client_cert)
+                    .set("ssl.key.pem", client_key);
+            }
         }
 
         let producer = common

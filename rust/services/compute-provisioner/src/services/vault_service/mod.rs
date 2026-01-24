@@ -5,34 +5,34 @@ use serde::Deserialize;
 use vaultrs::client::VaultClient;
 
 #[derive(Deserialize, Clone)]
-pub struct VaultConnectionConfig {
+pub struct VaultConnectionSettings {
     pub address: String,
     pub name: Option<String>,
     pub skip_tls_verify: bool,
 }
 
 #[derive(Deserialize, Clone)]
-pub struct VaultAuthKubernetesConfig {
+pub struct VaultAuthKubernetesSettings {
     pub role: Option<String>,
     pub service_account: Option<String>,
 }
 
 #[derive(Deserialize, Clone)]
-pub struct VaultAuthConfig {
+pub struct VaultAuthSettings {
     pub name: Option<String>,
     pub mount: Option<String>,
-    pub kubernetes: Option<VaultAuthKubernetesConfig>,
+    pub kubernetes: Option<VaultAuthKubernetesSettings>,
 }
 
 #[derive(Deserialize, Clone)]
-pub struct VaultConfig {
+pub struct VaultSettings {
     pub kv_mount: String,
-    pub vault_connection: VaultConnectionConfig,
-    pub vault_auth: Option<VaultAuthConfig>,
+    pub vault_connection: VaultConnectionSettings,
+    pub vault_auth: Option<VaultAuthSettings>,
 }
 
 #[derive(Clone)]
 pub struct VaultService {
     pub client: Arc<VaultClient>,
-    cfg: VaultConfig,
+    cfg: VaultSettings,
 }

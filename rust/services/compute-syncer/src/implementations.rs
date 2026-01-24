@@ -3,7 +3,7 @@ use factory::factories::{
     database::DatabaseConfig,
     kubernetes::KubernetesConfig,
     redis::{RedisConfig, RedisParams},
-    tls::Tls,
+    tls::TlsConfig,
 };
 use sqlx::postgres::PgSslMode;
 
@@ -28,7 +28,7 @@ impl KubernetesConfig for Config {
 }
 
 impl DatabaseConfig for Config {
-    type Tls = Tls;
+    type Tls = TlsConfig;
 
     fn url(&self) -> String {
         self.database_url.clone()
@@ -40,7 +40,7 @@ impl DatabaseConfig for Config {
         self.pg_ssl_mode
     }
     fn tls_config(&self) -> Self::Tls {
-        Tls {
+        TlsConfig {
             ca: self.ca.clone(),
             ca_path: self.ca_path.clone(),
             client_cert: self.client_cert.clone(),
@@ -52,7 +52,7 @@ impl DatabaseConfig for Config {
 }
 
 impl RedisConfig for Config {
-    type Tls = Tls;
+    type Tls = TlsConfig;
 
     fn url(&self) -> Option<String> {
         self.redis_url.clone()
@@ -68,7 +68,7 @@ impl RedisConfig for Config {
     }
 
     fn tls_config(&self) -> Self::Tls {
-        Tls {
+        TlsConfig {
             ca: self.ca.clone(),
             ca_path: self.ca_path.clone(),
             client_cert: self.client_cert.clone(),
@@ -80,14 +80,14 @@ impl RedisConfig for Config {
 }
 
 impl AmqpConfig for Config {
-    type Tls = Tls;
+    type Tls = TlsConfig;
 
     fn uri(&self) -> String {
         self.amqp_addr.clone()
     }
 
     fn tls_config(&self) -> Self::Tls {
-        Tls {
+        TlsConfig {
             ca: self.ca.clone(),
             ca_path: self.ca_path.clone(),
             client_cert: self.client_cert.clone(),

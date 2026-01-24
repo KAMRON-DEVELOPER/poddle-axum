@@ -10,38 +10,17 @@ use rustls::{
 };
 use rustls_pemfile::{Item, read_one};
 
-use crate::factories::tls::{Tls, TlsConfig};
+use crate::factories::tls::TlsConfig;
 
-impl TlsConfig for Tls {
-    fn ca(&self) -> Option<String> {
-        self.ca.clone()
-    }
-    fn ca_path(&self) -> Option<PathBuf> {
-        self.ca_path.clone()
-    }
-    fn client_cert(&self) -> Option<String> {
-        self.client_cert.clone()
-    }
-    fn client_cert_path(&self) -> Option<PathBuf> {
-        self.ca_path.clone()
-    }
-    fn client_key(&self) -> Option<String> {
-        self.client_key.clone()
-    }
-    fn client_key_path(&self) -> Option<PathBuf> {
-        self.client_key_path.clone()
-    }
-}
-
-impl Tls {
+impl TlsConfig {
     /// Build TLS client config from Config
-    pub fn build_rustls_config<T: TlsConfig>(cfg: &T) -> ClientConfig {
-        let ca = cfg.ca();
-        let ca_path = cfg.ca_path();
-        let client_cert = cfg.client_cert();
-        let client_cert_path = cfg.client_cert_path();
-        let client_key = cfg.client_key();
-        let client_key_path = cfg.client_key_path();
+    pub fn build_rustls_config(&self) -> ClientConfig {
+        let ca = self.ca.clone();
+        let ca_path = self.ca_path.clone();
+        let client_cert = self.client_cert.clone();
+        let client_cert_path = self.client_cert_path.clone();
+        let client_key = self.client_key.clone();
+        let client_key_path = self.client_key_path.clone();
 
         if ca.is_none() && ca_path.is_none() {
             panic!("Missing Tls Ca");
@@ -56,7 +35,7 @@ impl Tls {
         let mut root_store: RootCertStore = RootCertStore::empty();
 
         // Root CA
-        let ca_cert = Self::with_reader(cfg.ca(), cfg.ca_path(), "TLS CA", |reader| {
+        let ca_cert = Self::with_reader(ca, ca_path, "TLS CA", |reader| {
             Self::read_single_cert(reader)
         });
 
@@ -66,19 +45,17 @@ impl Tls {
 
         // Client cert chain
         let client_certs = Self::with_reader(
-            cfg.client_cert(),
-            cfg.client_cert_path(),
+            client_cert,
+            client_cert_path,
             "TLS client certificate",
             |reader| Self::read_cert_chain(reader),
         );
 
         // Client key
-        let client_key = Self::with_reader(
-            cfg.client_key(),
-            cfg.client_key_path(),
-            "TLS client key",
-            |reader| Self::read_private_key(reader),
-        );
+        let client_key =
+            Self::with_reader(client_key, client_key_path, "TLS client key", |reader| {
+                Self::read_private_key(reader)
+            });
 
         // Build ClientConfig
         let client_config = ClientConfig::builder()

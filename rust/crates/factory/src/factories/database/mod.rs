@@ -1,19 +1,17 @@
 pub mod error;
 pub mod implementation;
 
-use sqlx::{PgPool, postgres::PgSslMode};
+use serde::Deserialize;
+use sqlx::PgPool;
 
 use crate::factories::tls::TlsConfig;
 
-pub trait DatabaseConfig {
-    type Tls: TlsConfig;
-
-    fn url(&self) -> String;
-    fn max_connections(&self) -> u32 {
-        100
-    }
-    fn pg_ssl_mode(&self) -> PgSslMode;
-    fn tls_config(&self) -> Self::Tls;
+#[derive(Deserialize, Clone)]
+pub struct DatabaseConfig {
+    pub url: String,
+    pub pg_ssl_mode: Option<String>,
+    pub max_connections: Option<u32>,
+    pub tls_config: Option<TlsConfig>,
 }
 
 #[derive(Clone, Debug)]

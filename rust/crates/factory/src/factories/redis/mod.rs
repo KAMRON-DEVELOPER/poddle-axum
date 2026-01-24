@@ -2,22 +2,23 @@ pub mod error;
 pub mod implementation;
 
 use redis::{Client, aio::MultiplexedConnection};
+use serde::Deserialize;
 
 use crate::factories::tls::TlsConfig;
 
-pub trait RedisConfig {
-    type Tls: TlsConfig;
-
-    fn url(&self) -> Option<String>;
-    fn params(&self) -> RedisParams;
-    fn tls_config(&self) -> Self::Tls;
-}
-
+#[derive(Deserialize, Clone)]
 pub struct RedisParams {
     pub host: Option<String>,
     pub port: Option<u16>,
     pub username: Option<String>,
     pub password: Option<String>,
+}
+
+#[derive(Deserialize, Clone)]
+pub struct RedisConfig {
+    pub url: Option<String>,
+    pub params: Option<RedisParams>,
+    pub tls_config: Option<TlsConfig>,
 }
 
 #[derive(Clone)]

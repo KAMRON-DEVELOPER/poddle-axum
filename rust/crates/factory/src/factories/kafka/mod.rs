@@ -5,14 +5,14 @@ use std::sync::Arc;
 
 use rdkafka::consumer::StreamConsumer;
 use rdkafka::producer::FutureProducer;
+use serde::Deserialize;
 
 use crate::factories::tls::TlsConfig;
 
-pub trait KafkaConfig {
-    type Tls: TlsConfig;
-
-    fn kafka_bootstrap_servers(&self) -> String;
-    fn tls_config(&self) -> Self::Tls;
+#[derive(Deserialize, Clone)]
+pub struct KafkaConfig {
+    pub bootstrap_servers: String,
+    pub tls_config: Option<TlsConfig>,
 }
 
 #[derive(Clone)]

@@ -34,8 +34,8 @@ use kcr_traefik_io::v1alpha1::ingressroutes::{
 };
 
 use kube::{
+    Api,
     api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
-    {Api, Client},
 };
 
 use redis::AsyncTypedCommands;
@@ -47,21 +47,6 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::services::repository::DeploymentRepository;
 use crate::services::vault_service::VaultService;
-
-#[derive(Clone)]
-pub struct KubernetesService {
-    pub client: Client,
-    pub pool: PgPool,
-    pub redis: Redis,
-    pub vault_service: VaultService,
-    pub domain: String,
-    pub traefik_namespace: String,
-    pub cluster_issuer_name: String,
-    pub ingress_class_name: Option<String>,
-    pub ingressroute_entry_points: Option<Vec<String>>,
-    pub wildcard_certificate_name: String,
-    pub wildcard_certificate_secret_name: String,
-}
 
 impl KubernetesService {
     pub async fn init(&self) -> Result<(), AppError> {

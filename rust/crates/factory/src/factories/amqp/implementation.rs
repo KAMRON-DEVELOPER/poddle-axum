@@ -1,6 +1,5 @@
 use crate::factories::amqp::error::AmqpError;
 use crate::factories::amqp::{Amqp, AmqpConfig, AmqpPropagator};
-use crate::factories::tls::TlsConfig;
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
 use lapin::tcp::OwnedIdentity;
 use lapin::{
@@ -20,23 +19,24 @@ use std::collections::HashMap;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 impl Amqp {
-    pub async fn new<T: AmqpConfig>(cfg: &T) -> Self {
-        let uri = cfg.uri();
-        let tls_config = cfg.tls_config();
+    pub async fn new(cfg: &AmqpConfig) -> Self {
+        let uri = cfg.uri.clone();
 
         let mut config = OwnedTLSConfig::default();
 
-        if let (Some(ca), Some(client_cert), Some(client_key)) = (
-            tls_config.ca(),
-            tls_config.client_cert(),
-            tls_config.client_key(),
-        ) {
-            info!("🔐 AMQP SSL/TLS enabled");
-            config.cert_chain = Some(ca.to_string());
-            config.identity = Some(OwnedIdentity::PKCS8 {
-                pem: client_cert.clone().into_bytes(),
-                key: client_key.clone().into_bytes(),
-            });
+        if let Some(tls_config) = &cfg.tls_config {
+            if let (Some(ca), Some(client_cert), Some(client_key)) = (
+                tls_config.ca.clone(),
+                tls_config.client_cert.clone(),
+                tls_config.client_key.clone(),
+            ) {
+                info!("🔐 AMQP SSL/TLS enabled");
+                config.cert_chain = Some(ca.to_string());
+                config.identity = Some(OwnedIdentity::PKCS8 {
+                    pem: client_cert.clone().into_bytes(),
+                    key: client_key.clone().into_bytes(),
+                });
+            }
         }
 
         let options = ConnectionProperties::default();

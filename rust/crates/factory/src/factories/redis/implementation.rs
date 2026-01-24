@@ -3,13 +3,10 @@ use redis::{
     RedisConnectionInfo, TlsCertificates, aio::PubSub,
 };
 
-use crate::factories::{
-    redis::{Redis, RedisConfig, error::RedisError},
-    tls::TlsConfig,
-};
+use crate::factories::redis::{Redis, RedisConfig, error::RedisError};
 
 impl Redis {
-    pub async fn new<T: RedisConfig>(cfg: &T) -> Self {
+    pub async fn new(cfg: &RedisConfig) -> Self {
         let conn_info = Self::connection_info(cfg);
         let tls_certs = Self::tls_certificates(cfg);
 
@@ -36,12 +33,13 @@ impl Redis {
         Ok(self.client.get_async_pubsub().await?)
     }
 
-    fn connection_info<T: RedisConfig>(cfg: &T) -> impl IntoConnectionInfo {
-        let url = cfg.url();
-        let params = cfg.params();
+    fn connection_info(cfg: &RedisConfig) -> impl IntoConnectionInfo {
+        let url = cfg.url.clone();
+        let params = cfg.params.clone();
 
         // Prefer explicit host/port
-        if let Some(host) = params.host
+        if let Some(params) = params.clone()
+            && let Some(host) = params.host
             && let Some(port) = params.port
         {
             let conn_info = ConnectionInfo {
@@ -71,20 +69,23 @@ impl Redis {
         let mut conn_info = url.into_connection_info().expect("Invalid Redis URL");
 
         // Ensure credentials override URL if explicitly provided
-        if params.username.is_some() || params.password.is_some() {
-            conn_info.redis.username = params.username;
-            conn_info.redis.password = params.password;
+        if let Some(params) = params {
+            if params.username.is_some() || params.password.is_some() {
+                conn_info.redis.username = params.username;
+                conn_info.redis.password = params.password;
+            }
         }
 
         conn_info
     }
 
-    fn tls_certificates<T: RedisConfig>(cfg: &T) -> Option<TlsCertificates> {
-        let tls_config = cfg.tls_config();
+    fn tls_certificates(cfg: &RedisConfig) -> Option<TlsCertificates> {
+        let tls_config = cfg.tls_config.clone();
 
-        if let Some(ca) = tls_config.ca()
-            && let Some(client_cert) = tls_config.client_cert()
-            && let Some(client_key) = tls_config.client_key()
+        if let Some(tls) = tls_config
+            && let Some(ca) = tls.ca
+            && let Some(client_cert) = tls.client_cert
+            && let Some(client_key) = tls.client_key
         {
             // Structure to hold mTLS client certificate and key binaries in PEM format
             let client_tls_config = ClientTlsConfig {

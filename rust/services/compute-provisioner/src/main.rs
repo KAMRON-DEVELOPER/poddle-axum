@@ -1,18 +1,18 @@
 pub mod app;
-pub mod config;
 pub mod error;
 pub mod implementations;
 pub mod services;
+pub mod settings;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::result::Result::Ok;
 
-use config::Config;
 use factory::factories::{
     amqp::Amqp, database::Database, kubernetes::Kubernetes, observability::Observability,
     redis::Redis,
 };
+use settings::Settings;
 
 use tokio::task::JoinSet;
 use tracing::{error, info};
@@ -42,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    let config = Config::init(cargo_manifest_dir).await?;
+    let settings = Settings::init(cargo_manifest_dir).await?;
     let _guard = Observability::init(
         &config.otel_exporter_otlp_endpoint,
         cargo_crate_name,

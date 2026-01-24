@@ -4,16 +4,16 @@ pub mod implementation;
 use std::sync::Arc;
 
 use lapin::Connection;
+use serde::Deserialize;
 
 use crate::factories::tls::TlsConfig;
 
 pub struct AmqpPropagator;
 
-pub trait AmqpConfig {
-    type Tls: TlsConfig;
-
-    fn uri(&self) -> String;
-    fn tls_config(&self) -> Self::Tls;
+#[derive(Deserialize, Debug)]
+pub struct AmqpConfig {
+    pub uri: String,
+    pub tls_config: Option<TlsConfig>,
 }
 
 #[derive(Clone)]
