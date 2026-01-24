@@ -1,6 +1,7 @@
 target
 .env
 .env.*
+settings.json
 certs
 
 # FastEmbed cache
