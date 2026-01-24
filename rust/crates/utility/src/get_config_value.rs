@@ -1,6 +1,7 @@
+use serde::de::DeserializeOwned;
+
 use crate::get_optional_config_value::get_optional_config_value;
 use std::path::PathBuf;
-use std::str::FromStr;
 
 pub async fn get_config_value<T>(
     secret_name: &str,
@@ -9,12 +10,17 @@ pub async fn get_config_value<T>(
     fallback: Option<T>,
 ) -> T
 where
-    T: FromStr + Clone,
+    T: DeserializeOwned + Clone,
 {
     if let Some(value) = get_optional_config_value::<T>(secret_name, env_name, fallback_path).await
     {
         return value;
     }
 
-    fallback.expect(format!("Environment variable {} not set", secret_name).as_str())
+    fallback.unwrap_or_else(|| {
+        panic!(
+            "Configuration value '{}' not set (env, secret, or fallback path)",
+            secret_name
+        )
+    })
 }

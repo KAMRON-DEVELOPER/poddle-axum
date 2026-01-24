@@ -13,11 +13,6 @@ use k8s_openapi::{
         core::v1::{
             Container, ContainerPort, EnvVar, Namespace, PodSpec, PodTemplateSpec,
             ResourceRequirements, Secret as K8sSecret, Service, ServicePort, ServiceSpec,
-            TypedLocalObjectReference,
-        },
-        networking::v1::{
-            HTTPIngressPath, HTTPIngressRuleValue, Ingress, IngressBackend, IngressRule,
-            IngressServiceBackend, IngressSpec, IngressTLS, ServiceBackendPort,
         },
     },
     apimachinery::pkg::{
@@ -33,7 +28,10 @@ use kcr_secrets_hashicorp_com::v1beta1::{
         VaultStaticSecretRolloutRestartTargetsKind, VaultStaticSecretSpec, VaultStaticSecretType,
     },
 };
-use kcr_traefik_io::v1alpha1::ingressroutes::{IngressRoute, IngressRouteSpec};
+use kcr_traefik_io::v1alpha1::ingressroutes::{
+    IngressRoute, IngressRouteParentRefs, IngressRouteRoutes, IngressRouteRoutesServices,
+    IngressRouteSpec,
+};
 
 use kube::{
     api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
@@ -60,6 +58,7 @@ pub struct KubernetesService {
     pub traefik_namespace: String,
     pub cluster_issuer_name: String,
     pub ingress_class_name: Option<String>,
+    pub ingressroute_entry_points: Option<Vec<String>>,
     pub wildcard_certificate_name: String,
     pub wildcard_certificate_secret_name: String,
 }
@@ -182,17 +181,25 @@ impl KubernetesService {
     }
 
     async fn create_k8s_resources(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
-        let deployment_namespace = self.get_namespace_or_create(&msg.user_id).await?;
-        let deployment_name = self.get_deployment_name(&msg.deployment_id);
+        let user_namespace = self.ensure_namespace(&msg.user_id).await?;
+        let resource_name = self.format_resource_name(&msg.deployment_id);
 
         let mut labels = BTreeMap::new();
-        labels.insert("app".to_string(), deployment_name.to_string());
-        labels.insert("project-id".to_string(), msg.project_id.to_string());
-        labels.insert("deployment-id".to_string(), msg.deployment_id.to_string());
-        labels.insert("managed-by".to_string(), "poddle".to_string());
+        labels.insert(
+            "app.kubernetes.io/managed-by".to_string(),
+            "poddle".to_string(),
+        );
+        labels.insert(
+            "poddle.io/project-id".to_string(),
+            msg.project_id.to_string(),
+        );
+        labels.insert(
+            "poddle.io/deployment-id".to_string(),
+            msg.deployment_id.to_string(),
+        );
 
-        let mut secret_name = self
-            .create_vso_resources(
+        let secret_name = self
+            .create_vault_static_secret(
                 &deployment_namespace,
                 &deployment_name,
                 &msg.deployment_id.to_string(),
@@ -207,22 +214,23 @@ impl KubernetesService {
             msg.port,
             msg.desired_replicas,
             &msg.resource_spec,
-            secret_name.as_deref(),
+            secret_name,
             msg.environment_variables,
             &labels,
         )
         .await?;
 
-        self.create_k8s_service(&deployment_namespace, &deployment_name, msg.port, &labels)
+        self.create_k8s_service(&deployment_namespace, &service_name, msg.port, &labels)
             .await?;
 
         // ! ERROR, We use Traefik IngressRoute
-        self.create_k8s_ingress(
-            &deployment_namespace,
+        self.create_traefik_ingressroute(
+            deployment_namespace,
+            service,
             &deployment_name,
             msg.domain.as_deref(),
-            msg.subdomain.as_deref(),
-            &labels,
+            msg.domain.as_deref(),
+            msg.subdomain.as_deref() & labels,
         )
         .await?;
 
@@ -230,7 +238,7 @@ impl KubernetesService {
     }
 
     /// Create VSO resources
-    async fn create_vso_resources(
+    async fn create_vault_static_secret(
         &self,
         deployment_namespace: &str,
         deployment_name: &str,
@@ -342,10 +350,10 @@ impl KubernetesService {
         namespace: &str,
         name: &str,
         image: &str,
-        container_port: i32,
+        port: i32,
         desired_replicas: i32,
         resource_spec: &ResourceSpec,
-        secret_name: Option<&str>,
+        secret_name: Option<String>,
         environment_variables: Option<HashMap<String, String>>,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
@@ -417,7 +425,7 @@ impl KubernetesService {
                             image: Some(image.to_string()),
                             image_pull_policy: Some("Always".to_string()),
                             ports: Some(vec![ContainerPort {
-                                container_port,
+                                container_port: port,
                                 protocol: Some("TCP".to_string()),
                                 ..Default::default()
                             }]),
@@ -496,144 +504,55 @@ impl KubernetesService {
     }
 
     /// Create Traefik IngressRoute
-    async fn create_k8s_ingress_route(
+    async fn create_traefik_ingressroute(
         &self,
-        namespace: &str,
-        name: &str,
-        subdomain: &str,
-        subdomain: &str,
-        labels: &BTreeMap<String, String>,
+        namespace: String,
+        service: String,
+        name: String,
+        domain: Option<String>,
+        subdomain: String,
+        labels: Option<BTreeMap<String, String>>,
     ) -> Result<(), AppError> {
-        let ingrees_route = IngressRoute {
+        let mut ingrees_route = IngressRoute {
             metadata: ObjectMeta {
-                name: Some(name.to_string()),
-                namespace: Some(namespace.to_string()),
-                labels: Some(labels.clone()),
-                annotations: None,
+                name: Some(name),
+                namespace: Some(namespace),
+                labels,
                 ..Default::default()
             },
             spec: IngressRouteSpec {
-                entry_points: todo!(),
-                parent_refs: todo!(),
-                routes: todo!(),
+                entry_points: self.ingressroute_entry_points,
+                parent_refs: Some(vec![IngressRouteParentRefs {
+                    name: service.clone(),
+                    ..Default::default()
+                }]),
+                routes: vec![IngressRouteRoutes {
+                    r#match: subdomain,
+                    services: Some(vec![IngressRouteRoutesServices {
+                        name: service.clone(),
+                        ..Default::default()
+                    }]),
+                    ..Default::default()
+                }],
                 tls: todo!(),
             },
         };
-    }
 
-    /// Create Kubernetes Ingress with Traefik
-    async fn create_k8s_ingress(
-        &self,
-        deployment_namespace: &str,
-        deployment_name: &str,
-        subdomain: Option<&str>,
-        subdomain: Option<&str>,
-        labels: &BTreeMap<String, String>,
-    ) -> Result<(), AppError> {
-        let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), deployment_namespace);
-
-        let mut annotations = BTreeMap::new();
-
-        annotations.insert(
-            "traefik.ingress.kubernetes.io/router.tls".to_string(),
-            "true".to_string(),
-        );
-        annotations.insert(
-            "traefik.ingress.kubernetes.io/router.entrypoints".to_string(),
-            "web,websecure".to_string(),
-        );
-        annotations.insert(
-            "traefik.ingress.kubernetes.io/router.middlewares".to_string(),
-            "default-permanent-redirect-middleware@kubernetescrd".to_string(),
-        );
-
-        let mut ingress = Ingress {
-            metadata: ObjectMeta {
-                name: Some(deployment_name.to_string()),
-                namespace: Some(deployment_namespace.to_string()),
-                labels: Some(labels.clone()),
-                annotations: Some(annotations),
+        if let Some(domain) = domain {
+            ingrees_route.spec.routes.push(IngressRouteRoutes {
+                r#match: domain,
+                services: Some(vec![IngressRouteRoutesServices {
+                    name: service,
+                    ..Default::default()
+                }]),
                 ..Default::default()
-            },
-            spec: Some(IngressSpec {
-                default_backend: Some(IngressBackend {
-                    resource: Some(TypedLocalObjectReference {
-                        api_group: todo!(),
-                        kind: todo!(),
-                        name: todo!(),
-                    }),
-                    service: Some(IngressServiceBackend {
-                        name: todo!(),
-                        port: todo!(),
-                    }),
-                }),
-                ingress_class_name: self.ingress_class_name,
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        // * subdomain
-        if let Some(subdomain) = subdomain {
-            let host = format!("{}.{}", subdomain, self.domain);
-
-            let ingress_rule = IngressRule {
-                host: Some(host),
-                http: Some(HTTPIngressRuleValue {
-                    paths: vec![HTTPIngressPath {
-                        path: Some("/".to_string()),
-                        path_type: "Prefix".to_string(),
-                        backend: IngressBackend {
-                            service: Some(IngressServiceBackend {
-                                name: deployment_name.to_string(),
-                                port: Some(ServiceBackendPort {
-                                    number: Some(80),
-                                    ..Default::default()
-                                }),
-                            }),
-                            ..Default::default()
-                        },
-                    }],
-                }),
-            };
-
-            let tls = IngressTLS {
-                hosts: Some(vec![host.to_string()]),
-                secret_name: Some(self.wildcard_certificate_secret_name),
-            };
-
-            let ingress_spec = ingress.spec.get_or_insert_with(Default::default);
-            let ingress_rules = ingress_spec.rules.get_or_insert_with(Vec::new);
-            let ingress_tls = ingress_spec.tls.get_or_insert_with(Vec::new);
-            ingress_rules.push(ingress_rule);
-            ingress_tls.push(tls);
+            });
         }
 
-        // * subdomain
-        if let Some(subdomain) = subdomain {
-            // ! we add cert-manager.io/cluster-issuer annotation and secretName to autogenerated
-            let ingress_annotations = ingress
-                .metadata
-                .annotations
-                .get_or_insert_with(BTreeMap::new);
-            ingress_annotations.insert(
-                "cert-manager.io/cluster-issuer".to_string(),
-                self.cluster_issuer_name.clone(),
-            );
-        }
-
-        ingress_api
-            .create(&PostParams::default(), &ingress)
-            .await
-            .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to create ingress: {}", e))
-            })?;
-
-        info!(
-            "Ingress {} created in namespace {}",
-            deployment_name, deployment_namespace
-        );
-        Ok(())
+        let ingressroute_api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &namespace);
+        ingressroute_api
+            .create(&PostParams::default(), &ingrees_route)
+            .await?;
     }
 
     pub async fn update(&self, message: UpdateDeploymentMessage) -> Result<(), AppError> {
@@ -645,7 +564,7 @@ impl KubernetesService {
 
         // ! We can send pubsub message to notify users via SEE
 
-        let namespace = self.get_namespace_or_create(user_id).await?;
+        let namespace = self.ensure_namespace(user_id).await?;
         let name = deployment.cluster_deployment_name;
 
         let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &namespace);
@@ -694,7 +613,7 @@ impl KubernetesService {
         let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &self.pool).await?;
         // ! We can send pubsub message to notify users via SEE
 
-        let namespace = self.get_namespace_or_create(user_id).await?;
+        let namespace = self.ensure_namespace(user_id).await?;
         let name = deployment.cluster_deployment_name;
 
         let delete_params = DeleteParams::default();
@@ -718,98 +637,45 @@ impl KubernetesService {
 
     /// creates namespace for user like `user-{user_id[:16]}`
     /// additionally VaultAuth and VaultConnection, default VaultConnection can be used instead namespaced
-    async fn get_namespace_or_create(&self, user_id: &Uuid) -> Result<String, AppError> {
-        let user_id: String = user_id.as_simple().to_string().chars().take(16).collect();
-        let ns_string = format!("user-{}", &user_id);
+    async fn ensure_namespace(&self, user_id: &Uuid) -> Result<String, AppError> {
+        let name = format!(
+            "user-{}",
+            user_id
+                .as_simple()
+                .to_string()
+                .chars()
+                .take(8)
+                .collect::<String>()
+        );
         let ns_api: Api<Namespace> = Api::all(self.client.clone());
 
-        if ns_api.get(&ns_string).await.is_ok() {
-            return Ok(ns_string);
+        if ns_api.get(&name).await.is_ok() {
+            return Ok(name);
         }
 
-        info!("Creating namespace {}", ns_string);
+        info!(user_id = %user_id, "Creating namespace {}", name);
         let mut labels = BTreeMap::new();
         labels.insert("user-id".to_string(), user_id.to_string());
 
         let new_ns = Namespace {
             metadata: ObjectMeta {
-                name: Some(ns_string.clone()),
-
+                name: Some(name.clone()),
                 labels: Some(labels),
-
                 ..Default::default()
             },
-
             ..Default::default()
         };
 
         ns_api.create(&PostParams::default(), &new_ns).await?;
-        info!("Namespace {} created successfully", ns_string);
+        info!(user_id = %user_id, "Namespace {} created successfully", name);
 
-        // Create VaultAuth and VaultConnection resources for the tenant
-        let vault_connection = VaultConnection {
-            metadata: ObjectMeta {
-                name: Some(self.vault_service.vault_connection.clone()),
-                namespace: Some(ns_string.clone()),
-                ..Default::default()
-            },
-            spec: VaultConnectionSpec {
-                address: self.vault_service.address.clone(),
-                skip_tls_verify: self.vault_service.skip_tls_verify,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let vault_auth = VaultAuth {
-            metadata: ObjectMeta {
-                name: Some("vault-auth".to_string()),
-                namespace: Some(ns_string.clone()),
-                ..Default::default()
-            },
-            spec: VaultAuthSpec {
-                method: Some(VaultAuthMethod::Kubernetes),
-                mount: Some("kubernetes".to_string()),
-                kubernetes: Some(VaultAuthKubernetes {
-                    role: Some("poddle-user-app".to_string()),
-                    service_account: Some("default".to_string()),
-                    ..Default::default()
-                }),
-                vault_connection_ref: Some("vault-connection".to_string()),
-                ..Default::default()
-            },
-            ..Default::default()
-        };
-
-        let vault_connection_api: Api<VaultConnection> =
-            Api::namespaced(self.client.clone(), &ns_string);
-        let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns_string);
-
-        vault_auth_api
-            .create(&PostParams::default(), &vault_auth)
-            .instrument(info_span!("create_vault_api"))
-            .await
-            .map_err(|e| {
-                error!(user_id=%user_id, "Failed to create VaultAuth");
-                AppError::InternalServerError(format!("Failed to create VaultAuth: {}", e))
-            })?;
-        vault_connection_api
-            .create(&PostParams::default(), &vault_connection)
-            .instrument(info_span!("create_vault_connection"))
-            .await
-            .map_err(|e| {
-                error!(user_id=%user_id, "Failed to create VaultConnection");
-                AppError::InternalServerError(format!("Failed to create VaultConnection: {}", e))
-            })?;
-
-        info!(user_id=%user_id, "VaultAuth and VaultConnection created in {}", ns_string);
-        Ok(ns_string)
+        Ok(name)
     }
 
-    /// creates deployment name from `deployment_id` like `deployment-{deployment_id[:8]}`
-    fn get_deployment_name(&self, deployment_id: &Uuid) -> String {
+    /// generate resource name from `deployment_id` like `app-{deployment_id[:8]}`
+    fn format_resource_name(&self, deployment_id: &Uuid) -> String {
         format!(
-            "deployment-{}",
+            "app-{}",
             deployment_id
                 .as_simple()
                 .to_string()
@@ -817,5 +683,89 @@ impl KubernetesService {
                 .take(8)
                 .collect::<String>()
         )
+    }
+
+    async fn create_vso_resources(&self, ns: String) -> Result<(), AppError> {
+        let vault_connection = VaultConnection {
+            metadata: ObjectMeta {
+                name: self.vault_service.vault_connection.clone().name,
+                namespace: Some(ns.clone()),
+                ..Default::default()
+            },
+            spec: VaultConnectionSpec {
+                address: self.vault_service.vault_connection.address.clone(),
+                skip_tls_verify: self.vault_service.vault_connection.skip_tls_verify,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let vault_auth = VaultAuth {
+            metadata: ObjectMeta {
+                name: self
+                    .vault_service
+                    .vault_auth
+                    .clone()
+                    .unwrap_or_default()
+                    .name,
+                namespace: Some(ns.clone()),
+                ..Default::default()
+            },
+            spec: VaultAuthSpec {
+                method: Some(VaultAuthMethod::Kubernetes),
+                mount: self
+                    .vault_service
+                    .vault_auth
+                    .clone()
+                    .unwrap_or_default()
+                    .mount,
+                kubernetes: Some(VaultAuthKubernetes {
+                    role: self
+                        .vault_service
+                        .vault_auth
+                        .clone()
+                        .unwrap_or_default()
+                        .kubernetes
+                        .unwrap_or_default()
+                        .role,
+                    service_account: self
+                        .vault_service
+                        .vault_auth
+                        .clone()
+                        .unwrap_or_default()
+                        .kubernetes
+                        .unwrap_or_default()
+                        .service_account,
+                    ..Default::default()
+                }),
+                vault_connection_ref: vault_connection.clone().metadata.name,
+                ..Default::default()
+            },
+            ..Default::default()
+        };
+
+        let vault_connection_api: Api<VaultConnection> = Api::namespaced(self.client.clone(), &ns);
+        let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns);
+
+        vault_connection_api
+            .create(&PostParams::default(), &vault_connection)
+            .instrument(info_span!("create_vault_connection"))
+            .await
+            .map_err(|e| {
+                error!(ns=%ns, "Failed to create VaultConnection");
+                AppError::InternalServerError(format!("Failed to create VaultConnection: {}", e))
+            })?;
+        vault_auth_api
+            .create(&PostParams::default(), &vault_auth)
+            .instrument(info_span!("create_vault_api"))
+            .await
+            .map_err(|e| {
+                error!(ns=%ns, "Failed to create VaultAuth");
+                AppError::InternalServerError(format!("Failed to create VaultAuth: {}", e))
+            })?;
+
+        info!(ns=%ns, "VaultAuth and VaultConnection created in {}", ns);
+
+        Ok(())
     }
 }

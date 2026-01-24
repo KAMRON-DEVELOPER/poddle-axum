@@ -9,26 +9,63 @@ use vaultrs::kv2;
 
 use crate::config::Config;
 use crate::error::AppError;
+use crate::services::vault_service::{
+    VaultAuthConfig, VaultAuthKubernetesConfig, VaultConfig, VaultService,
+};
 
-#[derive(Clone)]
-pub struct VaultService {
-    pub client: Arc<VaultClient>,
-    pub kv_mount: String,
-    pub address: String,
-    pub skip_tls_verify: bool,
-    pub vault_connection: Option<String>,
-    pub vault_auth: Option<String>,
-    /// static secret token reconcilation interval
-    pub refresh_after: Option<String>,
+impl Default for VaultAuthKubernetesConfig {
+    fn default() -> Self {
+        Self {
+            role: Some("tenant-role".to_string()),
+            service_account: Default::default(),
+        }
+    }
 }
 
+impl Default for VaultAuthConfig {
+    fn default() -> Self {
+        Self {
+            name: Some("vault-auth".to_string()),
+            mount: Some("kubernetes".to_string()),
+            kubernetes: Default::default(),
+        }
+    }
+}
+
+/*
+VAULT_ADDR='https://vault.poddle.uz:8200'
+VAULT_AUTH_MOUNT='kubernetes'
+VAULT_AUTH_ROLE='compute-provisioner'
+VAULT_KV_MOUNT='kvv2'
+VAULT_SKIP_TLS_VERIFY=true
+VAULT_CONNECTION='vault-connection'
+VAULT_AUTH='vault-auth'
+REFRESH_AFTER='300s'
+
+VAULT_CONFIG='{
+   "vault_connection": {
+       "address": "https://vault.poddle.uz:8200",
+       "name": "vault-connection",
+       "skip_tls_verify": true
+   }
+   "vault_auth": {
+       "name": "vault-auth",
+       "mount": "kubernetes",
+       "kubernetes": {
+       "role": "tenant-role",
+       "service_account": "default"
+       }
+   }
+}'
+*/
+
 impl VaultService {
-    pub async fn init(config: &Config) -> Result<Self, AppError> {
+    pub async fn init(cfg: VaultConfig) -> Result<Self, AppError> {
         info!("🔐 Initializing Vault client");
 
         let mut client = VaultClient::new(
             VaultClientSettingsBuilder::default()
-                .address(&config.vault_address)
+                .address(&cfg.vault_connection.address)
                 .build()?,
         )?;
 
@@ -44,12 +81,7 @@ impl VaultService {
 
         Ok(Self {
             client: Arc::new(client),
-            kv_mount: config.vault_kv_mount.clone(),
-            address: config.vault_address.clone(),
-            skip_tls_verify: config.vault_skip_tls_verify,
-            vault_connection: config.vault_connection.clone(),
-            vault_auth: config.vault_auth.clone(),
-            refresh_after: config.refresh_after.clone(),
+            cfg,
         })
     }
 

@@ -1,22 +1,20 @@
-use serde::de::DeserializeOwned;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use tokio::fs;
 
-use crate::parse_value::parse_value;
-
-pub async fn get_optional_config_value<T>(
+pub async fn get_optional_config_value_fromstr<T>(
     secret_name: &str,
     env_name: Option<&str>,
     fallback_path: Option<&PathBuf>,
 ) -> Option<T>
 where
-    T: DeserializeOwned,
+    T: FromStr,
 {
     // Docker secret
     let docker_secret = Path::new("/run/secrets").join(secret_name);
     if docker_secret.exists() {
         if let Ok(content) = fs::read_to_string(&docker_secret).await {
-            if let Some(parsed) = parse_value(&content) {
+            if let Ok(parsed) = T::from_str(content.trim()) {
                 return Some(parsed);
             }
         }
@@ -26,7 +24,7 @@ where
     if let Some(env_key) = env_name
         && let Ok(val) = dotenvy::var(env_key)
     {
-        if let Some(parsed) = parse_value(&val) {
+        if let Ok(parsed) = T::from_str(val.trim()) {
             return Some(parsed);
         }
     }
@@ -36,7 +34,7 @@ where
         && path.exists()
     {
         if let Ok(content) = fs::read_to_string(path).await {
-            if let Some(parsed) = parse_value(&content) {
+            if let Ok(parsed) = T::from_str(content.trim()) {
                 return Some(parsed);
             }
         }

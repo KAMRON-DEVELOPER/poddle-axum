@@ -3,6 +3,7 @@ use std::{net::SocketAddr, path::PathBuf};
 use sqlx::postgres::PgSslMode;
 use tracing::Level;
 use utility::get_config_value::get_config_value;
+use utility::get_config_value_fromstr::get_config_value_fromstr;
 use utility::get_optional_config_value::get_optional_config_value;
 
 use crate::error::AppError;
@@ -18,6 +19,7 @@ pub struct Config {
     pub traefik_namespace: String,
     pub cluster_issuer_name: String,
     pub ingress_class_name: Option<String>,
+    pub ingressroute_entry_points: Option<Vec<String>>,
     pub wildcard_certificate_name: String,
     pub wildcard_certificate_secret_name: String,
 
@@ -115,7 +117,7 @@ impl Config {
         )
         .await;
 
-        let tracing_level = get_config_value(
+        let tracing_level = get_config_value_fromstr(
             "TRACING_LEVEL",
             Some("TRACING_LEVEL"),
             None,
@@ -220,6 +222,12 @@ impl Config {
         .await;
         let ingress_class_name =
             get_optional_config_value("INGRESS_CLASS_NAME", Some("INGRESS_CLASS_NAME"), None).await;
+        let ingressroute_entry_points = get_optional_config_value(
+            "INGRESSROUTE_ENTRY_POINTS",
+            Some("INGRESSROUTE_ENTRY_POINTS"),
+            None,
+        )
+        .await;
         let wildcard_certificate_name = get_config_value(
             "WILDCARD_CERTIFICATE_NAME",
             Some("WILDCARD_CERTIFICATE_NAME"),
@@ -242,12 +250,11 @@ impl Config {
             Some("postgresql://postgres:password@localhost:5432/poddle_db".to_string()),
         )
         .await;
-
         let postgres_pool_size =
             get_optional_config_value("DATABASE_POOL_SIZE", Some("DATABASE_POOL_SIZE"), None).await;
-
         let pg_ssl_mode =
-            get_config_value("ssl_mode", Some("SSL_MODE"), None, Some(PgSslMode::Disable)).await;
+            get_config_value_fromstr("ssl_mode", Some("SSL_MODE"), None, Some(PgSslMode::Disable))
+                .await;
 
         let redis_url = get_optional_config_value("REDIS_URL", Some("REDIS_URL"), None).await;
         let redis_host = get_optional_config_value("REDIS_HOST", Some("REDIS_HOST"), None).await;
@@ -422,6 +429,7 @@ impl Config {
             traefik_namespace,
             cluster_issuer_name,
             ingress_class_name,
+            ingressroute_entry_points,
             wildcard_certificate_name,
             wildcard_certificate_secret_name,
             database_url: postgres_url,
