@@ -10,7 +10,7 @@ use crate::factories::tls::TlsConfig;
 
 pub struct AmqpPropagator;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct AmqpConfig {
     pub uri: String,
     pub tls_config: Option<TlsConfig>,

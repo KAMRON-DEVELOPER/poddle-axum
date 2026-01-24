@@ -6,7 +6,6 @@ use compute_core::{
     channel_names::ChannelNames,
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
 };
-use factory::factories::redis::Redis;
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment as K8sDeployment, DeploymentSpec},
@@ -40,13 +39,12 @@ use kube::{
 
 use redis::AsyncTypedCommands;
 use serde_json::json;
-use sqlx::PgPool;
 use tracing::{Instrument, error, info, info_span, warn};
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::services::kubernetes_service::KubernetesService;
 use crate::services::repository::DeploymentRepository;
-use crate::services::vault_service::VaultService;
 
 impl KubernetesService {
     pub async fn init(&self) -> Result<(), AppError> {
@@ -54,13 +52,22 @@ impl KubernetesService {
 
         // Check for ClusterIssuer
         let cluster_issuer_api: Api<ClusterIssuer> = Api::all(self.client.clone());
-        match cluster_issuer_api.get(&self.cluster_issuer_name).await {
-            Ok(_) => info!("✅ ClusterIssuer '{}' found.", self.cluster_issuer_name),
+        match cluster_issuer_api
+            .get(&self.cfg.cert_manager.cluster_issuer)
+            .await
+        {
+            Ok(_) => info!(
+                "✅ ClusterIssuer '{}' found.",
+                self.cfg.cert_manager.cluster_issuer
+            ),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
-                error!("❌ ClusterIssuer '{}' is missing", self.cluster_issuer_name);
+                error!(
+                    "❌ ClusterIssuer '{}' is missing",
+                    self.cfg.cert_manager.cluster_issuer
+                );
                 return Err(AppError::InternalServerError(format!(
                     "ClusterIssuer '{}' is missing. Please apply infrastructure configuration.",
-                    self.cluster_issuer_name
+                    self.cfg.cert_manager.cluster_issuer
                 )));
             }
             Err(e) => return Err(e.into()),
@@ -68,20 +75,23 @@ impl KubernetesService {
 
         // Check for Wildcard Certificate
         let certificate_api: Api<Certificate> =
-            Api::namespaced(self.client.clone(), &self.traefik_namespace);
-        match certificate_api.get(&self.wildcard_certificate_name).await {
+            Api::namespaced(self.client.clone(), &self.cfg.traefik.namespace);
+        match certificate_api
+            .get(&self.cfg.cert_manager.wildcard_certificate)
+            .await
+        {
             Ok(_) => info!(
                 "✅ Wildcard Certificate '{}' found.",
-                self.wildcard_certificate_name
+                self.cfg.cert_manager.wildcard_certificate
             ),
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
                 error!(
                     "❌ Wildcard Certificate '{}' is missing in namespace '{}'.",
-                    self.wildcard_certificate_name, self.traefik_namespace
+                    self.cfg.cert_manager.wildcard_certificate, self.cfg.traefik.namespace
                 );
                 return Err(AppError::InternalServerError(format!(
                     "Wildcard Certificate '{}' is missing in namespace '{}'.",
-                    self.wildcard_certificate_name, self.traefik_namespace
+                    self.cfg.cert_manager.wildcard_certificate, self.cfg.traefik.namespace
                 )));
             }
             Err(e) => return Err(e.into()),
@@ -166,7 +176,7 @@ impl KubernetesService {
     }
 
     async fn create_k8s_resources(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
-        let user_namespace = self.ensure_namespace(&msg.user_id).await?;
+        let namespace = self.ensure_namespace(&msg.user_id).await?;
         let resource_name = self.format_resource_name(&msg.deployment_id);
 
         let mut labels = BTreeMap::new();
@@ -185,16 +195,16 @@ impl KubernetesService {
 
         let secret_name = self
             .create_vault_static_secret(
-                &deployment_namespace,
-                &deployment_name,
+                &namespace,
+                &resource_name,
                 &msg.deployment_id.to_string(),
                 msg.secrets,
             )
             .await?;
 
         self.create_k8s_deployment(
-            &deployment_namespace,
-            &deployment_name,
+            &namespace,
+            &resource_name,
             &msg.image,
             msg.port,
             msg.desired_replicas,
@@ -205,17 +215,17 @@ impl KubernetesService {
         )
         .await?;
 
-        self.create_k8s_service(&deployment_namespace, &service_name, msg.port, &labels)
+        self.create_k8s_service(&namespace, &service_name, msg.port, &labels)
             .await?;
 
         // ! ERROR, We use Traefik IngressRoute
         self.create_traefik_ingressroute(
-            deployment_namespace,
-            service,
-            &deployment_name,
-            msg.domain.as_deref(),
-            msg.domain.as_deref(),
-            msg.subdomain.as_deref() & labels,
+            namespace,
+            resource_name,
+            resource_name,
+            msg.domain,
+            msg.subdomain,
+            labels,
         )
         .await?;
 
@@ -495,18 +505,18 @@ impl KubernetesService {
         service: String,
         name: String,
         domain: Option<String>,
-        subdomain: String,
-        labels: Option<BTreeMap<String, String>>,
+        subdomain: Option<String>,
+        labels: BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let mut ingrees_route = IngressRoute {
             metadata: ObjectMeta {
                 name: Some(name),
                 namespace: Some(namespace),
-                labels,
+                labels: Some(labels),
                 ..Default::default()
             },
             spec: IngressRouteSpec {
-                entry_points: self.ingressroute_entry_points,
+                entry_points: self.cfg.traefik.entry_points,
                 parent_refs: Some(vec![IngressRouteParentRefs {
                     name: service.clone(),
                     ..Default::default()

@@ -21,7 +21,16 @@ pub struct Claims {
     pub iat: i64,
 }
 
-pub trait JwtConfig {
+#[derive(Deserialize, Clone, Debug)]
+pub struct JwtConfig {
+    pub secret_key: String,
+    pub access_token_expire_in_minute: i64,
+    pub refresh_token_expire_in_days: i64,
+    pub email_verification_token_expire_in_hours: i64,
+    pub refresh_token_renewal_threshold_days: i64,
+}
+
+pub trait JwtCapability {
     fn jwt_secret(&self) -> &str;
     fn access_token_expire_in_minute(&self) -> i64;
     fn refresh_token_expire_in_days(&self) -> i64;
@@ -29,7 +38,7 @@ pub trait JwtConfig {
 }
 
 #[tracing::instrument(name = "create_token", skip(cfg, user_id, typ), err)]
-pub fn create_token<C: JwtConfig + ?Sized>(
+pub fn create_token<C: JwtCapability + ?Sized>(
     cfg: &C,
     user_id: Uuid,
     typ: TokenType,
@@ -57,7 +66,7 @@ pub fn create_token<C: JwtConfig + ?Sized>(
 }
 
 #[tracing::instrument(name = "verify_token", skip(cfg, token), err)]
-pub fn verify_token<C: JwtConfig + ?Sized>(cfg: &C, token: &str) -> Result<Claims, JwtError> {
+pub fn verify_token<C: JwtCapability + ?Sized>(cfg: &C, token: &str) -> Result<Claims, JwtError> {
     let decoding_key = DecodingKey::from_secret(cfg.jwt_secret().as_bytes());
     decode::<Claims>(token, &decoding_key, &Validation::default())
         .map(|d| d.claims)

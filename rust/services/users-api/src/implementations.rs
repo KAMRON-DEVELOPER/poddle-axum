@@ -1,13 +1,5 @@
-use factory::factories::{
-    amqp::AmqpConfig,
-    database::DatabaseConfig,
-    mailtrap::error::MailtrapError,
-    redis::{RedisConfig, RedisParams},
-    tls::TlsConfig,
-    zepto::error::ZeptoError,
-};
-use sqlx::postgres::PgSslMode;
-use users_core::jwt::JwtConfig;
+use factory::factories::{mailtrap::error::MailtrapError, zepto::error::ZeptoError};
+use users_core::jwt::JwtCapability;
 
 use crate::config::Config;
 
@@ -62,91 +54,20 @@ impl From<MailtrapError> for AppError {
 // --------------------------- Factory implementations ---------------------------
 // -------------------------------------------------------------------------------
 
-impl DatabaseConfig for Config {
-    type Tls = TlsConfig;
-
-    fn url(&self) -> String {
-        self.database_url.clone()
-    }
-    fn max_connections(&self) -> u32 {
-        self.postgres_pool_size.unwrap_or_default()
-    }
-    fn pg_ssl_mode(&self) -> PgSslMode {
-        self.pg_ssl_mode
-    }
-    fn tls_config(&self) -> Self::Tls {
-        TlsConfig {
-            ca: self.ca.clone(),
-            ca_path: self.ca_path.clone(),
-            client_cert: self.client_cert.clone(),
-            client_cert_path: self.client_cert_path.clone(),
-            client_key: self.client_key.clone(),
-            client_key_path: self.client_key_path.clone(),
-        }
-    }
-}
-
-impl RedisConfig for Config {
-    type Tls = TlsConfig;
-
-    fn url(&self) -> Option<String> {
-        self.redis_url.clone()
-    }
-
-    fn params(&self) -> RedisParams {
-        RedisParams {
-            host: self.redis_host.clone(),
-            port: self.redis_port.clone(),
-            username: self.redis_username.clone(),
-            password: self.redis_password.clone(),
-        }
-    }
-
-    fn tls_config(&self) -> Self::Tls {
-        TlsConfig {
-            ca: self.ca.clone(),
-            ca_path: self.ca_path.clone(),
-            client_cert: self.client_cert.clone(),
-            client_cert_path: self.client_cert_path.clone(),
-            client_key: self.client_key.clone(),
-            client_key_path: self.client_key_path.clone(),
-        }
-    }
-}
-
-impl AmqpConfig for Config {
-    type Tls = TlsConfig;
-
-    fn uri(&self) -> String {
-        self.amqp_addr.clone()
-    }
-
-    fn tls_config(&self) -> Self::Tls {
-        TlsConfig {
-            ca: self.ca.clone(),
-            ca_path: self.ca_path.clone(),
-            client_cert: self.client_cert.clone(),
-            client_cert_path: self.client_cert_path.clone(),
-            client_key: self.client_key.clone(),
-            client_key_path: self.client_key_path.clone(),
-        }
-    }
-}
-
-impl JwtConfig for Config {
+impl JwtCapability for Config {
     fn jwt_secret(&self) -> &str {
-        &self.jwt_secret_key
+        &self.jwt.secret_key
     }
 
     fn access_token_expire_in_minute(&self) -> i64 {
-        self.access_token_expire_in_minute
+        self.jwt.access_token_expire_in_minute
     }
 
     fn refresh_token_expire_in_days(&self) -> i64 {
-        self.refresh_token_expire_in_days
+        self.jwt.refresh_token_expire_in_days
     }
 
     fn email_verification_token_expire_in_hours(&self) -> i64 {
-        self.email_verification_token_expire_in_hours
+        self.jwt.email_verification_token_expire_in_hours
     }
 }

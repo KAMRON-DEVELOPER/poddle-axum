@@ -1,21 +1,19 @@
-use crate::error::AppError;
 use crate::{
     config::Config,
+    error::AppError,
     services::{
-        build_oauth::{
-            GithubOAuthClient, GoogleOAuthClient, build_github_oauth_client,
-            build_google_oauth_client,
-        },
-        build_s3::{build_gcs, build_s3},
+        github_oauth::{GithubOAuthClient, build_github_oauth_client},
+        google_oauth::{GoogleOAuthClient, build_google_oauth_client},
+        s3::build_s3,
     },
 };
 use axum::extract::FromRef;
 use axum_extra::extract::cookie::Key;
 use factory::factories::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis};
-use object_store::{aws::AmazonS3, gcp::GoogleCloudStorage};
+use object_store::aws::AmazonS3;
 use reqwest::Client;
 use rustls::ClientConfig;
-use users_core::jwt::JwtConfig;
+use users_core::jwt::JwtCapability;
 
 #[derive(FromRef, Clone)]
 pub struct AppState {
@@ -30,25 +28,23 @@ pub struct AppState {
     pub github_oauth_client: GithubOAuthClient,
     pub http_client: Client,
     pub s3: AmazonS3,
-    pub gcs: GoogleCloudStorage,
 }
 
 impl AppState {
-    pub async fn init(config: &Config) -> Result<Self, AppError> {
+    pub async fn init(cfg: &Config) -> Result<Self, AppError> {
         // let rustls_config = build_rustls_config(&config)?;
-        let database = Database::new(config).await;
-        let redis = Redis::new(config).await;
-        let amqp = Amqp::new(config).await;
+        let database = Database::new(&cfg.database).await;
+        let redis = Redis::new(&cfg.redis).await;
+        let amqp = Amqp::new(&cfg.amqp).await;
         // let kafka = Kafka::new(config, "users-service")?;
-        let key = Key::from(config.cookie_key.as_bytes());
-        let google_oauth_client = build_google_oauth_client(config);
-        let github_oauth_client = build_github_oauth_client(config);
+        let key = Key::from(cfg.cookie_key.as_bytes());
+        let google_oauth_client = build_google_oauth_client(&cfg.google_oauth);
+        let github_oauth_client = build_github_oauth_client(&cfg.github_oauth);
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
             .build()
             .unwrap_or_else(|e| panic!("Couldn't construct http client: {}", e));
-        let s3 = build_s3(config);
-        let gcs = build_gcs(config);
+        let s3 = build_s3(&cfg.s3);
 
         Ok(Self {
             rustls_config: None,
@@ -56,19 +52,18 @@ impl AppState {
             redis,
             amqp,
             kafka: None,
-            config: config.clone(),
+            config: cfg.clone(),
             key,
             google_oauth_client,
             github_oauth_client,
             http_client,
             s3,
-            gcs,
         })
     }
 }
 
 // Option B: State can produce a JwtConfig via FromRef
-impl FromRef<AppState> for Box<dyn JwtConfig> {
+impl FromRef<AppState> for Box<dyn JwtCapability> {
     fn from_ref(state: &AppState) -> Self {
         Box::new(state.config.clone()) // assuming Config implements JwtConfig
     }

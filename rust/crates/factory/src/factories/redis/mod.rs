@@ -6,7 +6,7 @@ use serde::Deserialize;
 
 use crate::factories::tls::TlsConfig;
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct RedisParams {
     pub host: Option<String>,
     pub port: Option<u16>,
@@ -14,7 +14,7 @@ pub struct RedisParams {
     pub password: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct RedisConfig {
     pub url: Option<String>,
     pub params: Option<RedisParams>,

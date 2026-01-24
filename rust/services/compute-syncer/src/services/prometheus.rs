@@ -2,7 +2,7 @@ use prometheus_http_query::Client;
 use reqwest::Client as HttpClient;
 use tracing::info;
 
-use crate::{config::Config, error::AppError};
+use crate::error::AppError;
 
 #[derive(Clone)]
 pub struct Prometheus {
@@ -10,8 +10,8 @@ pub struct Prometheus {
 }
 
 impl Prometheus {
-    pub async fn new(config: &Config, http_client: HttpClient) -> Result<Self, AppError> {
-        let client = Client::from(http_client, &config.prometheus_url)?;
+    pub async fn new(url: &str, http_client: HttpClient) -> Result<Self, AppError> {
+        let client = Client::from(http_client, url)?;
 
         match client.query("up").get().await {
             Ok(_) => info!("✅ Successfully connected to Prometheus!"),

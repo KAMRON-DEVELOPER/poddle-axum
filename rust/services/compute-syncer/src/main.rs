@@ -46,23 +46,22 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    let config = Config::init(cargo_manifest_dir).await?;
+    let cfg = Config::init(cargo_manifest_dir).await?;
+
     let _guard = Observability::init(
-        &config.otel_exporter_otlp_endpoint,
+        &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
-        config.tracing_level,
     )
     .await;
 
-    let kubernetes = Kubernetes::new(&config).await?;
-    let database = Database::new(&config).await;
-    let redis = Redis::new(&config).await;
-    // let kafka = Kafka::new(config, "users-service")?;
+    let kubernetes = Kubernetes::new().await?;
+    let database = Database::new(&cfg.database).await;
+    let redis = Redis::new(&cfg.redis).await;
     let http_client = reqwest::ClientBuilder::new()
         .redirect(reqwest::redirect::Policy::none())
         .build()?;
-    let prometheus = Prometheus::new(&config, http_client.clone()).await?;
+    let prometheus = Prometheus::new(&cfg.prometheus.url, http_client.clone()).await?;
 
     let mut set = JoinSet::new();
 
@@ -72,16 +71,12 @@ async fn main() -> anyhow::Result<()> {
         redis.connection.clone(),
         kubernetes.client.clone(),
     ));
-    set.spawn(start_metrics_scraper(
-        config.clone(),
-        prometheus.client,
-        redis,
-    ));
+    set.spawn(start_metrics_scraper(cfg.clone(), redis, prometheus.client));
     set.spawn(start_reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),
     ));
-    set.spawn(start_health_server(cargo_pkg_name, config.server_address));
+    set.spawn(start_health_server(cargo_pkg_name, cfg.server_address));
 
     info!("✅ All background tasks started");
 
@@ -108,8 +103,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Start a simple HTTP server for health checks and metrics
-async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
+async fn start_health_server(cargo_pkg_name: &str, server_address: String) -> Result<(), AppError> {
     let app = app::app().await?;
+    let addr = server_address
+        .parse::<SocketAddr>()
+        .expect("Server address is invalid");
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);

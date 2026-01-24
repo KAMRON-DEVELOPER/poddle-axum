@@ -37,7 +37,6 @@ impl Observability {
         otel_exporter_otlp_endpoint: &str,
         cargo_crate_name: &str,
         cargo_pkg_version: &str,
-        tracing_level: Level,
     ) -> Observability {
         global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -54,7 +53,7 @@ impl Observability {
 
         // Filters
         let env_filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new(tracing_level.as_str().to_lowercase()));
+            .unwrap_or_else(|_| EnvFilter::new(Level::INFO.as_str().to_lowercase()));
 
         // Stdout
         let timer = LocalTime::new(format_description!(

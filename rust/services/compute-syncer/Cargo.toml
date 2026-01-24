@@ -33,3 +33,4 @@ k8s-openapi.workspace = true
 schemars.workspace = true
 prometheus-client.workspace = true
 prometheus-http-query = "0.8.3"
+config.workspace = true

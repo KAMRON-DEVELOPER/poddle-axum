@@ -9,7 +9,7 @@ use crate::{
             Tokens, UserIn, VerifyQuery,
         },
     },
-    services::build_oauth::{GithubOAuthClient, GoogleOAuthClient},
+    services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
 };
 use bcrypt::{DEFAULT_COST, hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
@@ -162,7 +162,9 @@ pub async fn google_oauth_callback_handler(
         .http_only(true)
         .path("/")
         .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(config.refresh_token_expire_in_days))
+        .max_age(CookieDuration::days(
+            config.jwt.refresh_token_expire_in_days,
+        ))
         .secure(config.cookie_secure);
     let jar = jar.add(refresh_cookie);
 
@@ -307,7 +309,9 @@ pub async fn github_oauth_callback_handler(
         .http_only(true)
         .path("/")
         .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(config.refresh_token_expire_in_days))
+        .max_age(CookieDuration::days(
+            config.jwt.refresh_token_expire_in_days,
+        ))
         .secure(config.cookie_secure);
     let jar = jar.add(refresh_cookie);
 
@@ -375,7 +379,7 @@ pub async fn continue_with_email_handler(
         let access_token = create_token(&config, user.id, TokenType::Access)?;
         let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
 
-        let max_age_days = config.refresh_token_expire_in_days;
+        let max_age_days = config.jwt.refresh_token_expire_in_days;
         let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
             .http_only(true)
             .path("/")
@@ -445,8 +449,7 @@ pub async fn continue_with_email_handler(
             &user.email,
             &user.username,
             &verification_link,
-            &config.email_service_api_key,
-            &config.email_service_verification_template_uuid,
+            &config.mailtrap,
         )
         .await
     {
@@ -456,7 +459,7 @@ pub async fn continue_with_email_handler(
             let access_token = create_token(&config, user.id, TokenType::Access)?;
             let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
 
-            let max_age_days = config.refresh_token_expire_in_days;
+            let max_age_days = config.jwt.refresh_token_expire_in_days;
             let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
                 .http_only(true)
                 .path("/")
@@ -641,7 +644,7 @@ pub async fn refresh_handler(
     }
 
     let now = Utc::now().timestamp();
-    let threshold_secs = config.refresh_token_renewal_threshold_days * 24 * 60 * 60;
+    let threshold_secs = config.jwt.refresh_token_renewal_threshold_days * 24 * 60 * 60;
     let refresh_token = if claims.exp.saturating_sub(now) < threshold_secs {
         Some(create_token(&config, claims.sub, TokenType::Refresh)?)
     } else {
@@ -650,7 +653,7 @@ pub async fn refresh_handler(
 
     let jar = if is_web {
         if let Some(ref refresh) = refresh_token {
-            let max_age_days = config.refresh_token_expire_in_days;
+            let max_age_days = config.jwt.refresh_token_expire_in_days;
             let cookie = Cookie::build(("refresh_token", refresh.clone()))
                 .http_only(true)
                 .same_site(SameSite::Lax)

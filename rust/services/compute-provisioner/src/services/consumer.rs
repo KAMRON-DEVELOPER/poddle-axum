@@ -1,12 +1,8 @@
 use compute_core::schemas::{
     CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage,
 };
-use factory::factories::{
-    amqp::{Amqp, AmqpPropagator},
-    redis::Redis,
-};
+use factory::factories::amqp::AmqpPropagator;
 use futures::StreamExt;
-use kube::Client;
 use lapin::{
     Consumer,
     options::{
@@ -16,45 +12,14 @@ use lapin::{
     types::{AMQPValue, FieldTable},
 };
 
-use sqlx::{Pool, Postgres};
 use tokio::task::JoinSet;
 use tracing::{Instrument, debug, error, info, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::{
-    error::AppError,
-    services::{kubernetes_service::KubernetesService, vault_service::VaultService},
-};
+use crate::{error::AppError, services::kubernetes_service::KubernetesService};
 
-pub async fn start_consumer(
-    amqp: Amqp,
-    redis: Redis,
-    pool: Pool<Postgres>,
-    client: Client,
-    domain: String,
-    traefik_namespace: String,
-    cluster_issuer_name: String,
-    ingress_class_name: Option<String>,
-    wildcard_certificate_name: String,
-    wildcard_certificate_secret_name: String,
-    vault_service: VaultService,
-) -> Result<(), AppError> {
-    let channel = amqp.channel().await;
-
-    let kubernetes_service = KubernetesService {
-        client,
-        pool,
-        redis,
-        vault_service,
-        domain,
-        traefik_namespace,
-        cluster_issuer_name,
-        ingress_class_name,
-        wildcard_certificate_name,
-        wildcard_certificate_secret_name,
-    };
-
-    kubernetes_service.init().await?;
+pub async fn start_consumer(service: KubernetesService) -> Result<(), AppError> {
+    let channel = service.amqp.channel().await;
 
     // Declare exchange
     channel
@@ -135,20 +100,9 @@ pub async fn start_consumer(
     // Create a JoinSet to hold our tasks
     let mut set = JoinSet::new();
 
-    set.spawn(handle_create_messages(
-        kubernetes_service.clone(),
-        create_consumer,
-    ));
-
-    set.spawn(handle_update_messages(
-        kubernetes_service.clone(),
-        update_consumer,
-    ));
-
-    set.spawn(handle_delete_messages(
-        kubernetes_service.clone(),
-        delete_consumer,
-    ));
+    set.spawn(handle_create_messages(service.clone(), create_consumer));
+    set.spawn(handle_update_messages(service.clone(), update_consumer));
+    set.spawn(handle_delete_messages(service.clone(), delete_consumer));
 
     info!("✅ RabbitMQ consumers started");
 

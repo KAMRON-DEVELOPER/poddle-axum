@@ -1,0 +1,223 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://poddle.uz/schemas/configs.schema.json",
+  "title": "Poddle Service Configuration",
+  "type": "object",
+  "additionalProperties": false,
+
+  "required": ["tracing_level", "server_address", "database", "redis", "kubernetes", "vault"],
+
+  "properties": {
+    "tracing_level": {
+      "type": "string",
+      "description": "Tracing / logging level",
+      "enum": ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"]
+    },
+
+    "server_address": {
+      "type": "string",
+      "description": "Bind address for the HTTP server",
+      "pattern": "^[^:]+:\\d+$",
+      "examples": ["0.0.0.0:8005"]
+    },
+
+    "otel_exporter_otlp_endpoint": {
+      "type": "string",
+      "description": "OTLP exporter endpoint",
+      "format": "uri"
+    },
+
+    "tls": {
+      "type": "object",
+      "description": "TLS configuration (optional CA material)",
+      "additionalProperties": false,
+      "properties": {
+        "ca": { "type": "string" },
+        "ca_path": { "type": "string" },
+        "ca_cert": { "type": "string" },
+        "ca_cert_path": { "type": "string" },
+        "ca_key": { "type": "string" },
+        "ca_key_path": { "type": "string" }
+      }
+    },
+
+    "database": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "description": "PostgreSQL connection string",
+          "pattern": "^postgres(ql)?://"
+        },
+        "max_connections": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 10000,
+          "default": 10
+        },
+        "pg_ssl_mode": {
+          "type": "string",
+          "description": "PostgreSQL SSL mode",
+          "enum": ["Disable", "Allow", "Prefer", "Require", "VerifyCa", "VerifyFull"]
+        }
+      }
+    },
+
+    "redis": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url"],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^redis://"
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": { "type": "string" },
+            "port": { "type": "string" },
+            "username": { "type": "string" },
+            "password": { "type": "string" }
+          }
+        }
+      }
+    },
+
+    "amqp_addr": {
+      "type": "string",
+      "description": "AMQP connection address",
+      "pattern": "^amqp://"
+    },
+
+    "kafka_bootstrap_servers": {
+      "type": "string",
+      "description": "Kafka bootstrap servers",
+      "examples": ["localhost:9092"]
+    },
+
+    "kubernetes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kubeconfig"],
+      "properties": {
+        "kubeconfig": {
+          "type": "string",
+          "description": "Path to kubeconfig file"
+        },
+
+        "traefik": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["domain"],
+          "properties": {
+            "domain": { "type": "string" },
+            "namespace": { "type": "string" },
+            "entry_points": {
+              "type": "string",
+              "description": "Comma-separated Traefik entry points"
+            }
+          }
+        },
+
+        "prometheus": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["url"],
+          "properties": {
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "scrape_interval_seconds": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "metric_snapshots_to_keep": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+
+        "cert_manager": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["cluster_issuer"],
+          "properties": {
+            "cluster_issuer": { "type": "string" },
+            "wildcard_certificate": { "type": "string" },
+            "wildcard_certificate_duration": {
+              "type": "string",
+              "pattern": "^\\d+[smhd]$",
+              "description": "Duration (e.g. 720h)"
+            },
+            "wildcard_certificate_renew_before": {
+              "type": "string",
+              "pattern": "^\\d+[smhd]$"
+            }
+          }
+        }
+      }
+    },
+
+    "vault": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["vault_connection"],
+      "properties": {
+        "auth_mount": { "type": "string" },
+        "auth_role": { "type": "string" },
+        "auth_jwt": { "type": "string" },
+
+        "kv_mount": { "type": "string" },
+
+        "vault_connection": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["address"],
+          "properties": {
+            "address": {
+              "type": "string",
+              "format": "uri"
+            },
+            "name": { "type": "string" },
+            "skip_tls_verify": { "type": "boolean" }
+          }
+        },
+
+        "vault_auth": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "name": { "type": "string" },
+            "mount": { "type": "string" },
+            "kubernetes": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "role": { "type": "string" },
+                "service_account": { "type": "string" }
+              }
+            }
+          }
+        },
+
+        "vault_static_secret": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "refresh_after": {
+              "type": "string",
+              "pattern": "^\\d+[smhd]$",
+              "description": "Refresh interval (e.g. 300s)"
+            }
+          }
+        }
+      }
+    }
+  }
+}

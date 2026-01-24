@@ -1,17 +1,21 @@
 use std::path::PathBuf;
 
-use compute_core::configs::PrometheusConfig;
 use config::{ConfigBuilder, ConfigError, Environment, File, builder::AsyncState};
 use factory::factories::{
     amqp::AmqpConfig, database::DatabaseConfig, redis::RedisConfig, tls::TlsConfig,
 };
 use serde::Deserialize;
 
+use crate::services::{
+    kubernetes_service::KubernetesServiceConfig, vault_service::VaultServiceConfig,
+};
+
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub tracing_level: String,
     pub server_address: String,
-    pub prometheus: PrometheusConfig,
+    pub kubernetes: KubernetesServiceConfig,
+    pub vault: VaultServiceConfig,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub amqp_addr: AmqpConfig,

@@ -5,7 +5,7 @@ use axum_extra::extract::cookie::Key;
 use factory::factories::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis};
 
 use rustls::ClientConfig;
-use users_core::jwt::JwtConfig;
+use users_core::jwt::JwtCapability;
 
 #[derive(FromRef, Clone)]
 pub struct AppState {
@@ -40,7 +40,7 @@ impl AppState {
 }
 
 // Option B: State can produce a JwtConfig via FromRef
-impl FromRef<AppState> for Box<dyn JwtConfig> {
+impl FromRef<AppState> for Box<dyn JwtCapability> {
     fn from_ref(state: &AppState) -> Self {
         Box::new(state.config.clone()) // assuming Config implements JwtConfig
     }

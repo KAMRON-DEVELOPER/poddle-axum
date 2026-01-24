@@ -14,29 +14,30 @@ use tracing::{error, info};
 use crate::{config::Config, error::AppError};
 
 pub async fn start_metrics_scraper(
-    config: Config,
-    prometheus: PrometheusClient,
+    cfg: Config,
     redis: Redis,
+    prometheus: PrometheusClient,
 ) -> Result<(), AppError> {
     info!("📈 Starting Prometheus metrics scraper");
     info!(
         "⚙️  Scrape interval: {}s, Snapshot to keep: {}",
-        config.scrape_interval_seconds, config.metric_snapshots_to_keep
+        cfg.prometheus.scrape_interval_seconds, cfg.prometheus.metric_snapshots_to_keep
     );
 
-    let mut interval = tokio::time::interval(Duration::from_secs(config.scrape_interval_seconds));
+    let mut interval =
+        tokio::time::interval(Duration::from_secs(cfg.prometheus.scrape_interval_seconds));
 
     loop {
         interval.tick().await;
 
-        if let Err(e) = scrape(&config, &prometheus, redis.clone()).await {
+        if let Err(e) = scrape(&cfg, &prometheus, redis.clone()).await {
             error!("Failed to scrape metrics: {}", e);
         }
     }
 }
 
 async fn scrape(
-    config: &Config,
+    cfg: &Config,
     prometheus: &PrometheusClient,
     mut redis: Redis,
 ) -> Result<(), AppError> {
@@ -114,7 +115,7 @@ async fn scrape(
 
     // Pipeline to Redis
     let mut pipe = redis::pipe();
-    let metric_snapshots_to_keep = config.metric_snapshots_to_keep as i64;
+    let metric_snapshots_to_keep = cfg.prometheus.metric_snapshots_to_keep;
     let mut total_deployments = 0;
 
     for (project_id, deployment_map) in project_map {
@@ -147,7 +148,8 @@ async fn scrape(
             };
             let _ = pipe.json_arr_append(&key, "$.history", &metric_snapshot);
             let _ = pipe.json_arr_trim(&key, "$.history", -metric_snapshots_to_keep, -1);
-            let ttl = config.scrape_interval_seconds * config.metric_snapshots_to_keep;
+            let ttl = cfg.prometheus.scrape_interval_seconds
+                * cfg.prometheus.metric_snapshots_to_keep as u64;
             pipe.expire(&key, ttl.try_into().unwrap()).ignore();
         }
 

@@ -36,32 +36,31 @@ async fn main() -> anyhow::Result<()> {
     dotenvy::dotenv().ok();
 
     println!("🔍 Loading configuration...");
-    let config = Config::init(cargo_manifest_dir).await?;
+    let cfg = Config::init(cargo_manifest_dir).await?;
 
-    println!("🌐 Server address: {}", config.server_address);
-    println!("📡 OTLP endpoint: {}", config.otel_exporter_otlp_endpoint);
+    println!("🌐 Server address: {}", cfg.server_address);
+    println!("📡 OTLP endpoint: {}", cfg.otel_exporter_otlp_endpoint);
 
     println!("🔭 Initializing observability...");
     let _guard = Observability::init(
-        &config.otel_exporter_otlp_endpoint,
+        &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
-        config.tracing_level,
     )
     .await;
 
     println!("🏗️  Building application...");
-    let app = app::app(&config).await?;
+    let app = app::app(&cfg).await?;
 
-    println!("🔌 Binding to {}...", config.server_address);
-    let listener = tokio::net::TcpListener::bind(config.server_address).await?;
+    println!("🔌 Binding to {}...", cfg.server_address);
+    let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
 
     warn_span!("🚀 service running");
     error_span!("🚀 service running");
 
     info!(
         "🚀 {} service running at {:#?}",
-        cargo_pkg_name, config.server_address
+        cargo_pkg_name, cfg.server_address
     );
     axum::serve(
         listener,

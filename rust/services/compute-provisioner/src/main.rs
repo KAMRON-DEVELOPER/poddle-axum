@@ -1,18 +1,19 @@
 pub mod app;
+pub mod config;
 pub mod error;
 pub mod implementations;
 pub mod services;
-pub mod settings;
 
+use core::panic;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::result::Result::Ok;
 
+use config::Config;
 use factory::factories::{
     amqp::Amqp, database::Database, kubernetes::Kubernetes, observability::Observability,
     redis::Redis,
 };
-use settings::Settings;
 
 use tokio::task::JoinSet;
 use tracing::{error, info};
@@ -20,7 +21,10 @@ use utility::shutdown_signal::shutdown_signal;
 
 use crate::{
     error::AppError,
-    services::{consumer::start_consumer, vault_service::VaultService},
+    services::{
+        consumer::start_consumer, kubernetes_service::KubernetesService,
+        vault_service::VaultService,
+    },
 };
 
 #[tokio::main]
@@ -42,44 +46,43 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    let settings = Settings::init(cargo_manifest_dir).await?;
+    let cfg = Config::init(cargo_manifest_dir).await?;
+
     let _guard = Observability::init(
-        &config.otel_exporter_otlp_endpoint,
+        &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
-        config.tracing_level,
     )
     .await;
 
     // Initialize services
-    // let rustls_config = build_rustls_config(&config)?;
-    let database = Database::new(&config).await;
-    let redis = Redis::new(&config).await;
-    let kubernetes = Kubernetes::new(&config).await?;
-    let amqp = Amqp::new(&config).await;
-    // let kafka = Kafka::new(&config, "compute-service-group")?;
+    // let rustls_config = build_rustls_config(&cfg)?;
+    let database = Database::new(&cfg.database).await;
+    let redis = Redis::new(&cfg.redis).await;
+    let kubernetes = Kubernetes::new().await?;
+    let amqp = Amqp::new(&cfg.amqp_addr).await;
+    // let kafka = Kafka::new(&cfg, "compute-service-group")?;
     // let http_client = reqwest::ClientBuilder::new()
     //     .redirect(reqwest::redirect::Policy::none())
     //     .build()?;
-    let vault_service = VaultService::init(&config).await?;
+    let vault_service = VaultService::init(&cfg.vault).await?;
+
+    let kubernetes_service = KubernetesService {
+        client: kubernetes.client,
+        pool: database.pool,
+        redis,
+        amqp,
+        vault_service,
+        cfg: cfg.kubernetes,
+    };
+
+    kubernetes_service.init().await?;
 
     let mut set = JoinSet::new();
 
     // Spawn background tasks
-    set.spawn(start_consumer(
-        amqp,
-        redis,
-        database.pool,
-        kubernetes.client,
-        config.domain,
-        config.traefik_namespace,
-        config.cluster_issuer_name,
-        config.ingress_class_name,
-        config.wildcard_certificate_name,
-        config.wildcard_certificate_secret_name,
-        vault_service,
-    ));
-    set.spawn(start_health_server(cargo_pkg_name, config.server_address));
+    set.spawn(start_consumer(kubernetes_service));
+    set.spawn(start_health_server(cargo_pkg_name, cfg.server_address));
 
     info!("✅ All background tasks started");
 
@@ -104,8 +107,11 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Start a simple HTTP server for health checks and metrics
-async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
+async fn start_health_server(cargo_pkg_name: &str, server_address: String) -> Result<(), AppError> {
     let app = app::app().await?;
+    let addr = server_address
+        .parse::<SocketAddr>()
+        .expect("Server address is invalid");
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);

@@ -6,7 +6,7 @@ use axum::{
 
 use crate::{
     error::JwtError,
-    jwt::{Claims, JwtConfig, TokenType, verify_token},
+    jwt::{Claims, JwtCapability, TokenType, verify_token},
 };
 use axum_extra::{
     TypedHeader,
@@ -41,7 +41,7 @@ use axum_extra::{
 impl<S> FromRequestParts<S> for Claims
 where
     S: Send + Sync,
-    Box<dyn JwtConfig>: FromRef<S>,
+    Box<dyn JwtCapability>: FromRef<S>,
 {
     type Rejection = JwtError;
 
@@ -51,7 +51,7 @@ where
             .await
             .map_err(|_| JwtError::Invalid)?;
 
-        let config = Box::<dyn JwtConfig>::from_ref(state);
+        let config = Box::<dyn JwtCapability>::from_ref(state);
 
         let claims = verify_token(&*config, bearer.token())?;
 

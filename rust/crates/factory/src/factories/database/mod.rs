@@ -6,7 +6,7 @@ use sqlx::PgPool;
 
 use crate::factories::tls::TlsConfig;
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, Debug)]
 pub struct DatabaseConfig {
     pub url: String,
     pub pg_ssl_mode: Option<String>,

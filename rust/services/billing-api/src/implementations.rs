@@ -6,7 +6,7 @@ use factory::factories::{
     zepto::error::ZeptoError,
 };
 use sqlx::postgres::PgSslMode;
-use users_core::jwt::JwtConfig;
+use users_core::jwt::JwtCapability;
 
 use crate::config::Config;
 
@@ -118,7 +118,7 @@ impl AmqpConfig for Config {
     }
 }
 
-impl JwtConfig for Config {
+impl JwtCapability for Config {
     fn jwt_secret(&self) -> &str {
         &self.jwt_secret_key
     }

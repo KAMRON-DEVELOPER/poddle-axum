@@ -4,8 +4,14 @@ pub mod implementation;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
+#[derive(Deserialize, Clone, Debug)]
+pub struct MailtrapConfig {
+    pub api_key: String,
+    pub verification_template_uuid: String,
+}
+
 pub struct Mailtrap {
-    api_url: String,
+    url: String,
     client: Client,
 }
 

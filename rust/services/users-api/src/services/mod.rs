@@ -1,2 +1,3 @@
-pub mod build_oauth;
-pub mod build_s3;
+pub mod github_oauth;
+pub mod google_oauth;
+pub mod s3;

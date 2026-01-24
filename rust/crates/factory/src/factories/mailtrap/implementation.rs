@@ -2,7 +2,8 @@ use reqwest::Client;
 use tracing::{debug, error};
 
 use crate::factories::mailtrap::{
-    ErrorResponse, Mailbox, Mailtrap, Payload, SuccessResponse, error::MailtrapError,
+    ErrorResponse, Mailbox, Mailtrap, MailtrapConfig, Payload, SuccessResponse,
+    error::MailtrapError,
 };
 
 use std::fmt;
@@ -16,21 +17,14 @@ impl Default for Mailtrap {
 impl Mailtrap {
     pub fn new() -> Self {
         Self {
-            api_url: "https://send.api.mailtrap.io/api/send".to_string(),
+            url: "https://send.api.mailtrap.io/api/send".to_string(),
             client: Client::new(),
         }
     }
 
     #[tracing::instrument(
         name = "mailtrip.send_email_verification_link",
-        skip(
-            self,
-            to_email,
-            name,
-            link,
-            email_service_api_key,
-            email_service_verification_template_uuid
-        ), fields(recipient = %to_email)
+        skip_all, fields(recipient = %to_email)
         err
     )]
     pub async fn send_email_verification_link(
@@ -38,8 +32,7 @@ impl Mailtrap {
         to_email: &str,
         name: &str,
         link: &str,
-        email_service_api_key: &str,
-        email_service_verification_template_uuid: &str,
+        cfg: &MailtrapConfig,
     ) -> Result<(), MailtrapError> {
         debug!("Sending email...");
         let payload = Payload {
@@ -51,7 +44,7 @@ impl Mailtrap {
                 email: to_email.to_string(),
                 name: name.to_string(),
             }],
-            template_uuid: email_service_verification_template_uuid.into(),
+            template_uuid: cfg.clone().verification_template_uuid.into(),
             template_variables: serde_json::json!({
                 "link": link
             }),
@@ -61,10 +54,10 @@ impl Mailtrap {
 
         let res = self
             .client
-            .post(&self.api_url)
+            .post(&self.url)
             .header("accept", "application/json")
             .header("content-type", "application/json")
-            .header("authorization", email_service_api_key)
+            .header("authorization", cfg.clone().api_key)
             .json(&payload)
             .send()
             .await?;

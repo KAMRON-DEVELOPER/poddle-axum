@@ -4,6 +4,7 @@ use kube::{Api, Client};
 use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{error, info, warn};
+use uuid::Uuid;
 
 use crate::error::AppError;
 
@@ -22,11 +23,35 @@ pub async fn start_reconciliation_loop(pool: PgPool, client: Client) -> Result<(
     }
 }
 
+fn format_namespace(user_id: &Uuid) -> String {
+    format!(
+        "app-{}",
+        user_id
+            .as_simple()
+            .to_string()
+            .chars()
+            .take(8)
+            .collect::<String>()
+    )
+}
+
+fn format_resource_name(deployment_id: &Uuid) -> String {
+    format!(
+        "app-{}",
+        deployment_id
+            .as_simple()
+            .to_string()
+            .chars()
+            .take(8)
+            .collect::<String>()
+    )
+}
+
 async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(), AppError> {
     // Fetch all active deployments from database
     let db_deployments = sqlx::query!(
         r#"
-            SELECT id, cluster_namespace, cluster_deployment_name, status as "status: DeploymentStatus", replicas
+            SELECT id, user_id, status as "status: DeploymentStatus", desired_replicas, ready_replicas, available_replicas
             FROM deployments
             WHERE status NOT IN ('failed', 'suspended')
         "#
@@ -37,8 +62,8 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
     info!("🔍 Reconciling {} deployments", db_deployments.len());
 
     for db_deployment in db_deployments {
-        let namespace = &db_deployment.cluster_namespace;
-        let deployment_name = &db_deployment.cluster_deployment_name;
+        let namespace = &format_namespace(&db_deployment.user_id);
+        let deployment_name = &format_resource_name(&db_deployment.id);
         let deployment_id = db_deployment.id;
 
         // Try to fetch from Kubernetes
@@ -81,17 +106,17 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
                 }
 
                 // Check replica count drift
-                if desired != db_deployment.replicas {
+                if desired != db_deployment.desired_replicas {
                     warn!(
                         "⚠️ Replica drift for {}: DB={}, K8s={}",
-                        deployment_id, db_deployment.replicas, desired
+                        deployment_id, db_deployment.desired_replicas, desired
                     );
 
                     // Update DB to match K8s (K8s is source of truth for actual state)
                     sqlx::query!(
                         r#"
                         UPDATE deployments
-                        SET replicas = $2, updated_at = NOW()
+                        SET desired_replicas = $2
                         WHERE id = $1
                         "#,
                         deployment_id,
