@@ -196,9 +196,9 @@ impl KubernetesService {
 
         let secret_name = self
             .create_vault_static_secret(
+                &msg.deployment_id.to_string(),
                 &namespace,
                 &resource_name,
-                &msg.deployment_id.to_string(),
                 msg.secrets,
             )
             .await?;
@@ -235,52 +235,52 @@ impl KubernetesService {
     /// Create VSO resources
     async fn create_vault_static_secret(
         &self,
-        deployment_namespace: &str,
-        deployment_name: &str,
         deployment_id: &str,
+        ns: &str,
+        name: &str,
         secrets: Option<HashMap<String, String>>,
     ) -> Result<Option<String>, AppError> {
         // Option::filter is essentially a way to apply an additional condition to an Option that is already known to be Some
-        // We are checking to be empty as additional condition
-        if secrets.filter(|hm| hm.is_empty()).is_none() || secrets.is_none() {
+        if secrets.clone().filter(|hm| hm.is_empty()).is_none() || secrets.is_none() {
             return Ok(None);
         }
 
         // Write to Vault
         let secret_path = self
             .vault_service
-            .store_secrets(deployment_namespace, deployment_id, secrets)
+            .store_secrets(ns, deployment_id, secrets.unwrap())
             .await?;
-
-        // Define the VSO Resource
-        let vault_static_secret_name = format!("{}-vso", deployment_name);
-        let secret_name = format!("{}-secrets", deployment_name);
 
         let vault_static_secret = VaultStaticSecret {
             metadata: ObjectMeta {
-                name: Some(vault_static_secret_name),
-                namespace: Some(deployment_namespace.to_owned()),
+                name: Some(name.to_owned()),
+                namespace: Some(ns.to_owned()),
                 ..Default::default()
             },
             spec: VaultStaticSecretSpec {
-                vault_auth_ref: self.vault_service.cfg.vault_auth.name,
-                mount: self.vault_service.cfg.kv_mount,
+                vault_auth_ref: self.vault_service.cfg.vault_auth.name.clone(),
+                mount: self.vault_service.cfg.kv_mount.clone(),
                 r#type: VaultStaticSecretType::KvV2,
                 path: secret_path,
                 destination: VaultStaticSecretDestination {
                     create: Some(true),
-                    name: secret_name,
+                    name: name.to_owned(),
                     ..Default::default()
                 },
                 // reconcilation interval
-                refresh_after: self.vault_service.cfg.vault_static_secret.refresh_after,
+                refresh_after: self
+                    .vault_service
+                    .cfg
+                    .vault_static_secret
+                    .refresh_after
+                    .clone(),
                 // Restart the deployment if secrets change
                 rollout_restart_targets: Some(vec![VaultStaticSecretRolloutRestartTargets {
                     kind: VaultStaticSecretRolloutRestartTargetsKind::Deployment,
-                    name: deployment_name.to_string(),
+                    name: name.to_string(),
                 }]),
                 hmac_secret_data: Some(true),
-                namespace: Some(deployment_namespace.to_owned()),
+                namespace: Some(ns.to_owned()),
                 sync_config: None,
                 version: Some(2),
             },
@@ -289,7 +289,7 @@ impl KubernetesService {
 
         // APPLY the VSO CRD
         let vault_static_secret_api: Api<VaultStaticSecret> =
-            Api::namespaced(self.client, deployment_namespace);
+            Api::namespaced(self.client.clone(), ns);
 
         vault_static_secret_api
             .create(&PostParams::default(), &vault_static_secret)
@@ -300,7 +300,7 @@ impl KubernetesService {
                 AppError::InternalServerError(format!("Failed to create VSO Secret: {}", e))
             })?;
 
-        Ok(Some(secret_name))
+        Ok(Some(name.to_owned()))
     }
 
     async fn _create_k8s_secret(
