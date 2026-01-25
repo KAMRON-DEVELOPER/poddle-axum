@@ -183,7 +183,7 @@ impl KubernetesService {
         self.create_resources(msg).await?;
 
         let query_result =
-            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Healthy, &pool)
+            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Running, &pool)
                 .await?;
 
         if query_result.rows_affected() == 0 {
@@ -213,7 +213,7 @@ impl KubernetesService {
         let now = Utc::now().timestamp();
         let message = json!({
             "type": "status_update",
-            "status": "healthy",
+            "status": "running",
             "deployment_id": &deployment_id,
             "timestamp": now,
         });
@@ -861,7 +861,7 @@ impl KubernetesService {
 
         // Update status back to 'healthy'
         let query_result =
-            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Healthy, &pool)
+            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Running, &pool)
                 .await?;
 
         if query_result.rows_affected() == 0 {
@@ -880,7 +880,7 @@ impl KubernetesService {
         let now = Utc::now().timestamp();
         let message = json!({
             "type": "status_update",
-            "status": "healthy",
+            "status": "running",
             "deployment_id": &deployment_id,
             "timestamp": now,
         });

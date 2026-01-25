@@ -250,7 +250,7 @@ fn determine_deployment_status(
     }
 
     if ready == desired && available == desired && updated == desired {
-        return DeploymentStatus::Healthy;
+        return DeploymentStatus::Running;
     }
 
     if ready > 0 && ready < desired {

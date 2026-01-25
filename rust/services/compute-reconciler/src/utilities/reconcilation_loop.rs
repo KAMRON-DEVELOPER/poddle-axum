@@ -163,7 +163,7 @@ fn determine_status(desired: i32, ready: i32, available: i32, updated: i32) -> D
     }
 
     if ready == desired && available == desired && updated == desired {
-        return DeploymentStatus::Healthy;
+        return DeploymentStatus::Running;
     }
 
     if ready > 0 && ready < desired {
