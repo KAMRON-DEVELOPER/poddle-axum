@@ -1,5 +1,5 @@
 [package]
-name = "compute-syncer"
+name = "compute-reconciler"
 version = "0.1.0"
 edition = "2024"
 

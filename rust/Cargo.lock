@@ -841,6 +841,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "compute-metrics-worker"
+version = "0.1.0"
+
+[[package]]
 name = "compute-provisioner"
 version = "0.1.0"
 dependencies = [
@@ -885,7 +889,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "compute-syncer"
+name = "compute-reconciler"
 version = "0.1.0"
 dependencies = [
  "anyhow",

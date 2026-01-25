@@ -5,13 +5,14 @@ members = [
     "services/billing-worker",
     "services/compute-api",
     "services/compute-provisioner",
-    "services/compute-syncer",
+    "services/compute-reconciler",
     "services/ai-orchestrator",
     "crates/factory",
     "crates/utility",
     "crates/users-core",
     "crates/http-contracts",
     "crates/compute-core",
+    "services/compute-metrics-worker",
 ]
 
 resolver = "2"
