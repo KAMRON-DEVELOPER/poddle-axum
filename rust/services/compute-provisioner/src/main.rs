@@ -22,7 +22,8 @@ use utility::shutdown_signal::shutdown_signal;
 use crate::{
     error::AppError,
     services::{
-        consumer::start_consumer, kubernetes_service::KubernetesService,
+        consumer::{ConsumerContext, start_consumer},
+        kubernetes_service::KubernetesService,
         vault_service::VaultService,
     },
 };
@@ -52,6 +53,7 @@ async fn main() -> anyhow::Result<()> {
         &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
+        cfg.tracing_level.as_deref(),
     )
     .await;
 
@@ -67,21 +69,25 @@ async fn main() -> anyhow::Result<()> {
     //     .build()?;
     let vault_service = VaultService::init(&cfg.vault).await?;
 
-    let kubernetes_service = KubernetesService {
+    let k8s = KubernetesService {
         client: kubernetes.client,
-        pool: database.pool,
-        redis,
-        amqp,
-        vault_service,
         cfg: cfg.kubernetes,
+        vault_service,
     };
 
-    kubernetes_service.init().await?;
+    k8s.init().await?;
+
+    let ctx = ConsumerContext {
+        database,
+        redis,
+        amqp,
+        k8s,
+    };
 
     let mut set = JoinSet::new();
 
     // Spawn background tasks
-    set.spawn(start_consumer(kubernetes_service));
+    set.spawn(start_consumer(ctx));
     set.spawn(start_health_server(cargo_pkg_name, cfg.server_address));
 
     info!("✅ All background tasks started");
@@ -107,11 +113,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Start a simple HTTP server for health checks and metrics
-async fn start_health_server(cargo_pkg_name: &str, server_address: String) -> Result<(), AppError> {
+async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
     let app = app::app().await?;
-    let addr = server_address
-        .parse::<SocketAddr>()
-        .expect("Server address is invalid");
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);

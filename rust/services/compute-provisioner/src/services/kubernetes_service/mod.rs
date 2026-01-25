@@ -1,8 +1,6 @@
 use compute_core::configs::PrometheusConfig;
-use factory::factories::{amqp::Amqp, redis::Redis};
 use kube::Client;
 use serde::Deserialize;
-use sqlx::PgPool;
 
 use crate::services::vault_service::VaultService;
 
@@ -35,9 +33,6 @@ pub struct KubernetesServiceConfig {
 #[derive(Clone)]
 pub struct KubernetesService {
     pub client: Client,
-    pub pool: PgPool,
-    pub redis: Redis,
-    pub amqp: Amqp,
-    pub vault_service: VaultService,
     pub cfg: KubernetesServiceConfig,
+    pub vault_service: VaultService,
 }

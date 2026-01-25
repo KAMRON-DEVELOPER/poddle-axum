@@ -20,8 +20,8 @@ use k8s_openapi::{
 };
 use kcr_cert_manager_io::v1::{certificates::Certificate, clusterissuers::ClusterIssuer};
 use kcr_secrets_hashicorp_com::v1beta1::{
-    vaultauths::{VaultAuth, VaultAuthKubernetes, VaultAuthMethod, VaultAuthSpec},
-    vaultconnections::{VaultConnection, VaultConnectionSpec},
+    vaultauths::{VaultAuth, VaultAuthKubernetes, VaultAuthMethod},
+    vaultconnections::VaultConnection,
     vaultstaticsecrets::{
         VaultStaticSecret, VaultStaticSecretDestination, VaultStaticSecretRolloutRestartTargets,
         VaultStaticSecretRolloutRestartTargetsKind, VaultStaticSecretSpec, VaultStaticSecretType,
@@ -29,7 +29,7 @@ use kcr_secrets_hashicorp_com::v1beta1::{
 };
 use kcr_traefik_io::v1alpha1::ingressroutes::{
     IngressRoute, IngressRouteParentRefs, IngressRouteRoutes, IngressRouteRoutesServices,
-    IngressRouteSpec,
+    IngressRouteSpec, IngressRouteTls, IngressRouteTlsDomains,
 };
 
 use kube::{
@@ -38,7 +38,9 @@ use kube::{
 };
 
 use redis::AsyncTypedCommands;
+use redis::aio::MultiplexedConnection;
 use serde_json::json;
+use sqlx::PgPool;
 use tracing::{Instrument, error, info, info_span, warn};
 use uuid::Uuid;
 
@@ -107,7 +109,12 @@ impl KubernetesService {
         fields(user_id = %msg.user_id, project_id = %msg.project_id, deployment_id = %msg.deployment_id),
         err
     )]
-    pub async fn create(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
+    pub async fn create(
+        &self,
+        pool: PgPool,
+        mut con: MultiplexedConnection,
+        msg: CreateDeploymentMessage,
+    ) -> Result<(), AppError> {
         let user_id = msg.user_id.clone();
         let project_id = msg.project_id.clone();
         let deployment_id = msg.deployment_id.clone();
@@ -123,7 +130,7 @@ impl KubernetesService {
         let query_result = DeploymentRepository::update_status(
             &deployment_id,
             DeploymentStatus::Provisioning,
-            &self.pool,
+            &pool,
         )
         .await?;
 
@@ -144,22 +151,16 @@ impl KubernetesService {
             "deployment_id": &deployment_id,
             "timestamp": now,
         });
-        let _ = self
-            .redis
-            .clone()
-            .connection
+        let _ = con
             .publish(channel, message.to_string())
             .instrument(info_span!("pubsub.status_update"))
             .await;
 
         self.create_k8s_resources(msg).await?;
 
-        let query_result = DeploymentRepository::update_status(
-            &deployment_id,
-            DeploymentStatus::Starting,
-            &self.pool,
-        )
-        .await?;
+        let query_result =
+            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Starting, &pool)
+                .await?;
 
         if query_result.rows_affected() == 0 {
             warn!(
@@ -215,13 +216,12 @@ impl KubernetesService {
         )
         .await?;
 
-        self.create_k8s_service(&namespace, &service_name, msg.port, &labels)
+        self.create_k8s_service(&namespace, &resource_name, msg.port, &labels)
             .await?;
 
         // ! ERROR, We use Traefik IngressRoute
         self.create_traefik_ingressroute(
             namespace,
-            resource_name,
             resource_name,
             msg.domain,
             msg.subdomain,
@@ -263,8 +263,8 @@ impl KubernetesService {
                 ..Default::default()
             },
             spec: VaultStaticSecretSpec {
-                vault_auth_ref: self.vault_service.vault_auth,
-                mount: self.vault_service.kv_mount,
+                vault_auth_ref: self.vault_service.cfg.vault_auth.name,
+                mount: self.vault_service.cfg.kv_mount,
                 r#type: VaultStaticSecretType::KvV2,
                 path: secret_path,
                 destination: VaultStaticSecretDestination {
@@ -273,7 +273,7 @@ impl KubernetesService {
                     ..Default::default()
                 },
                 // reconcilation interval
-                refresh_after: self.vault_service.refresh_after,
+                refresh_after: self.vault_service.cfg.vault_static_secret.refresh_after,
                 // Restart the deployment if secrets change
                 rollout_restart_targets: Some(vec![VaultStaticSecretRolloutRestartTargets {
                     kind: VaultStaticSecretRolloutRestartTargetsKind::Deployment,
@@ -460,7 +460,7 @@ impl KubernetesService {
         &self,
         namespace: &str,
         name: &str,
-        container_port: i32,
+        port: i32,
         labels: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let services_api: Api<Service> = Api::namespaced(self.client.clone(), namespace);
@@ -477,7 +477,7 @@ impl KubernetesService {
                 ports: Some(vec![ServicePort {
                     name: Some("http".to_string()),
                     port: 80,
-                    target_port: Some(IntOrString::Int(container_port)),
+                    target_port: Some(IntOrString::Int(port)),
                     protocol: Some("TCP".to_string()),
                     ..Default::default()
                 }]),
@@ -501,8 +501,7 @@ impl KubernetesService {
     /// Create Traefik IngressRoute
     async fn create_traefik_ingressroute(
         &self,
-        namespace: String,
-        service: String,
+        ns: String,
         name: String,
         domain: Option<String>,
         subdomain: Option<String>,
@@ -510,26 +509,33 @@ impl KubernetesService {
     ) -> Result<(), AppError> {
         let mut ingrees_route = IngressRoute {
             metadata: ObjectMeta {
-                name: Some(name),
-                namespace: Some(namespace),
+                name: Some(name.clone()),
+                namespace: Some(ns.clone()),
                 labels: Some(labels),
                 ..Default::default()
             },
             spec: IngressRouteSpec {
-                entry_points: self.cfg.traefik.entry_points,
+                entry_points: self.cfg.traefik.entry_points.clone(),
                 parent_refs: Some(vec![IngressRouteParentRefs {
-                    name: service.clone(),
+                    name: name.clone(),
                     ..Default::default()
                 }]),
-                routes: vec![IngressRouteRoutes {
-                    r#match: subdomain,
-                    services: Some(vec![IngressRouteRoutesServices {
-                        name: service.clone(),
-                        ..Default::default()
-                    }]),
+                tls: Some(IngressRouteTls {
+                    cert_resolver: Some(self.cfg.traefik.cluster_issuer.clone()),
+                    domains: Some(vec![
+                        IngressRouteTlsDomains {
+                            main: domain.clone(),
+                            sans: None,
+                        },
+                        IngressRouteTlsDomains {
+                            main: subdomain.clone(),
+                            sans: None,
+                        },
+                    ]),
+                    secret_name: Some(self.cfg.cert_manager.wildcard_certificate_secret.clone()),
                     ..Default::default()
-                }],
-                tls: todo!(),
+                }),
+                ..Default::default()
             },
         };
 
@@ -537,34 +543,52 @@ impl KubernetesService {
             ingrees_route.spec.routes.push(IngressRouteRoutes {
                 r#match: domain,
                 services: Some(vec![IngressRouteRoutesServices {
-                    name: service,
+                    name: name.clone(),
                     ..Default::default()
                 }]),
                 ..Default::default()
             });
         }
 
-        let ingressroute_api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &namespace);
+        if let Some(subdomain) = subdomain {
+            ingrees_route.spec.routes.push(IngressRouteRoutes {
+                r#match: subdomain,
+                services: Some(vec![IngressRouteRoutesServices {
+                    name,
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            });
+        }
+
+        let ingressroute_api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &ns);
         ingressroute_api
             .create(&PostParams::default(), &ingrees_route)
             .await?;
+
+        Ok(())
     }
 
-    pub async fn update(&self, message: UpdateDeploymentMessage) -> Result<(), AppError> {
+    pub async fn update(
+        &self,
+        pool: PgPool,
+        mut con: MultiplexedConnection,
+        message: UpdateDeploymentMessage,
+    ) -> Result<(), AppError> {
         let user_id = message.user_id;
         let project_id = message.project_id;
         let deployment_id = message.deployment_id;
 
-        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &self.pool).await?;
+        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &pool).await?;
 
         // ! We can send pubsub message to notify users via SEE
 
-        let namespace = self.ensure_namespace(user_id).await?;
-        let name = deployment.cluster_deployment_name;
+        let namespace = self.ensure_namespace(&user_id).await?;
+        let resource_name = self.format_resource_name(&deployment.id);
 
         let deployments_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &namespace);
 
-        if let Some(replicas) = message.replicas {
+        if let Some(replicas) = message.desired_replicas {
             let patch = serde_json::json!({
                 "spec": {
                     "replicas": replicas
@@ -572,7 +596,11 @@ impl KubernetesService {
             });
 
             deployments_api
-                .patch(&name, &PatchParams::default(), &Patch::Strategic(patch))
+                .patch(
+                    &resource_name,
+                    &PatchParams::default(),
+                    &Patch::Strategic(patch),
+                )
                 .await
                 .map_err(|e| {
                     AppError::InternalServerError(format!("Failed to update deployment: {}", e))
@@ -581,7 +609,7 @@ impl KubernetesService {
             // ! We can send pubsub message to notify users via SEE
 
             let query_result =
-                DeploymentRepository::update_replicas(&deployment_id, replicas, &self.pool).await?;
+                DeploymentRepository::update_replicas(&deployment_id, replicas, &pool).await?;
 
             if query_result.rows_affected() == 0 {
                 warn!(
@@ -600,38 +628,40 @@ impl KubernetesService {
         Ok(())
     }
 
-    pub async fn delete(&self, message: DeleteDeploymentMessage) -> Result<(), AppError> {
+    pub async fn delete(
+        &self,
+        pool: PgPool,
+        message: DeleteDeploymentMessage,
+    ) -> Result<(), AppError> {
         let user_id = message.user_id;
-        let project_id = message.project_id;
         let deployment_id = message.deployment_id;
 
-        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &self.pool).await?;
+        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &pool).await?;
         // ! We can send pubsub message to notify users via SEE
 
-        let namespace = self.ensure_namespace(user_id).await?;
-        let name = deployment.cluster_deployment_name;
+        let ns = self.ensure_namespace(&user_id).await?;
+        let name = self.format_resource_name(&deployment.id);
 
         let delete_params = DeleteParams::default();
 
-        let ingress_api: Api<Ingress> = Api::namespaced(self.client.clone(), &namespace);
-        let _ = ingress_api.delete(&name, &delete_params).await;
+        let ingressroute_api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &ns);
+        let _ = ingressroute_api.delete(&name, &delete_params).await;
 
-        let service_api: Api<Service> = Api::namespaced(self.client.clone(), &namespace);
+        let service_api: Api<Service> = Api::namespaced(self.client.clone(), &ns);
         let _ = service_api.delete(&name, &delete_params).await;
 
-        let deployment_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &namespace);
+        let deployment_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &ns);
         let _ = deployment_api.delete(&name, &delete_params).await;
 
         let secret_name = format!("{}-secrets", name);
-        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &namespace);
+        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
         let _ = secret_api.delete(&secret_name, &delete_params).await;
 
         info!("✅ K8s resources deleted for deployment {}", deployment_id);
         Ok(())
     }
 
-    /// creates namespace for user like `user-{user_id[:16]}`
-    /// additionally VaultAuth and VaultConnection, default VaultConnection can be used instead namespaced
+    /// creates namespace for user like `user-{user_id[:8]}`
     async fn ensure_namespace(&self, user_id: &Uuid) -> Result<String, AppError> {
         let name = format!(
             "user-{}",
@@ -681,63 +711,32 @@ impl KubernetesService {
     }
 
     async fn create_vso_resources(&self, ns: String) -> Result<(), AppError> {
-        let vault_connection = VaultConnection {
-            metadata: ObjectMeta {
-                name: self.vault_service.vault_connection.clone().name,
-                namespace: Some(ns.clone()),
-                ..Default::default()
-            },
-            spec: VaultConnectionSpec {
-                address: self.vault_service.vault_connection.address.clone(),
-                skip_tls_verify: self.vault_service.vault_connection.skip_tls_verify,
-                ..Default::default()
-            },
-            ..Default::default()
+        let mut vault_connection = VaultConnection::default();
+        vault_connection.metadata.namespace = Some(ns.clone());
+
+        if let Some(con) = &self.vault_service.cfg.vault_connection {
+            vault_connection.metadata.name = con.name.clone();
+            vault_connection.spec.address = con.address.clone();
+            vault_connection.spec.skip_tls_verify = con.skip_tls_verify;
         };
 
-        let vault_auth = VaultAuth {
-            metadata: ObjectMeta {
-                name: self
-                    .vault_service
-                    .vault_auth
-                    .clone()
-                    .unwrap_or_default()
-                    .name,
-                namespace: Some(ns.clone()),
-                ..Default::default()
-            },
-            spec: VaultAuthSpec {
-                method: Some(VaultAuthMethod::Kubernetes),
-                mount: self
-                    .vault_service
-                    .vault_auth
-                    .clone()
-                    .unwrap_or_default()
-                    .mount,
-                kubernetes: Some(VaultAuthKubernetes {
-                    role: self
-                        .vault_service
-                        .vault_auth
-                        .clone()
-                        .unwrap_or_default()
-                        .kubernetes
-                        .unwrap_or_default()
-                        .role,
-                    service_account: self
-                        .vault_service
-                        .vault_auth
-                        .clone()
-                        .unwrap_or_default()
-                        .kubernetes
-                        .unwrap_or_default()
-                        .service_account,
-                    ..Default::default()
-                }),
-                vault_connection_ref: vault_connection.clone().metadata.name,
-                ..Default::default()
-            },
+        let mut vault_auth = VaultAuth::default();
+        vault_auth.metadata.name = self.vault_service.cfg.vault_auth.name.clone();
+        vault_auth.metadata.namespace = Some(ns.clone());
+        vault_auth.spec.method = Some(VaultAuthMethod::Kubernetes);
+        vault_auth.spec.mount = self.vault_service.cfg.vault_auth.mount.clone();
+        vault_auth.spec.vault_connection_ref = vault_connection.clone().metadata.name;
+        vault_auth.spec.kubernetes = Some(VaultAuthKubernetes {
+            role: self.vault_service.cfg.vault_auth.k8s.role.clone(),
+            service_account: self
+                .vault_service
+                .cfg
+                .vault_auth
+                .k8s
+                .service_account
+                .clone(),
             ..Default::default()
-        };
+        });
 
         let vault_connection_api: Api<VaultConnection> = Api::namespaced(self.client.clone(), &ns);
         let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns);

@@ -19,13 +19,11 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub async fn init(config: &Config) -> Result<Self, AppError> {
-        // let rustls_config = build_rustls_config(&config)?;
-        let database = Database::new(config).await;
-        let redis = Redis::new(config).await;
-        let amqp = Amqp::new(config).await;
-        // let kafka = Kafka::new(config, "users-service")?;
-        let key = Key::from(config.cookie_key.as_bytes());
+    pub async fn init(cfg: &Config) -> Result<Self, AppError> {
+        let database = Database::new(&cfg.database).await;
+        let redis = Redis::new(&cfg.redis).await;
+        let amqp = Amqp::new(&cfg.amqp).await;
+        let key = Key::from(cfg.cookie_key.as_bytes());
 
         Ok(Self {
             rustls_config: None,
@@ -33,7 +31,7 @@ impl AppState {
             redis,
             amqp,
             kafka: None,
-            config: config.clone(),
+            config: cfg.clone(),
             key,
         })
     }

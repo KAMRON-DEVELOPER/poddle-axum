@@ -21,21 +21,28 @@ pub struct VaultAuthKubernetesConfig {
 pub struct VaultAuthConfig {
     pub name: Option<String>,
     pub mount: Option<String>,
-    pub kubernetes: Option<VaultAuthKubernetesConfig>,
+    pub k8s: VaultAuthKubernetesConfig,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct VaultStaticSecretConfig {
+    pub refresh_after: Option<String>,
 }
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct VaultServiceConfig {
+    pub address: String,
     pub auth_mount: String,
     pub auth_role: String,
     pub auth_jwt: String,
     pub kv_mount: String,
-    pub vault_connection: VaultConnectionConfig,
-    pub vault_auth: Option<VaultAuthConfig>,
+    pub vault_connection: Option<VaultConnectionConfig>,
+    pub vault_auth: VaultAuthConfig,
+    pub vault_static_secret: VaultStaticSecretConfig,
 }
 
 #[derive(Clone)]
 pub struct VaultService {
     pub client: Arc<VaultClient>,
-    cfg: VaultServiceConfig,
+    pub cfg: VaultServiceConfig,
 }

@@ -32,11 +32,9 @@ pub struct AppState {
 
 impl AppState {
     pub async fn init(cfg: &Config) -> Result<Self, AppError> {
-        // let rustls_config = build_rustls_config(&config)?;
         let database = Database::new(&cfg.database).await;
         let redis = Redis::new(&cfg.redis).await;
         let amqp = Amqp::new(&cfg.amqp).await;
-        // let kafka = Kafka::new(config, "users-service")?;
         let key = Key::from(cfg.cookie_key.as_bytes());
         let google_oauth_client = build_google_oauth_client(&cfg.google_oauth);
         let github_oauth_client = build_github_oauth_client(&cfg.github_oauth);

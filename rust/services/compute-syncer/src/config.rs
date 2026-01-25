@@ -1,23 +1,19 @@
-use std::path::PathBuf;
+use std::{net::SocketAddr, path::PathBuf};
 
 use compute_core::configs::PrometheusConfig;
 use config::{ConfigBuilder, ConfigError, Environment, File, builder::AsyncState};
-use factory::factories::{
-    amqp::AmqpConfig, database::DatabaseConfig, redis::RedisConfig, tls::TlsConfig,
-};
+use factory::factories::{amqp::AmqpConfig, database::DatabaseConfig, redis::RedisConfig};
 use serde::Deserialize;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
-    pub tracing_level: String,
-    pub server_address: String,
-    pub prometheus: PrometheusConfig,
+    pub tracing_level: Option<String>,
+    pub server_address: SocketAddr,
+    pub otel_exporter_otlp_endpoint: String,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
-    pub amqp_addr: AmqpConfig,
-    pub kafka_bootstrap_servers: String,
-    pub tls: TlsConfig,
-    pub otel_exporter_otlp_endpoint: String,
+    pub amqp: AmqpConfig,
+    pub prometheus: PrometheusConfig,
 }
 
 impl Config {

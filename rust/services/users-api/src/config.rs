@@ -14,20 +14,20 @@ use crate::services::{
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
+    pub tracing_level: Option<String>,
     pub server_address: SocketAddr,
     pub frontend_endpoint: String,
+    pub otel_exporter_otlp_endpoint: String,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
     pub amqp: AmqpConfig,
-    pub kafka_bootstrap_servers: String,
-    pub google_oauth: GoogleOAuthServiceConfig,
-    pub github_oauth: GithubOAuthServiceConfig,
-    pub s3: S3ServiceConfig,
     pub cookie_key: String,
     pub cookie_secure: bool,
     pub jwt: JwtConfig,
+    pub google_oauth: GoogleOAuthServiceConfig,
+    pub github_oauth: GithubOAuthServiceConfig,
+    pub s3: S3ServiceConfig,
     pub mailtrap: MailtrapConfig,
-    pub otel_exporter_otlp_endpoint: String,
 }
 
 impl Config {

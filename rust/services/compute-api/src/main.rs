@@ -35,21 +35,21 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    let config = Config::init(cargo_manifest_dir).await?;
+    let cfg = Config::init(cargo_manifest_dir).await?;
     let _guard = Observability::init(
-        &config.otel_exporter_otlp_endpoint,
+        &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
-        config.tracing_level,
+        cfg.tracing_level.as_deref(),
     )
     .await;
 
-    let app = app::app(&config).await?;
-    let listener = tokio::net::TcpListener::bind(config.server_address).await?;
+    let app = app::app(&cfg).await?;
+    let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
 
     info!(
         "🚀 {} service running at {:#?}",
-        cargo_pkg_name, config.server_address
+        cargo_pkg_name, cfg.server_address
     );
     axum::serve(
         listener,

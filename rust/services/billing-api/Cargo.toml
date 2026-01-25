@@ -30,3 +30,4 @@ time.workspace = true
 bigdecimal.workspace = true
 lapin.workspace = true
 redis.workspace = true
+config.workspace = true

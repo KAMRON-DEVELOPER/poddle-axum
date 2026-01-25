@@ -1,7 +1,11 @@
 use compute_core::schemas::{
     CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage,
 };
-use factory::factories::amqp::AmqpPropagator;
+use factory::factories::{
+    amqp::{Amqp, AmqpPropagator},
+    database::Database,
+    redis::Redis,
+};
 use futures::StreamExt;
 use lapin::{
     Consumer,
@@ -12,14 +16,24 @@ use lapin::{
     types::{AMQPValue, FieldTable},
 };
 
+use redis::aio::MultiplexedConnection;
+use sqlx::PgPool;
 use tokio::task::JoinSet;
 use tracing::{Instrument, debug, error, info, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::{error::AppError, services::kubernetes_service::KubernetesService};
 
-pub async fn start_consumer(service: KubernetesService) -> Result<(), AppError> {
-    let channel = service.amqp.channel().await;
+#[derive(Clone)]
+pub struct ConsumerContext {
+    pub database: Database,
+    pub redis: Redis,
+    pub amqp: Amqp,
+    pub k8s: KubernetesService,
+}
+
+pub async fn start_consumer(ctx: ConsumerContext) -> Result<(), AppError> {
+    let channel = ctx.amqp.channel().await;
 
     // Declare exchange
     channel
@@ -100,9 +114,23 @@ pub async fn start_consumer(service: KubernetesService) -> Result<(), AppError> 
     // Create a JoinSet to hold our tasks
     let mut set = JoinSet::new();
 
-    set.spawn(handle_create_messages(service.clone(), create_consumer));
-    set.spawn(handle_update_messages(service.clone(), update_consumer));
-    set.spawn(handle_delete_messages(service.clone(), delete_consumer));
+    set.spawn(handle_create_messages(
+        ctx.database.pool.clone(),
+        ctx.redis.connection.clone(),
+        ctx.k8s.clone(),
+        create_consumer,
+    ));
+    set.spawn(handle_update_messages(
+        ctx.database.pool.clone(),
+        ctx.redis.connection.clone(),
+        ctx.k8s.clone(),
+        update_consumer,
+    ));
+    set.spawn(handle_delete_messages(
+        ctx.database.pool.clone(),
+        ctx.k8s.clone(),
+        delete_consumer,
+    ));
 
     info!("✅ RabbitMQ consumers started");
 
@@ -138,7 +166,12 @@ pub fn get_retry_count(headers: &FieldTable) -> i64 {
 }
 
 #[tracing::instrument(name = "consumer.handle_create_messages", skip_all)]
-async fn handle_create_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
+async fn handle_create_messages(
+    pool: PgPool,
+    con: MultiplexedConnection,
+    k8s: KubernetesService,
+    mut consumer: Consumer,
+) {
     info!("🎯 Create consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -163,7 +196,9 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
         let retry_count = get_retry_count(&headers);
 
         // Clone Service for the async block
-        let k8s_svc = kubernetes_service.clone();
+        let pool = pool.clone();
+        let con = con.clone();
+        let k8s = k8s.clone();
         let span = info_span!("consumer.handle_create_messages", retry_count = retry_count);
         let _ = span.set_parent(parent_cx);
 
@@ -181,7 +216,7 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
                     Ok(message) => {
                         debug!(deployment_id = %message.deployment_id, "🎯 Create deployment request received");
 
-                        match k8s_svc.create(message.clone()).await {
+                        match k8s.create(pool, con, message.clone() ).await {
                             Ok(_) => {
                                 info!(deployment_id = %message.deployment_id, "✅ Deployment created");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
@@ -213,7 +248,12 @@ async fn handle_create_messages(kubernetes_service: KubernetesService, mut consu
 }
 
 #[tracing::instrument(name = "consumer.handle_update_messages", skip_all)]
-async fn handle_update_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
+async fn handle_update_messages(
+    pool: PgPool,
+    con: MultiplexedConnection,
+    k8s: KubernetesService,
+    mut consumer: Consumer,
+) {
     info!("📏 update consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -238,7 +278,9 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
         let retry_count = get_retry_count(&headers);
 
         // Clone Service for the async block
-        let k8s_svc = kubernetes_service.clone();
+        let pool = pool.clone();
+        let con = con.clone();
+        let k8s = k8s.clone();
         let span = info_span!("consumer.handle_update_messages", retry_count = retry_count);
         let _ = span.set_parent(parent_cx);
 
@@ -256,7 +298,7 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
                     Ok(message) => {
                         debug!(deployment_id = %message.deployment_id, "📏 Update deployment request received");
 
-                        match k8s_svc.update(message.clone()).await {
+                        match k8s.update(pool, con, message.clone()).await {
                             Ok(_) => {
                                 info!(deployment_id = %message.deployment_id, "📏 Deployment updated");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
@@ -286,7 +328,7 @@ async fn handle_update_messages(kubernetes_service: KubernetesService, mut consu
 }
 
 #[tracing::instrument(name = "consumer.handle_delete_messages", skip_all)]
-async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consumer: Consumer) {
+async fn handle_delete_messages(pool: PgPool, k8s: KubernetesService, mut consumer: Consumer) {
     info!("🗑️ Delete consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -311,7 +353,8 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
         let retry_count = get_retry_count(&headers);
 
         // Clone Service for the async block
-        let k8s_svc = kubernetes_service.clone();
+        let pool = pool.clone();
+        let k8s = k8s.clone();
         let span = info_span!("consumer.handle_delete_messages", retry_count = retry_count);
         let _ = span.set_parent(parent_cx);
 
@@ -329,7 +372,7 @@ async fn handle_delete_messages(kubernetes_service: KubernetesService, mut consu
                     Ok(message) => {
                         debug!(deployment_id = %message.deployment_id, "🗑️ Delete deployment request received");
 
-                        match k8s_svc.delete(message.clone()).await {
+                        match k8s.delete(pool, message.clone()).await {
                             Ok(_) => {
                                 info!(deployment_id = %message.deployment_id, "🗑️ Deployment created");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {

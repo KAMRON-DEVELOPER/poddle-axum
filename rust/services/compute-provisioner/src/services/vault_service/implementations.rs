@@ -9,7 +9,7 @@ use vaultrs::kv2;
 
 use crate::error::AppError;
 use crate::services::vault_service::{
-    VaultAuthConfig, VaultAuthKubernetesConfig, VaultServiceConfig, VaultService,
+    VaultAuthConfig, VaultAuthKubernetesConfig, VaultService, VaultServiceConfig,
 };
 
 impl Default for VaultAuthKubernetesConfig {
@@ -26,7 +26,7 @@ impl Default for VaultAuthConfig {
         Self {
             name: Some("vault-auth".to_string()),
             mount: Some("kubernetes".to_string()),
-            kubernetes: Default::default(),
+            k8s: Default::default(),
         }
     }
 }
@@ -37,7 +37,7 @@ impl VaultService {
 
         let mut client = VaultClient::new(
             VaultClientSettingsBuilder::default()
-                .address(&cfg.vault_connection.address)
+                .address(&cfg.address)
                 .build()?,
         )?;
 

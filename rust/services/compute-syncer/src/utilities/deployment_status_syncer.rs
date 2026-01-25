@@ -3,7 +3,7 @@ use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::core::v1::Pod;
 use kube::runtime::watcher::{Config, Event};
-use kube::{Api, Client as KubeClient};
+use kube::{Api, Client};
 use redis::aio::MultiplexedConnection;
 use sqlx::PgPool;
 use tracing::{error, info, warn};
@@ -14,7 +14,7 @@ use crate::error::AppError;
 pub async fn start_deployment_status_syncer(
     pool: PgPool,
     mut redis: MultiplexedConnection,
-    client: KubeClient,
+    client: Client,
 ) -> Result<(), AppError> {
     let watcher_config = Config::default().labels("managed-by=poddle");
 

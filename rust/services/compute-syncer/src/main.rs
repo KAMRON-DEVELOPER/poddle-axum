@@ -52,6 +52,7 @@ async fn main() -> anyhow::Result<()> {
         &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
+        cfg.tracing_level.as_deref(),
     )
     .await;
 
@@ -103,11 +104,8 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Start a simple HTTP server for health checks and metrics
-async fn start_health_server(cargo_pkg_name: &str, server_address: String) -> Result<(), AppError> {
+async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
     let app = app::app().await?;
-    let addr = server_address
-        .parse::<SocketAddr>()
-        .expect("Server address is invalid");
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);
