@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
         vault_service,
     };
 
-    k8s.init().await?;
+    k8s.preflight().await?;
 
     let ctx = ConsumerContext {
         database,

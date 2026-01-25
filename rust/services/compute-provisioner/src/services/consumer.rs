@@ -126,11 +126,7 @@ pub async fn start_consumer(ctx: ConsumerContext) -> Result<(), AppError> {
         ctx.k8s.clone(),
         update_consumer,
     ));
-    set.spawn(handle_delete_messages(
-        ctx.database.pool.clone(),
-        ctx.k8s.clone(),
-        delete_consumer,
-    ));
+    set.spawn(handle_delete_messages(ctx.k8s.clone(), delete_consumer));
 
     info!("✅ RabbitMQ consumers started");
 
@@ -328,7 +324,7 @@ async fn handle_update_messages(
 }
 
 #[tracing::instrument(name = "consumer.handle_delete_messages", skip_all)]
-async fn handle_delete_messages(pool: PgPool, k8s: KubernetesService, mut consumer: Consumer) {
+async fn handle_delete_messages(k8s: KubernetesService, mut consumer: Consumer) {
     info!("🗑️ Delete consumer started");
 
     while let Some(delivery) = consumer.next().await {
@@ -353,7 +349,6 @@ async fn handle_delete_messages(pool: PgPool, k8s: KubernetesService, mut consum
         let retry_count = get_retry_count(&headers);
 
         // Clone Service for the async block
-        let pool = pool.clone();
         let k8s = k8s.clone();
         let span = info_span!("consumer.handle_delete_messages", retry_count = retry_count);
         let _ = span.set_parent(parent_cx);
@@ -372,7 +367,7 @@ async fn handle_delete_messages(pool: PgPool, k8s: KubernetesService, mut consum
                     Ok(message) => {
                         debug!(deployment_id = %message.deployment_id, "🗑️ Delete deployment request received");
 
-                        match k8s.delete(pool, message.clone()).await {
+                        match k8s.delete(  message.clone()).await {
                             Ok(_) => {
                                 info!(deployment_id = %message.deployment_id, "🗑️ Deployment created");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {

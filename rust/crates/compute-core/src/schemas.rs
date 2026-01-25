@@ -45,6 +45,19 @@ pub struct UpdateProjectRequest {
 // DEPLOYMENT SCHEMAS
 // -----------------------------------------------
 
+/// Whole point is we don't implement Display & Debug
+
+#[derive(Clone, Deserialize)]
+pub struct SecretString(pub String);
+
+#[derive(Clone, Deserialize, Serialize, Validate, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ImagePullSecret {
+    pub server: String,
+    pub username: String,
+    pub secret: String,
+}
+
 #[derive(Clone, Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDeploymentRequest {
@@ -52,6 +65,7 @@ pub struct CreateDeploymentRequest {
     pub name: String,
     #[validate(length(min = 1, max = 500))]
     pub image: String,
+    pub image_pull_secret: ImagePullSecret,
     #[validate(range(min = 1, max = 65535))]
     pub port: i32,
     #[validate(range(min = 1, max = 25))]
@@ -79,6 +93,7 @@ static DOMAIN: Lazy<Regex> =
 pub struct UpdateDeploymentRequest {
     pub name: Option<String>,
     pub image: Option<String>,
+    pub image_pull_secret: Option<ImagePullSecret>,
     pub port: Option<i32>,
     #[validate(range(min = 0, max = 25))]
     pub desired_replicas: Option<i32>,
@@ -142,6 +157,7 @@ pub struct CreateDeploymentMessage {
     pub project_id: Uuid,
     pub deployment_id: Uuid,
     pub image: String,
+    pub image_pull_secret: ImagePullSecret,
     pub port: i32,
     pub desired_replicas: i32,
     pub resource_spec: ResourceSpec,
@@ -159,8 +175,8 @@ pub struct UpdateDeploymentMessage {
     pub user_id: Uuid,
     pub project_id: Uuid,
     pub deployment_id: Uuid,
-    pub name: Option<String>,
     pub image: Option<String>,
+    pub image_pull_secret: Option<ImagePullSecret>,
     pub port: Option<i32>,
     pub desired_replicas: Option<i32>,
     pub resource_spec: Option<ResourceSpec>,
