@@ -13,19 +13,19 @@ impl<B> OnResponse<B> for CustomOnResponse {
 
         match code {
             200..=299 => {
-                event!(Level::INFO, status = %status, latency = %latency, "✅ HTTP request finished")
+                event!(Level::INFO, status = %status, latency = %latency, "| ✅ HTTP request finished |")
             }
             300..=399 => {
-                event!(Level::INFO, status = %status, latency = %latency, "🔄 HTTP request finished")
+                event!(Level::INFO, status = %status, latency = %latency, "| 🔄 HTTP request finished |")
             }
             400..=499 => {
-                event!(Level::WARN, status = %status, latency = %latency, "⚠️ HTTP request finished")
+                event!(Level::WARN, status = %status, latency = %latency, "| ⚠️ HTTP request finished |")
             }
             500..=599 => {
-                event!(Level::ERROR, status = %status, latency = %latency, "🌋 HTTP request finished")
+                event!(Level::ERROR, status = %status, latency = %latency, "| 🌋 HTTP request finished |")
             }
             _ => {
-                event!(Level::INFO, status = %status, latency = %latency, "❓ HTTP request finished")
+                event!(Level::INFO, status = %status, latency = %latency, "| ❓ HTTP request finished |")
             }
         }
     }
