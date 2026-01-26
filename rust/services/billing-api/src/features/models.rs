@@ -106,7 +106,6 @@ pub struct Billing {
     pub hours_used: BigDecimal,
     pub total_cost: BigDecimal,
     // Metadata
-    pub resources_snapshot: serde_json::Value,
     pub created_at: DateTime<Utc>,
 }
 
