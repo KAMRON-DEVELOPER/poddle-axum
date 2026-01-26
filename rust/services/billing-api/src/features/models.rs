@@ -76,6 +76,7 @@ pub struct Transaction {
     pub amount: BigDecimal,
     pub detail: Option<String>,
     #[sqlx(rename = "type")]
+    #[serde(rename = "type")]
     pub transaction_type: TransactionType,
     pub created_at: DateTime<Utc>,
 }

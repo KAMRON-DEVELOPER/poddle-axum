@@ -33,10 +33,8 @@ pub async fn get_transactions(
     Query(pagination): Query<Pagination>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
-    let data = BillingRepository::get_transactions(user_id, pagination, &database.pool).await?;
+    let (data, total) =
+        BillingRepository::get_transactions(user_id, pagination, &database.pool).await?;
 
-    Ok(Json(ListResponse {
-        total: i64::try_from(data.len()).unwrap_or_else(|_| 0),
-        data,
-    }))
+    Ok(Json(ListResponse { data, total }))
 }
