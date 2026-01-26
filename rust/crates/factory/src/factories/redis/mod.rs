@@ -3,14 +3,20 @@ pub mod implementation;
 
 use redis::{Client, aio::MultiplexedConnection};
 use serde::Deserialize;
+use serde_with::{NoneAsEmptyString, serde_as};
 
 use crate::factories::tls::TlsConfig;
 
+#[serde_as]
 #[derive(Deserialize, Clone, Debug)]
 pub struct RedisParams {
+    #[serde_as(as = "NoneAsEmptyString")]
     pub host: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub port: Option<u16>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub username: Option<String>,
+    #[serde_as(as = "NoneAsEmptyString")]
     pub password: Option<String>,
 }
 
