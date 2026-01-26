@@ -32,7 +32,9 @@ impl Drop for Observability {
 }
 
 impl Observability {
-    // Initialize tracing-subscriber and return Observability for opentelemetry-related termination processing
+    /// Initialize tracing-subscriber and return Observability for opentelemetry-related termination processing.
+    ///
+    /// **absolutely** no spans must created before this call
     pub async fn init(
         otel_exporter_otlp_endpoint: &str,
         cargo_crate_name: &str,
