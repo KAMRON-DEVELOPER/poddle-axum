@@ -252,7 +252,7 @@ CREATE TABLE IF NOT EXISTS billings (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE SET NULL,
     deployment_id UUID REFERENCES deployments (id) ON DELETE SET NULL,
     -- Scaling Factor
-    replica_count INTEGER NOT NULL DEFAULT 1,
+    desired_replicas INTEGER NOT NULL DEFAULT 1,
     -- PRESET SNAPSHOT
     preset_cpu_millicores INTEGER NOT NULL,
     preset_memory_mb INTEGER NOT NULL,
@@ -266,12 +266,12 @@ CREATE TABLE IF NOT EXISTS billings (
     cpu_millicores_used INTEGER GENERATED ALWAYS AS (
         (
             preset_cpu_millicores + addon_cpu_millicores
-        ) * replica_count
+        ) * desired_replicas
     ) STORED,
     memory_mb_used INTEGER GENERATED ALWAYS AS (
         (
             preset_memory_mb + addon_memory_mb
-        ) * replica_count
+        ) * desired_replicas
     ) STORED,
     -- TIME SLICE
     hours_used NUMERIC(18, 6) NOT NULL,
@@ -279,7 +279,7 @@ CREATE TABLE IF NOT EXISTS billings (
     total_cost NUMERIC(18, 6) GENERATED ALWAYS AS (
         (
             preset_hourly_price + addon_cpu_millicores * addon_cpu_millicores_hourly_price + addon_memory_mb * addon_memory_mb_hourly_price
-        ) * replica_count * hours_used
+        ) * desired_replicas * hours_used
     ) STORED,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -309,11 +309,11 @@ CREATE TRIGGER set_balances_timestamp BEFORE UPDATE ON balances FOR EACH ROW EXE
 -- ==============================================
 CREATE TABLE IF NOT EXISTS transactions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    balance_id UUID NOT NULL REFERENCES balances (id) ON DELETE CASCADE,
+    billing_id UUID REFERENCES billings (id) ON DELETE SET NULL,
     amount NUMERIC(18, 6) NOT NULL, -- Negative for charges, Positive for deposits
     detail TEXT,
     type transaction_type NOT NULL,
-    balance_id UUID NOT NULL REFERENCES balances (id) ON DELETE CASCADE,
-    billing_id UUID REFERENCES billings (id) ON DELETE SET NULL,
     external_transaction_id VARCHAR(255), -- ID from Payme / Click / Uzum
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

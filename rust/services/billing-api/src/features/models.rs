@@ -8,7 +8,7 @@ use uuid::Uuid;
 // ENUMS
 // ============================================
 
-#[derive(Type, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Type, Serialize, Deserialize, Clone, Debug, Copy, PartialEq, Eq)]
 #[sqlx(type_name = "transaction_type", rename_all = "snake_case")]
 pub enum TransactionType {
     FreeCredit,
@@ -20,7 +20,7 @@ pub enum TransactionType {
 // MODELS
 // ============================================
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Balance {
     pub id: Uuid,
@@ -31,7 +31,7 @@ pub struct Balance {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Preset {
     pub id: Uuid,
@@ -52,7 +52,7 @@ pub struct Preset {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AddonPrice {
     pub id: Uuid,
@@ -67,7 +67,7 @@ pub struct AddonPrice {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: Uuid,
@@ -81,22 +81,36 @@ pub struct Transaction {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Billing {
+    // Identity
     pub id: Uuid,
     pub user_id: Uuid,
     pub deployment_id: Option<Uuid>,
-    pub resources_snapshot: serde_json::Value,
-    pub cpu_millicores: i32,
-    pub memory_mb: i32,
-    pub cost_per_hour: BigDecimal,
+    // Scaling
+    pub desired_replicas: i32,
+    // Preset snapshot
+    pub preset_cpu_millicores: i32,
+    pub preset_memory_mb: i32,
+    pub preset_hourly_price: BigDecimal,
+    // Addon snapshot
+    pub addon_cpu_millicores: i32,
+    pub addon_memory_mb: i32,
+    pub addon_cpu_millicores_hourly_price: BigDecimal,
+    pub addon_memory_mb_hourly_price: BigDecimal,
+    // Usage (generated)
+    pub cpu_millicores_used: i32,
+    pub memory_mb_used: i32,
+    // Time & cost
     pub hours_used: BigDecimal,
     pub total_cost: BigDecimal,
+    // Metadata
+    pub resources_snapshot: serde_json::Value,
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemConfig {
     pub id: bool,
