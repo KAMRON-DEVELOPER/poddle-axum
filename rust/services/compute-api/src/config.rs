@@ -8,6 +8,7 @@ use users_core::jwt::JwtConfig;
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
+    pub rust_log: Option<String>,
     pub tracing_level: Option<String>,
     pub server_address: SocketAddr,
     pub otel_exporter_otlp_endpoint: String,

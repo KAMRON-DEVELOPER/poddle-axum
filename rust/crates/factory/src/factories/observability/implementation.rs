@@ -6,10 +6,7 @@ use opentelemetry_sdk::{
     propagation::TraceContextPropagator,
     trace::{RandomIdGenerator, Sampler, SdkTracerProvider},
 };
-use opentelemetry_semantic_conventions::{
-    SCHEMA_URL,
-    attribute::{SERVICE_NAME, SERVICE_VERSION},
-};
+use opentelemetry_semantic_conventions::{SCHEMA_URL, attribute::SERVICE_VERSION};
 use time::macros::format_description;
 use tonic::transport::ClientTlsConfig;
 use tracing::Level;
@@ -39,6 +36,7 @@ impl Observability {
         otel_exporter_otlp_endpoint: &str,
         cargo_crate_name: &str,
         cargo_pkg_version: &str,
+        rust_log: Option<&str>,
         tracing_level: Option<&str>,
     ) -> Observability {
         global::set_text_map_propagator(TraceContextPropagator::new());
@@ -64,21 +62,21 @@ impl Observability {
             Some("ERROR") => Level::ERROR,
             _ => Level::INFO,
         };
-        let env_filter = EnvFilter::try_from_default_env()
-            .unwrap_or_else(|_| EnvFilter::new(level.as_str().to_lowercase()));
+
+        let env_filter = match rust_log {
+            Some(rust_log) => EnvFilter::new(rust_log),
+            None => EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new(level.as_str().to_lowercase())),
+        };
 
         // Stdout
         let timer = LocalTime::new(format_description!(
             "[year]-[month]-[day] [hour]:[minute]:[second]"
         ));
         let fmt_layer = tracing_subscriber::fmt::layer()
-            // Use a more compact, abbreviated log format
             .compact()
-            // Don't display the event's target (module path)
             .with_target(false)
-            // Display source code file paths
             .with_file(true)
-            // Display source code line numbers
             .with_line_number(true)
             .with_timer(timer)
             .json();
@@ -100,11 +98,12 @@ impl Observability {
     // Resource
     fn get_resource(cargo_crate_name: &str, cargo_pkg_version: &str) -> Resource {
         Resource::builder()
+            .with_service_name(cargo_crate_name.to_string())
             .with_schema_url(
-                [
-                    KeyValue::new(SERVICE_NAME, cargo_crate_name.to_string()),
-                    KeyValue::new(SERVICE_VERSION, cargo_pkg_version.to_string()),
-                ],
+                [KeyValue::new(
+                    SERVICE_VERSION,
+                    cargo_pkg_version.to_string(),
+                )],
                 SCHEMA_URL,
             )
             .build()

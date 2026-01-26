@@ -13,7 +13,7 @@ use std::{env, net::SocketAddr};
 use config::Config;
 use factory::factories::observability::Observability;
 
-use tracing::{error_span, info, warn_span};
+use tracing::info;
 use utility::shutdown_signal::shutdown_signal;
 
 #[tokio::main]
@@ -43,8 +43,6 @@ async fn main() -> anyhow::Result<()> {
     let full_path = cargo_manifest_dir.join(path);
     let cfg = Config::init(full_path).await?;
 
-    println!("cfg: {:#?}", cfg);
-
     println!("🌐 Server address: {}", cfg.server_address);
     println!("📡 OTLP endpoint: {}", cfg.otel_exporter_otlp_endpoint);
 
@@ -53,6 +51,7 @@ async fn main() -> anyhow::Result<()> {
         &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
+        cfg.rust_log.as_deref(),
         cfg.tracing_level.as_deref(),
     )
     .await;
@@ -62,9 +61,6 @@ async fn main() -> anyhow::Result<()> {
 
     println!("🔌 Binding to {}...", cfg.server_address);
     let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
-
-    warn_span!("🚀 service running");
-    error_span!("🚀 service running");
 
     info!(
         "🚀 {} service running at {:#?}",

@@ -54,6 +54,7 @@ async fn main() -> anyhow::Result<()> {
         &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
+        cfg.rust_log.as_deref(),
         cfg.tracing_level.as_deref(),
     )
     .await;
