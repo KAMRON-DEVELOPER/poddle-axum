@@ -12,7 +12,7 @@ members = [
     "crates/users-core",
     "crates/http-contracts",
     "crates/compute-core",
-    "services/compute-metrics-worker",
+    "services/compute-metrics-worker", "crates/http-common",
 ]
 
 resolver = "2"

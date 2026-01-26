@@ -8,6 +8,7 @@ factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
 http-contracts = { path = "../../crates/http-contracts" }
 users-core = { path = "../../crates/users-core" }
+http-common = { path = "../../crates/http-common" }
 anyhow.workspace = true
 thiserror.workspace = true
 rustls.workspace = true

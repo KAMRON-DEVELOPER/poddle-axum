@@ -7,6 +7,7 @@ edition = "2024"
 factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
 http-contracts = { path = "../../crates/http-contracts" }
+http-common = { path = "../../crates/http-common" }
 users-core = { path = "../../crates/users-core" }
 thiserror.workspace = true
 anyhow.workspace = true

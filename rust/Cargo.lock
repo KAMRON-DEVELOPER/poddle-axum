@@ -551,6 +551,7 @@ dependencies = [
  "config",
  "dotenvy",
  "factory",
+ "http-common",
  "http-contracts",
  "lapin",
  "redis",
@@ -800,6 +801,7 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
+ "http-common",
  "http-contracts",
  "infer",
  "lapin",
@@ -858,6 +860,7 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
+ "http-common",
  "k8s-openapi",
  "kcr_cert_manager_io",
  "kcr_secrets_hashicorp_com",
@@ -901,6 +904,7 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
+ "http-common",
  "k8s-openapi",
  "kube",
  "kube-client",
@@ -1995,6 +1999,15 @@ dependencies = [
  "http",
  "http-body",
  "pin-project-lite",
+]
+
+[[package]]
+name = "http-common"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "serde_json",
+ "tracing",
 ]
 
 [[package]]
@@ -5424,6 +5437,7 @@ dependencies = [
  "cookie",
  "dotenvy",
  "factory",
+ "http-common",
  "http-contracts",
  "infer",
  "jsonwebtoken",

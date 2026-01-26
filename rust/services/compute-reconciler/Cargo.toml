@@ -7,6 +7,7 @@ edition = "2024"
 factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
 compute-core = { path = "../../crates/compute-core" }
+http-common = { path = "../../crates/http-common" }
 thiserror.workspace = true
 anyhow.workspace = true
 rustls.workspace = true

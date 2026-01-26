@@ -9,6 +9,7 @@ factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
 users-core = { path = "../../crates/users-core" }
 http-contracts = { path = "../../crates/http-contracts" }
+http-common = { path = "../../crates/http-common" }
 compute-core = { path = "../../crates/compute-core" }
 thiserror.workspace = true
 anyhow.workspace = true

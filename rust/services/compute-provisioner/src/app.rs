@@ -1,17 +1,16 @@
-use std::net::SocketAddr;
-
 use crate::error::AppError;
 use axum::{
-    Json, Router,
-    extract::{ConnectInfo, DefaultBodyLimit},
-    http::{HeaderName, HeaderValue, Method, StatusCode, header},
-    response::IntoResponse,
-    routing::get,
+    Router,
+    extract::DefaultBodyLimit,
+    http::{HeaderName, HeaderValue, Method, header},
 };
-use serde_json::json;
+use http_common::router::base_routes;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
-pub async fn app() -> Result<Router, AppError> {
+pub async fn app(
+    cargo_pkg_name: &'static str,
+    cargo_pkg_version: &'static str,
+) -> Result<Router, AppError> {
     let cors = CorsLayer::new()
         .allow_origin([
             HeaderValue::from_static("http://127.0.0.1:3000"),
@@ -38,40 +37,10 @@ pub async fn app() -> Result<Router, AppError> {
     let tracing_layer = TraceLayer::new_for_http();
 
     let app = axum::Router::new()
-        .merge(get_health_check_handler())
-        .fallback(not_found_handler)
+        .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .layer(tracing_layer)
         .layer(cors);
 
     Ok(app)
-}
-
-async fn not_found_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    println!("Client with {} connected", addr);
-    (StatusCode::NOT_FOUND, "nothing to see here")
-}
-
-fn get_health_check_handler() -> Router {
-    let health_route = Router::new()
-        .route(
-            "/health",
-            get(|| async {
-                Json(json!({
-                    "status": "healthy",
-                    "service": "compute-syncer"
-                }))
-            }),
-        )
-        .route(
-            "/ready",
-            get(|| async {
-                Json(json!({
-                    "status": "ready",
-                    "service": "compute-syncer"
-                }))
-            }),
-        );
-
-    health_route
 }

@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
-    let app = app::app(&cfg).await?;
+    let app = app::app(cargo_pkg_name, cargo_pkg_version, &cfg).await?;
     let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
 
     info!(

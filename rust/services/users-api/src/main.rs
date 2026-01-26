@@ -55,7 +55,7 @@ async fn main() -> anyhow::Result<()> {
     .await;
 
     println!("🏗️  Building application...");
-    let app = app::app(&cfg).await?;
+    let app = app::app(cargo_pkg_name, cargo_pkg_version, &cfg).await?;
 
     println!("🔌 Binding to {}...", cfg.server_address);
     let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;

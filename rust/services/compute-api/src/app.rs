@@ -1,19 +1,21 @@
-use std::net::SocketAddr;
-
 use super::config::Config;
+use crate::error::AppError;
 use axum::{
     Router,
-    extract::{ConnectInfo, DefaultBodyLimit},
-    http::{HeaderName, HeaderValue, Method, StatusCode, header},
-    response::IntoResponse,
+    extract::DefaultBodyLimit,
+    http::{HeaderName, HeaderValue, Method, header},
 };
-use crate::error::AppError;
+use http_common::router::base_routes;
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{features, utilities::app_state::AppState};
 
-pub async fn app(config: &Config) -> Result<Router, AppError> {
-    let app_state = AppState::init(&config).await?;
+pub async fn app(
+    cargo_pkg_name: &'static str,
+    cargo_pkg_version: &'static str,
+    cfg: &Config,
+) -> Result<Router, AppError> {
+    let app_state = AppState::init(&cfg).await?;
 
     let cors = CorsLayer::new()
         .allow_origin([
@@ -42,16 +44,11 @@ pub async fn app(config: &Config) -> Result<Router, AppError> {
 
     let app = axum::Router::new()
         .merge(features::get_routes())
-        .fallback(not_found_handler)
+        .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(app_state)
         .layer(tracing_layer)
         .layer(cors);
 
     Ok(app)
-}
-
-async fn not_found_handler(ConnectInfo(addr): ConnectInfo<SocketAddr>) -> impl IntoResponse {
-    println!("Client with {} connected", addr);
-    (StatusCode::NOT_FOUND, "nothing to see here")
 }

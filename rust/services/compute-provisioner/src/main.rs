@@ -90,7 +90,11 @@ async fn main() -> anyhow::Result<()> {
 
     // Spawn background tasks
     set.spawn(start_consumer(ctx));
-    set.spawn(start_health_server(cargo_pkg_name, cfg.server_address));
+    set.spawn(start_health_server(
+        cargo_pkg_name,
+        cargo_pkg_version,
+        cfg.server_address,
+    ));
 
     info!("✅ All background tasks started");
 
@@ -115,8 +119,12 @@ async fn main() -> anyhow::Result<()> {
 }
 
 // Start a simple HTTP server for health checks and metrics
-async fn start_health_server(cargo_pkg_name: &str, addr: SocketAddr) -> Result<(), AppError> {
-    let app = app::app().await?;
+async fn start_health_server(
+    cargo_pkg_name: &'static str,
+    cargo_pkg_version: &'static str,
+    addr: SocketAddr,
+) -> Result<(), AppError> {
+    let app = app::app(cargo_pkg_name, cargo_pkg_version).await?;
     let listener = tokio::net::TcpListener::bind(addr).await?;
 
     info!("🚀 {} service running at {:#?}", cargo_pkg_name, addr);
