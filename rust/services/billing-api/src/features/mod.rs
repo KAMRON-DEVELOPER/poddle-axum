@@ -11,6 +11,7 @@ use axum::{Router, routing::get};
 pub fn get_routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/billing/balance", get(handlers::get_balance))
+        .route("/api/v1/billing/presets", get(handlers::get_presets))
         .route(
             "/api/v1/billing/transactions",
             get(handlers::get_transactions),

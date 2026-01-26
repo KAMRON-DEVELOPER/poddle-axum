@@ -13,7 +13,7 @@ use uuid::Uuid;
 pub enum TransactionType {
     FreeCredit,
     UsageCharge,
-    Fund,
+    TopUp,
 }
 
 // ============================================
@@ -33,14 +33,50 @@ pub struct Balance {
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
+pub struct Preset {
+    pub id: Uuid,
+    pub name: String,
+    pub description: String,
+    // Resources
+    pub cpu_millicores: i32,
+    pub memory_mb: i32,
+    // Pricing
+    pub currency: String,
+    pub monthly_price: BigDecimal,
+    pub hourly_price: BigDecimal,
+    // Guardrails
+    pub max_addon_cpu_millicores: i32,
+    pub max_addon_memory_mb: i32,
+    pub is_active: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct AddonPrice {
+    pub id: Uuid,
+    // CPU pricing
+    pub cpu_monthly_unit_price: BigDecimal,
+    pub cpu_hourly_unit_price: BigDecimal,
+    // Memory pricing
+    pub memory_monthly_unit_price: BigDecimal,
+    pub memory_hourly_unit_price: BigDecimal,
+    pub currency: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: Uuid,
     pub balance_id: Uuid,
+    pub billing_id: Option<Uuid>,
     pub amount: BigDecimal,
+    pub detail: Option<String>,
     #[sqlx(rename = "type")]
     pub transaction_type: TransactionType,
-    pub detail: Option<String>,
-    pub billing_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -55,7 +91,6 @@ pub struct Billing {
     pub memory_mb: i32,
     pub cost_per_hour: BigDecimal,
     pub hours_used: BigDecimal,
-    #[sqlx(default)]
     pub total_cost: BigDecimal,
     pub created_at: DateTime<Utc>,
 }

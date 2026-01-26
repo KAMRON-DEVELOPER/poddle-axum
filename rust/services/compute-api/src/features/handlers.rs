@@ -189,7 +189,7 @@ pub async fn get_deployments_handler(
     let user_id: Uuid = claims.sub;
     let points_count = project_page_query.minutes * 60 / config.prometheus.scrape_interval_seconds;
 
-    let (total, deployments) =
+    let (deployments, total) =
         DeploymentRepository::get_all_by_project(user_id, project_id, pagination, &database.pool)
             .await?;
 

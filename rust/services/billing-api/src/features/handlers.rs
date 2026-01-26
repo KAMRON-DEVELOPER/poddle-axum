@@ -1,6 +1,10 @@
-use axum::{Json, extract::State, response::IntoResponse};
+use axum::{
+    Json,
+    extract::{Query, State},
+    response::IntoResponse,
+};
 use factory::factories::database::Database;
-use http_contracts::list::schema::ListResponse;
+use http_contracts::{list::schema::ListResponse, pagination::schema::Pagination};
 use users_core::jwt::Claims;
 
 use crate::{error::AppError, features::repository::BillingRepository};
@@ -10,20 +14,29 @@ pub async fn get_balance(
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
-    let balance = BillingRepository::get_user_balance(&database.pool, user_id).await?;
+    let balance = BillingRepository::get_balance(user_id, &database.pool).await?;
+    Ok(Json(balance))
+}
+
+pub async fn get_presets(
+    claims: Claims,
+    State(database): State<Database>,
+) -> Result<impl IntoResponse, AppError> {
+    let user_id = claims.sub;
+    let balance = BillingRepository::get_presets(user_id, &database.pool).await?;
     Ok(Json(balance))
 }
 
 pub async fn get_transactions(
     claims: Claims,
     State(database): State<Database>,
+    Query(pagination): Query<Pagination>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
-
-    let transactions = BillingRepository::get_transactions(&database.pool, user_id).await?;
+    let data = BillingRepository::get_transactions(user_id, pagination, &database.pool).await?;
 
     Ok(Json(ListResponse {
-        total: i64::try_from(transactions.len()).unwrap_or_else(|_| 0),
-        data: transactions,
+        total: i64::try_from(data.len()).unwrap_or_else(|_| 0),
+        data,
     }))
 }

@@ -32,35 +32,6 @@ impl ProjectRepository {
         pagination: Pagination,
         pool: &PgPool,
     ) -> Result<(Vec<Project>, i64), sqlx::Error> {
-        // let projects = sqlx::query_as::<_, Project>(
-        //     r#"
-        //     SELECT id, owner_id, name, description, created_at, updated_at
-        //     FROM projects
-        //     WHERE owner_id = $1
-        //     ORDER BY created_at DESC
-        //     LIMIT $2
-        //     OFFSET $3
-        //     "#,
-        // )
-        // .bind(user_id)
-        // .bind(pagination.limit)
-        // .bind(pagination.offset)
-        // .fetch_all(pool)
-        // .await?;
-
-        // let row = sqlx::query!(
-        //     r#"
-        //         SELECT COUNT(*) as count
-        //         FROM projects d
-        //         WHERE owner_id = $1
-        //     "#,
-        //     user_id
-        // )
-        // .fetch_one(pool)
-        // .await?;
-
-        // let total = row.count.unwrap_or(0);
-
         let rows = sqlx::query!(
             r#"
             SELECT
@@ -220,40 +191,7 @@ impl DeploymentRepository {
         project_id: Uuid,
         pagination: Pagination,
         pool: &PgPool,
-    ) -> Result<(i64, Vec<Deployment>), sqlx::Error> {
-        // let deployments = sqlx::query_as::<_, Deployment>(
-        //     r#"
-        //     SELECT d.*
-        //     FROM deployments d
-        //     INNER JOIN projects p ON d.project_id = p.id
-        //     WHERE p.owner_id = $1 AND d.project_id = $2
-        //     ORDER BY d.created_at DESC
-        //     LIMIT $2
-        //     OFFSET $3
-        //     "#,
-        // )
-        // .bind(user_id)
-        // .bind(project_id)
-        // .bind(pagination.limit)
-        // .bind(pagination.offset)
-        // .fetch_all(pool)
-        // .await?;
-
-        // let row = sqlx::query!(
-        //     r#"
-        //         SELECT COUNT(*) as count
-        //         FROM deployments d
-        //         INNER JOIN projects p ON d.project_id = p.id
-        //         WHERE p.owner_id = $1 AND d.project_id = $2
-        //     "#,
-        //     user_id,
-        //     project_id
-        // )
-        // .fetch_one(pool)
-        // .await?;
-
-        // let total = row.count.unwrap_or(0);
-        //
+    ) -> Result<(Vec<Deployment>, i64), sqlx::Error> {
         // In standard SQL, if you use COUNT(*), the database "collapses" all your rows into a single number.
         // You lose your individual deployment data.
         // OVER() turns the count into a Window Function.
@@ -331,7 +269,7 @@ impl DeploymentRepository {
             })
             .collect();
 
-        Ok((total, deployments))
+        Ok((deployments, total))
     }
 
     #[tracing::instrument(name = "deployment_repository.get_by_id", skip(pool), err)]

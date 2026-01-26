@@ -38,6 +38,8 @@ async fn main() -> anyhow::Result<()> {
     println!("🔍 Loading configuration...");
     let cfg = Config::init(cargo_manifest_dir).await?;
 
+    println!("cfg: {:#?}", cfg);
+
     println!("🌐 Server address: {}", cfg.server_address);
     println!("📡 OTLP endpoint: {}", cfg.otel_exporter_otlp_endpoint);
 

@@ -150,9 +150,9 @@ CREATE TABLE IF NOT EXISTS projects (
 CREATE TRIGGER set_projects_timestamp BEFORE UPDATE ON projects FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ==============================================
--- DEPLOYMENT PRESETS
+-- PRESETS
 -- ==============================================
-CREATE TABLE IF NOT EXISTS deployment_presets (
+CREATE TABLE IF NOT EXISTS presets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     name VARCHAR(50) NOT NULL UNIQUE,
     description TEXT,
@@ -171,7 +171,7 @@ CREATE TABLE IF NOT EXISTS deployment_presets (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TRIGGER set_deployment_presets_timestamp BEFORE UPDATE ON deployment_presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+CREATE TRIGGER set_presets_timestamp BEFORE UPDATE ON presets FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ==============================================
 -- ADDON PRICES
@@ -205,7 +205,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     desired_replicas INTEGER NOT NULL DEFAULT 1 CHECK (desired_replicas >= 1),
     ready_replicas INTEGER NOT NULL,
     available_replicas INTEGER NOT NULL,
-    preset_id UUID NOT NULL REFERENCES deployment_presets (id) ON DELETE CASCADE,
+    preset_id UUID NOT NULL REFERENCES presets (id) ON DELETE CASCADE,
     addon_cpu_millicores INTEGER CHECK (addon_cpu_millicores >= 0),
     addon_memory_mb INTEGER CHECK (addon_memory_mb >= 0),
     vault_secret_path VARCHAR(250),
@@ -375,7 +375,7 @@ CREATE TRIGGER after_transaction_insert AFTER INSERT ON transactions FOR EACH RO
 -- SEED DEPLOYMENT PRESETS DATA
 -- ==============================================
 INSERT INTO
-    deployment_presets (
+    presets (
         name,
         cpu_millicores,
         memory_mb,
