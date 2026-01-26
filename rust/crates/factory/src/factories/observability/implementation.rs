@@ -81,8 +81,8 @@ impl Observability {
                 .with_ansi(true)
                 .with_timer(timer)
                 .with_target(false)
-                .with_file(false)
-                .with_line_number(false)
+                .with_file(true)
+                .with_line_number(true)
                 .compact()
                 .boxed()
         } else {
