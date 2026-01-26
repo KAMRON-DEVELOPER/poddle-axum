@@ -55,6 +55,7 @@ async fn main() -> anyhow::Result<()> {
         cargo_crate_name,
         cargo_pkg_version,
         cfg.rust_log.as_deref(),
+        cfg.log_format.as_deref(),
         cfg.tracing_level.as_deref(),
     )
     .await;

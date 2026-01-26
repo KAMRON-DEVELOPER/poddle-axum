@@ -12,7 +12,7 @@ use tonic::transport::ClientTlsConfig;
 use tracing::Level;
 use tracing_opentelemetry::{MetricsLayer, OpenTelemetryLayer};
 use tracing_subscriber::{
-    EnvFilter, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
+    EnvFilter, Layer, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
 use crate::factories::observability::Observability;
@@ -37,6 +37,7 @@ impl Observability {
         cargo_crate_name: &str,
         cargo_pkg_version: &str,
         rust_log: Option<&str>,
+        log_format: Option<&str>,
         tracing_level: Option<&str>,
     ) -> Observability {
         global::set_text_map_propagator(TraceContextPropagator::new());
@@ -70,16 +71,31 @@ impl Observability {
         };
 
         // Stdout
+        let log_format = log_format.unwrap_or("json");
         let timer = LocalTime::new(format_description!(
             "[year]-[month]-[day] [hour]:[minute]:[second]"
         ));
-        let fmt_layer = tracing_subscriber::fmt::layer()
-            .compact()
-            .with_target(false)
-            .with_file(true)
-            .with_line_number(true)
-            .with_timer(timer)
-            .json();
+
+        let fmt_layer = if log_format == "pretty" {
+            tracing_subscriber::fmt::layer()
+                .with_ansi(true)
+                .with_timer(timer)
+                .with_target(false)
+                .with_file(false)
+                .with_line_number(false)
+                .compact()
+                .boxed()
+        } else {
+            tracing_subscriber::fmt::layer()
+                .with_timer(timer)
+                .with_target(false)
+                .with_file(true)
+                .with_line_number(true)
+                .json()
+                .flatten_event(true)
+                .with_span_list(false)
+                .boxed()
+        };
 
         // Registry
         tracing_subscriber::registry()

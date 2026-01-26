@@ -15,6 +15,7 @@ use crate::services::{
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub rust_log: Option<String>,
+    pub log_format: Option<String>,
     pub tracing_level: Option<String>,
     pub server_address: SocketAddr,
     pub frontend_endpoint: String,
