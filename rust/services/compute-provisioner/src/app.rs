@@ -4,7 +4,10 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, Method, header},
 };
-use http_common::router::base_routes;
+use http_common::{
+    router::base_routes,
+    trace_layer::{custom_make_span::CustomMakeSpan, custom_on_response::CustomOnResponse},
+};
 use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 pub async fn app(
@@ -34,7 +37,10 @@ pub async fn app(
             HeaderName::from_static("x-requested-with"),
         ]);
 
-    let tracer_layer = TraceLayer::new_for_http();
+    let tracer_layer = TraceLayer::new_for_http()
+        .make_span_with(CustomMakeSpan)
+        .on_response(CustomOnResponse)
+        .on_request(());
 
     let app = axum::Router::new()
         .merge(base_routes(cargo_pkg_name, cargo_pkg_version))

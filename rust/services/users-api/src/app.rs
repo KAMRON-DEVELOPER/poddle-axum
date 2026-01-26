@@ -5,12 +5,11 @@ use axum::{
     extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, Method, header},
 };
-use http_common::router::base_routes;
-use tower_http::{
-    cors::CorsLayer,
-    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
+use http_common::{
+    router::base_routes,
+    trace_layer::{custom_make_span::CustomMakeSpan, custom_on_response::CustomOnResponse},
 };
-use tracing::Level;
+use tower_http::{cors::CorsLayer, trace::TraceLayer};
 
 use crate::{features, utilities::app_state::AppState};
 
@@ -45,8 +44,9 @@ pub async fn app(
         ]);
 
     let tracer_layer = TraceLayer::new_for_http()
-        .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
-        .on_response(DefaultOnResponse::new().level(Level::INFO));
+        .make_span_with(CustomMakeSpan)
+        .on_response(CustomOnResponse)
+        .on_request(());
 
     let app = axum::Router::new()
         .merge(features::get_routes())
