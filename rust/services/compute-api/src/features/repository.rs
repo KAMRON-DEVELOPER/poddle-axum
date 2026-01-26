@@ -183,7 +183,8 @@ pub struct DeploymentRepository;
 impl DeploymentRepository {
     #[tracing::instrument(
         name = "deployment_repository.get_all_by_project",
-        skip(pagination, pool),
+        skip_all,
+        fields(user_id = %user_id, project_id = %project_id),
         err
     )]
     pub async fn get_all_by_project(
@@ -272,7 +273,7 @@ impl DeploymentRepository {
         Ok((deployments, total))
     }
 
-    #[tracing::instrument(name = "deployment_repository.get_by_id", skip(pool), err)]
+    #[tracing::instrument(name = "deployment_repository.get_by_id", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
     pub async fn get_by_id(
         user_id: Uuid,
         deployment_id: Uuid,
@@ -292,7 +293,7 @@ impl DeploymentRepository {
         .await
     }
 
-    #[tracing::instrument(name = "deployment_repository.create", skip(req, tx), err)]
+    #[tracing::instrument(name = "deployment_repository.create", skip_all, fields(user_id = %user_id, project_id = %project_id), err)]
     pub async fn create(
         user_id: Uuid,
         project_id: Uuid,
@@ -344,7 +345,7 @@ impl DeploymentRepository {
         .await
     }
 
-    #[tracing::instrument(name = "deployment_repository.update_status", skip(pool), err)]
+    #[tracing::instrument(name = "deployment_repository.update_status", skip_all, fields(deployment_id = %deployment_id, status = %status), err)]
     pub async fn update_status(
         deployment_id: Uuid,
         status: DeploymentStatus,
@@ -365,7 +366,7 @@ impl DeploymentRepository {
         Ok(())
     }
 
-    #[tracing::instrument(name = "deployment_repository.update", skip(req, tx), err)]
+    #[tracing::instrument(name = "deployment_repository.update", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
     pub async fn update(
         user_id: Uuid,
         deployment_id: Uuid,
@@ -418,7 +419,7 @@ impl DeploymentRepository {
         .await
     }
 
-    #[tracing::instrument(name = "deployment_repository.delete", skip(tx), err)]
+    #[tracing::instrument(name = "deployment_repository.delete", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
     pub async fn delete(
         user_id: Uuid,
         deployment_id: Uuid,
@@ -443,7 +444,7 @@ impl DeploymentRepository {
 pub struct DeploymentEventRepository;
 
 impl DeploymentEventRepository {
-    #[tracing::instrument(name = "deployment_event_repository.create", skip(message, pool), err)]
+    #[tracing::instrument(name = "deployment_event_repository.create", skip_all, fields(deployment_id = %deployment_id, event_type = %event_type), err)]
     pub async fn create(
         deployment_id: Uuid,
         event_type: &str,
@@ -466,7 +467,8 @@ impl DeploymentEventRepository {
 
     #[tracing::instrument(
         name = "deployment_event_repository.get_recent_by_deployment",
-        skip(pool),
+        skip_all,
+        fields(deployment_id = %deployment_id),
         err
     )]
     pub async fn get_recent_by_deployment(
@@ -492,11 +494,7 @@ impl DeploymentEventRepository {
 pub struct CacheRepository;
 
 impl CacheRepository {
-    #[tracing::instrument(
-        name = "cache_repository.get_deployment_metrics",
-        skip(points_count, deployment_ids, connection),
-        err
-    )]
+    #[tracing::instrument(name = "cache_repository.get_deployment_metrics", skip_all, err)]
     pub async fn get_deployment_metrics(
         points_count: u64,
         deployment_ids: Vec<&str>,

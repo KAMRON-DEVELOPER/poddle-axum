@@ -233,7 +233,7 @@ CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments (status);
 CREATE TABLE IF NOT EXISTS deployment_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     deployment_id UUID NOT NULL REFERENCES deployments (id) ON DELETE CASCADE,
-    event_type VARCHAR(128) NOT NULL,
+    type VARCHAR(128) NOT NULL,
     message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

@@ -118,6 +118,8 @@ pub struct Deployment {
 pub struct DeploymentEvent {
     pub id: Uuid,
     pub deployment_id: Uuid,
+    #[sqlx(rename = "type")]
+    #[serde(rename = "type")]
     pub event_type: String,
     pub message: Option<String>,
     pub created_at: DateTime<Utc>,

@@ -7,6 +7,7 @@ use crate::features::models::{AddonPrice, Balance, Preset, Transaction, Transact
 pub struct BillingRepository;
 
 impl BillingRepository {
+    #[tracing::instrument(name = "billing_repository.get_balance", skip_all, fields(user_id = %user_id), err)]
     pub async fn get_balance(user_id: Uuid, pool: &PgPool) -> Result<Balance, sqlx::Error> {
         sqlx::query_as::<Postgres, Balance>(
             r#"
@@ -20,18 +21,21 @@ impl BillingRepository {
         .await
     }
 
+    #[tracing::instrument(name = "billing_repository.get_presets", skip_all, err)]
     pub async fn get_presets(pool: &PgPool) -> Result<Vec<Preset>, sqlx::Error> {
         sqlx::query_as::<Postgres, Preset>(r#"SELECT * FROM presets"#)
             .fetch_all(pool)
             .await
     }
 
+    #[tracing::instrument(name = "billing_repository.get_addon_price", skip_all, err)]
     pub async fn get_addon_price(pool: &PgPool) -> Result<AddonPrice, sqlx::Error> {
         sqlx::query_as::<Postgres, AddonPrice>(r#"SELECT * FROM addon_prices"#)
             .fetch_one(pool)
             .await
     }
 
+    #[tracing::instrument(name = "billing_repository.get_transactions", skip_all, fields(user_id = %user_id), err)]
     pub async fn get_transactions(
         user_id: Uuid,
         pagination: Pagination,
