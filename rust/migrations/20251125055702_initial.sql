@@ -24,7 +24,7 @@ DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
     -- 3. K8s accepted it, pulling images (ContainerCreating)
     'starting',
     -- 4. All pods are Running and Ready
-    'healthy',
+    'running',
     -- 5. Pods are crashing or failing health checks
     'unhealthy',
     -- 6. Expected 3 replicas, but only 2 are ready
