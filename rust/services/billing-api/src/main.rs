@@ -6,6 +6,7 @@ pub mod implementations;
 pub mod services;
 pub mod utilities;
 
+use std::env;
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::result::Result::Ok;
@@ -35,21 +36,23 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    let config = Config::init(cargo_manifest_dir).await?;
+    let path = env::var("CONFIG").unwrap_or("config.json".to_string());
+    let full_path = cargo_manifest_dir.join(path);
+    let cfg = Config::init(full_path).await?;
     let _guard = Observability::init(
-        &config.otel_exporter_otlp_endpoint,
+        &cfg.otel_exporter_otlp_endpoint,
         cargo_crate_name,
         cargo_pkg_version,
-        config.tracing_level.as_deref(),
+        cfg.tracing_level.as_deref(),
     )
     .await;
 
-    let app = app::app(&config).await?;
-    let listener = tokio::net::TcpListener::bind(config.server_address).await?;
+    let app = app::app(&cfg).await?;
+    let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
 
     info!(
         "🚀 {} service running at {:#?}",
-        cargo_pkg_name, config.server_address
+        cargo_pkg_name, cfg.server_address
     );
     axum::serve(
         listener,

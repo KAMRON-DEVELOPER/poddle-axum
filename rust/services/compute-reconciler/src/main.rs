@@ -5,9 +5,9 @@ pub mod implementations;
 pub mod services;
 pub mod utilities;
 
-use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::result::Result::Ok;
+use std::{env, net::SocketAddr};
 
 use factory::factories::{
     database::Database, kubernetes::Kubernetes, observability::Observability, redis::Redis,
@@ -46,7 +46,9 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    let cfg = Config::init(cargo_manifest_dir).await?;
+    let path = env::var("CONFIG").unwrap_or("config.json".to_string());
+    let full_path = cargo_manifest_dir.join(path);
+    let cfg = Config::init(full_path).await?;
 
     let _guard = Observability::init(
         &cfg.otel_exporter_otlp_endpoint,

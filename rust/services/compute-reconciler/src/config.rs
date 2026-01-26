@@ -17,9 +17,9 @@ pub struct Config {
 }
 
 impl Config {
-    pub async fn init(cargo_manifest_dir: PathBuf) -> Result<Self, ConfigError> {
+    pub async fn init(path: PathBuf) -> Result<Self, ConfigError> {
         let cfg = ConfigBuilder::<AsyncState>::default()
-            .add_source(File::from(cargo_manifest_dir.join("settings.json")))
+            .add_source(File::from(path))
             .add_source(Environment::default())
             .build()
             .await?;
