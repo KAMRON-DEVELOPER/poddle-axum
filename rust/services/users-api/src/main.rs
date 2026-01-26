@@ -28,6 +28,9 @@ async fn main() -> anyhow::Result<()> {
     let cargo_pkg_name = env!("CARGO_PKG_NAME");
     let cargo_pkg_version = env!("CARGO_PKG_VERSION").into();
 
+    println!("***** cargo_crate_name: {}", cargo_crate_name);
+    println!("***** cargo_pkg_name: {}", cargo_pkg_name);
+
     let env_path = cargo_manifest_dir.join(".env");
 
     // Load service-specific .env

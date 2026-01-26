@@ -44,9 +44,9 @@ impl Observability {
         let resource = Self::get_resource(cargo_crate_name, cargo_pkg_version);
 
         let tracer_provider =
-            Self::init_tracer_provider(otel_exporter_otlp_endpoint.to_owned(), resource.clone());
+            Self::init_tracer_provider(resource.clone(), otel_exporter_otlp_endpoint.to_owned());
         let meter_provider =
-            Self::init_meter_provider(otel_exporter_otlp_endpoint.to_string(), resource);
+            Self::init_meter_provider(resource, otel_exporter_otlp_endpoint.to_string());
 
         let tracer = tracer_provider.tracer("tracing-otel-subscriber");
         let open_telemetry_layer = OpenTelemetryLayer::new(tracer);
@@ -110,8 +110,8 @@ impl Observability {
 
     // Construct TracerProvider for OpenTelemetryLayer
     fn init_tracer_provider(
-        otel_exporter_otlp_endpoint: String,
         resource: Resource,
+        otel_exporter_otlp_endpoint: String,
     ) -> SdkTracerProvider {
         println!("📤 Initializing OTLP trace exporter...");
 
@@ -148,8 +148,8 @@ impl Observability {
 
     // Construct MeterProvider for MetricsLayer
     fn init_meter_provider(
-        otel_exporter_otlp_endpoint: String,
         resource: Resource,
+        otel_exporter_otlp_endpoint: String,
     ) -> SdkMeterProvider {
         println!("📊 Initializing OTLP metric exporter...");
 
