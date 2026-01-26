@@ -6,7 +6,11 @@ use axum::{
     http::{HeaderName, HeaderValue, Method, header},
 };
 use http_common::router::base_routes;
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{
+    cors::CorsLayer,
+    trace::{DefaultMakeSpan, DefaultOnResponse, TraceLayer},
+};
+use tracing::Level;
 
 use crate::{features, utilities::app_state::AppState};
 
@@ -40,14 +44,16 @@ pub async fn app(
             HeaderName::from_static("x-requested-with"),
         ]);
 
-    let tracing_layer = TraceLayer::new_for_http();
+    let tracer_layer = TraceLayer::new_for_http()
+        .make_span_with(DefaultMakeSpan::new().level(Level::INFO))
+        .on_response(DefaultOnResponse::new().level(Level::INFO));
 
     let app = axum::Router::new()
         .merge(features::get_routes())
         .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(app_state)
-        .layer(tracing_layer)
+        .layer(tracer_layer)
         .layer(cors);
 
     Ok(app)

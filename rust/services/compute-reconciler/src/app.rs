@@ -34,12 +34,12 @@ pub async fn app(
             HeaderName::from_static("x-requested-with"),
         ]);
 
-    let tracing_layer = TraceLayer::new_for_http();
+    let tracer_layer = TraceLayer::new_for_http();
 
     let app = axum::Router::new()
         .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
-        .layer(tracing_layer)
+        .layer(tracer_layer)
         .layer(cors);
 
     Ok(app)
