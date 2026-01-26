@@ -20,30 +20,16 @@ impl BillingRepository {
         .await
     }
 
-    pub async fn get_presets(user_id: Uuid, pool: &PgPool) -> Result<Vec<Preset>, sqlx::Error> {
-        sqlx::query_as::<Postgres, Preset>(
-            r#"
-                SELECT *
-                FROM presets
-                WHERE user_id = $1
-            "#,
-        )
-        .bind(user_id)
-        .fetch_all(pool)
-        .await
+    pub async fn get_presets(pool: &PgPool) -> Result<Vec<Preset>, sqlx::Error> {
+        sqlx::query_as::<Postgres, Preset>(r#"SELECT * FROM presets"#)
+            .fetch_all(pool)
+            .await
     }
 
-    pub async fn get_addon_price(user_id: Uuid, pool: &PgPool) -> Result<AddonPrice, sqlx::Error> {
-        sqlx::query_as::<Postgres, AddonPrice>(
-            r#"
-                SELECT *
-                FROM addon_prices
-                WHERE user_id = $1
-            "#,
-        )
-        .bind(user_id)
-        .fetch_one(pool)
-        .await
+    pub async fn get_addon_price(pool: &PgPool) -> Result<AddonPrice, sqlx::Error> {
+        sqlx::query_as::<Postgres, AddonPrice>(r#"SELECT * FROM addon_prices"#)
+            .fetch_one(pool)
+            .await
     }
 
     pub async fn get_transactions(

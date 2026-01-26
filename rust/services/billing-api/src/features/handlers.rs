@@ -19,12 +19,19 @@ pub async fn get_balance(
 }
 
 pub async fn get_presets(
-    claims: Claims,
+    _claims: Claims,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
-    let user_id = claims.sub;
-    let balance = BillingRepository::get_presets(user_id, &database.pool).await?;
+    let balance = BillingRepository::get_presets(&database.pool).await?;
     Ok(Json(balance))
+}
+
+pub async fn get_addon_price(
+    _claims: Claims,
+    State(database): State<Database>,
+) -> Result<impl IntoResponse, AppError> {
+    let addon_price = BillingRepository::get_addon_price(&database.pool).await?;
+    Ok(Json(addon_price))
 }
 
 pub async fn get_transactions(
