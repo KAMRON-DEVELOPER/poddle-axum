@@ -12,7 +12,8 @@ members = [
     "crates/users-core",
     "crates/http-contracts",
     "crates/compute-core",
-    "services/compute-metrics-worker", "crates/http-common",
+    "services/compute-metrics-worker",
+    "crates/http-common",
 ]
 
 resolver = "2"
@@ -142,6 +143,7 @@ tracing-subscriber = { version = "0.3.20", features = [
     "local-time",
     "std",
     "time",
+    "ansi",
 ] }
 # Integration between the tracing crate and the opentelemetry crate
 tracing-opentelemetry = "0.32.0"

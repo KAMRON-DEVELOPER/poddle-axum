@@ -30,8 +30,6 @@ impl Drop for Observability {
 
 impl Observability {
     /// Initialize tracing-subscriber and return Observability for opentelemetry-related termination processing.
-    ///
-    /// **absolutely** no spans must created before this call
     pub async fn init(
         otel_exporter_otlp_endpoint: &str,
         cargo_crate_name: &str,
@@ -39,6 +37,8 @@ impl Observability {
         rust_log: Option<&str>,
         log_format: Option<&str>,
         tracing_level: Option<&str>,
+        with_file: Option<bool>,
+        with_line_number: Option<bool>,
     ) -> Observability {
         global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -81,16 +81,16 @@ impl Observability {
                 .with_ansi(true)
                 .with_timer(timer)
                 .with_target(false)
-                .with_file(true)
-                .with_line_number(true)
+                .with_file(with_file.unwrap_or(true))
+                .with_line_number(with_line_number.unwrap_or(true))
                 .compact()
                 .boxed()
         } else {
             tracing_subscriber::fmt::layer()
                 .with_timer(timer)
                 .with_target(false)
-                .with_file(true)
-                .with_line_number(true)
+                .with_file(with_file.unwrap_or(true))
+                .with_line_number(with_line_number.unwrap_or(true))
                 .json()
                 .flatten_event(true)
                 .with_span_list(false)
