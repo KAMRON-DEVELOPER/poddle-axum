@@ -428,7 +428,7 @@ pub async fn continue_with_email_handler(
     // Offload CPU intensive work to a thread pool dedicated to blocking operations
     let hash_password = tokio::task::spawn_blocking(move || {
         let _span = info_span!("password_hashing").entered();
-        hash(password, 6)
+        hash(password, 10)
     })
     .await
     .map_err(|e| AppError::InternalServerError(e.to_string()))??;
