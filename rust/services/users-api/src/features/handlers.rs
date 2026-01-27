@@ -11,7 +11,7 @@ use crate::{
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
 };
-use bcrypt::{DEFAULT_COST, hash, verify};
+use bcrypt::{hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
 use http_contracts::message::MessageResponse;
 use serde_json::json;
@@ -365,14 +365,22 @@ pub async fn continue_with_email_handler(
     if let Some(user) = maybe_user {
         tracing::Span::current().record("user_id", &user.id.to_string());
 
-        let same = verify(
-            &auth_in.password,
-            &user.password.clone().unwrap_or_default(),
-        )?;
+        // Run VERIFY in a blocking thread
+        // We clone the data needed for the closure to avoid borrow checker issues
+        let password_input = auth_in.password.clone();
+        let password_hash = user.password.clone().unwrap_or_default();
+
+        let same = tokio::task::spawn_blocking(move || {
+            let _span = info_span!("password_verifying").entered();
+            verify(&password_input, &password_hash)
+        })
+        .await
+        .map_err(|e| AppError::InternalServerError(e.to_string()))? // JoinError
+        .map_err(|e| AppError::InternalServerError(e.to_string()))?; // VerifyError
 
         if !same {
             return Err(AppError::ValidationError(
-                "Password is incorrect".to_string(),
+                "Password is incorrect or not set".to_string(),
             ));
         }
 
@@ -416,12 +424,19 @@ pub async fn continue_with_email_handler(
 
     let mut tx = database.pool.begin().await?;
 
-    let username = auth_in.username.clone().unwrap_or_default();
-    let hash_password = hash(auth_in.password, DEFAULT_COST)?;
+    let password = auth_in.password.clone();
+    // Offload CPU intensive work to a thread pool dedicated to blocking operations
+    let hash_password = tokio::task::spawn_blocking(move || {
+        let _span = info_span!("password_hashing").entered();
+        hash(password, 6)
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(e.to_string()))??;
+    // The double ?? handles the JoinError and the HashError
 
     let email_oauth_user_id = UsersRepository::create_oauth_user(
         Uuid::new_v4().to_string().as_ref(),
-        Some(&username),
+        auth_in.username.as_deref(),
         Some(&auth_in.email),
         None,
         Some(&hash_password),
@@ -431,7 +446,7 @@ pub async fn continue_with_email_handler(
     .await?;
 
     let user = UsersRepository::create_user(
-        username,
+        auth_in.username.clone().unwrap_or_default(),
         auth_in.email,
         Some(hash_password),
         email_oauth_user_id,

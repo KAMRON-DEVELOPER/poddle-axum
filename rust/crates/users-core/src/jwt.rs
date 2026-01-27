@@ -37,7 +37,7 @@ pub trait JwtCapability {
     fn email_verification_token_expire_in_hours(&self) -> i64;
 }
 
-#[tracing::instrument(name = "create_token", skip(cfg, user_id, typ), err)]
+#[tracing::instrument(name = "create_token", skip_all, fields(user_id = %user_id), err)]
 pub fn create_token<C: JwtCapability + ?Sized>(
     cfg: &C,
     user_id: Uuid,
