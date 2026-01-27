@@ -5,9 +5,19 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Clone, Debug)]
+pub struct MailtrapTemplateConfig {
+    pub from_email: String,
+    pub from_name: String,
+    pub template_uuid: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
 pub struct MailtrapConfig {
     pub api_key: String,
-    pub verification_template_uuid: String,
+    pub verification: MailtrapTemplateConfig,
+    pub password_reset: MailtrapTemplateConfig,
+    pub billing: MailtrapTemplateConfig,
+    pub support: MailtrapTemplateConfig,
 }
 
 pub struct Mailtrap {

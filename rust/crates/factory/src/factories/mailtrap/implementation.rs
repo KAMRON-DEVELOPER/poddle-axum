@@ -35,16 +35,19 @@ impl Mailtrap {
         cfg: &MailtrapConfig,
     ) -> Result<(), MailtrapError> {
         debug!("Sending email...");
+
+        let template = cfg.verification.clone();
+
         let payload = Payload {
             from: Mailbox {
-                name: "Poddle Verification".to_string(),
-                email: "verify@podle.uz".to_string(),
+                name: template.from_name,
+                email: template.from_email,
             },
             to: vec![Mailbox {
                 email: to_email.to_string(),
                 name: name.to_string(),
             }],
-            template_uuid: cfg.clone().verification_template_uuid.into(),
+            template_uuid: template.template_uuid,
             template_variables: serde_json::json!({
                 "link": link
             }),
