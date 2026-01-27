@@ -55,7 +55,7 @@ impl Database {
             .await
             .unwrap_or_else(|e| panic!("Failed connect to database, {}", e));
 
-        info!("✅ Postgres pool created.");
+        info!("✅ Postgres pool created");
 
         Self { pool }
     }

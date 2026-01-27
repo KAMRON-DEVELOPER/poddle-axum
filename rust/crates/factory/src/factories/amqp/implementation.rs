@@ -44,7 +44,7 @@ impl Amqp {
         let connection = Connection::connect_with_config(&uri, options, config)
             .await
             .expect(format!("Failed to connect to RabbitMQ at {}", uri).as_str());
-        info!("✅ RabbitMQ connection established.");
+        info!("✅ RabbitMQ connection created");
 
         Self {
             connection: Arc::new(connection),

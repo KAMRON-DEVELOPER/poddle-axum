@@ -28,9 +28,6 @@ async fn main() -> anyhow::Result<()> {
     let cargo_pkg_name = env!("CARGO_PKG_NAME");
     let cargo_pkg_version = env!("CARGO_PKG_VERSION");
 
-    println!("***** cargo_crate_name: {}", cargo_crate_name);
-    println!("***** cargo_pkg_name: {}", cargo_pkg_name);
-
     let env_path = cargo_manifest_dir.join(".env");
 
     // Load service-specific .env
@@ -38,18 +35,10 @@ async fn main() -> anyhow::Result<()> {
     // Load workspace root .env as fallback
     dotenvy::dotenv().ok();
 
-    println!("🔍 Loading configuration...");
     let path = env::var("CONFIG").unwrap_or("config.json".to_string());
     let full_path = cargo_manifest_dir.join(path);
     let cfg = Config::init(full_path).await?;
 
-    println!("🌐 Server address: {}", cfg.server_address);
-    println!(
-        "📡 OTLP endpoint: {}",
-        cfg.observability.otel_exporter_otlp_endpoint
-    );
-
-    println!("🔭 Initializing observability...");
     let _guard = Observability::init(
         cargo_crate_name.to_string(),
         cargo_pkg_version.to_string(),
@@ -57,10 +46,8 @@ async fn main() -> anyhow::Result<()> {
     )
     .await;
 
-    println!("🏗️  Building application...");
     let app = app::app(cargo_pkg_name, cargo_pkg_version, &cfg).await?;
 
-    println!("🔌 Binding to {}...", cfg.server_address);
     let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
 
     info!(

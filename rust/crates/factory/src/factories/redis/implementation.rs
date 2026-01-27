@@ -2,6 +2,7 @@ use redis::{
     Client, ClientTlsConfig, ConnectionAddr, ConnectionInfo, IntoConnectionInfo, ProtocolVersion,
     RedisConnectionInfo, TlsCertificates, aio::PubSub,
 };
+use tracing::info;
 
 use crate::factories::redis::{Redis, RedisConfig, error::RedisError};
 
@@ -26,6 +27,9 @@ impl Redis {
             .get_multiplexed_tokio_connection()
             .await
             .unwrap_or_else(|e| panic!("Couldn't establish connection to redis: {}", e));
+
+        info!("✅ Redis client & connection created");
+
         Self { client, connection }
     }
 
