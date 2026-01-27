@@ -13,7 +13,7 @@ impl<B> MakeSpan<B> for CustomMakeSpan {
             .unwrap_or("unknown");
 
         tracing::info_span!(
-            "| Request |",
+            "Request",
             method = %request.method(),
             uri = %request.uri(),
             version = ?request.version(),
