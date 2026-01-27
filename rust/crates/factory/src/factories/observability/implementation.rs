@@ -15,7 +15,7 @@ use tracing_subscriber::{
     EnvFilter, Layer, fmt::time::LocalTime, layer::SubscriberExt, util::SubscriberInitExt,
 };
 
-use crate::factories::observability::Observability;
+use crate::factories::observability::{Observability, ObservabilityConfig};
 
 impl Drop for Observability {
     fn drop(&mut self) {
@@ -31,23 +31,23 @@ impl Drop for Observability {
 impl Observability {
     /// Initialize tracing-subscriber and return Observability for opentelemetry-related termination processing.
     pub async fn init(
-        otel_exporter_otlp_endpoint: &str,
-        cargo_crate_name: &str,
-        cargo_pkg_version: &str,
-        rust_log: Option<&str>,
-        log_format: Option<&str>,
-        tracing_level: Option<&str>,
-        with_file: Option<bool>,
-        with_line_number: Option<bool>,
+        cargo_crate_name: String,
+        cargo_pkg_version: String,
+        cfg: &ObservabilityConfig,
     ) -> Observability {
+        let endpoint = cfg.otel_exporter_otlp_endpoint.as_str();
+        let rust_log = cfg.rust_log.as_deref();
+        let log_format = cfg.log_format.as_deref();
+        let tracing_level = cfg.tracing_level.as_deref();
+        let with_file = cfg.with_file;
+        let with_line_number = cfg.with_line_number;
+
         global::set_text_map_propagator(TraceContextPropagator::new());
 
-        let resource = Self::get_resource(cargo_crate_name, cargo_pkg_version);
+        let resource = Self::get_resource(cargo_crate_name.as_str(), cargo_pkg_version.as_str());
 
-        let tracer_provider =
-            Self::init_tracer_provider(resource.clone(), otel_exporter_otlp_endpoint.to_owned());
-        let meter_provider =
-            Self::init_meter_provider(resource, otel_exporter_otlp_endpoint.to_string());
+        let tracer_provider = Self::init_tracer_provider(resource.clone(), endpoint);
+        let meter_provider = Self::init_meter_provider(resource, endpoint);
 
         let tracer = tracer_provider.tracer("tracing-otel-subscriber");
         let open_telemetry_layer = OpenTelemetryLayer::new(tracer);
@@ -126,18 +126,15 @@ impl Observability {
     }
 
     // Construct TracerProvider for OpenTelemetryLayer
-    fn init_tracer_provider(
-        resource: Resource,
-        otel_exporter_otlp_endpoint: String,
-    ) -> SdkTracerProvider {
+    fn init_tracer_provider(resource: Resource, endpoint: &str) -> SdkTracerProvider {
         println!("📤 Initializing OTLP trace exporter...");
 
         let mut exporter = SpanExporter::builder()
             .with_tonic()
-            .with_endpoint(&otel_exporter_otlp_endpoint)
+            .with_endpoint(endpoint)
             .with_compression(opentelemetry_otlp::Compression::Gzip);
 
-        if otel_exporter_otlp_endpoint.starts_with("https://") {
+        if endpoint.starts_with("https://") {
             let tls_config = ClientTlsConfig::new().with_native_roots();
             exporter = exporter.with_tls_config(tls_config);
         }
@@ -164,18 +161,15 @@ impl Observability {
     }
 
     // Construct MeterProvider for MetricsLayer
-    fn init_meter_provider(
-        resource: Resource,
-        otel_exporter_otlp_endpoint: String,
-    ) -> SdkMeterProvider {
+    fn init_meter_provider(resource: Resource, endpoint: &str) -> SdkMeterProvider {
         println!("📊 Initializing OTLP metric exporter...");
 
         let mut exporter = MetricExporter::builder()
             .with_tonic()
-            .with_endpoint(&otel_exporter_otlp_endpoint)
+            .with_endpoint(endpoint)
             .with_compression(opentelemetry_otlp::Compression::Gzip);
 
-        if otel_exporter_otlp_endpoint.starts_with("https://") {
+        if endpoint.starts_with("https://") {
             let tls_config = ClientTlsConfig::new().with_native_roots();
             exporter = exporter.with_tls_config(tls_config);
         }
