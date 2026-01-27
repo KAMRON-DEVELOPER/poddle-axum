@@ -65,7 +65,7 @@ pub fn create_token<C: JwtCapability + ?Sized>(
     encode(&Header::new(Algorithm::HS256), &claims, &encoding_key).map_err(|_| JwtError::Creation)
 }
 
-#[tracing::instrument(name = "verify_token", skip(cfg, token), err)]
+#[tracing::instrument(name = "verify_token", skip_all, err)]
 pub fn verify_token<C: JwtCapability + ?Sized>(cfg: &C, token: &str) -> Result<Claims, JwtError> {
     let decoding_key = DecodingKey::from_secret(cfg.jwt_secret().as_bytes());
     decode::<Claims>(token, &decoding_key, &Validation::default())
