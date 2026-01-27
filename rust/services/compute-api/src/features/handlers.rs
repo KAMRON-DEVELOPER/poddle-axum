@@ -78,7 +78,7 @@ pub async fn get_project_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let project = ProjectRepository::get_one_by_id(project_id, user_id, &database.pool).await?;
+    let project = ProjectRepository::get_one_by_id(user_id, project_id, &database.pool).await?;
 
     Ok(Json(project))
 }
