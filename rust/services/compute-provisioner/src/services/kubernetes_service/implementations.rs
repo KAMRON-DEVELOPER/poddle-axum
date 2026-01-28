@@ -259,9 +259,10 @@ impl KubernetesService {
             .create_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
             .await?;
 
-        let image_pull_secret = self
-            .create_image_pull_secret(&ns, &name, &msg.image_pull_secret)
-            .await?;
+        let image_pull_secret = match msg.image_pull_secret.as_ref() {
+            Some(secret) => Some(self.create_image_pull_secret(&ns, &name, secret).await?),
+            None => None,
+        };
 
         self.create_deployment(
             &ns,
@@ -553,7 +554,7 @@ impl KubernetesService {
         ns: &str,
         name: &str,
         image: &str,
-        image_pull_secret: String,
+        image_pull_secret: Option<String>,
         port: i32,
         desired_replicas: i32,
         resource_spec: &ResourceSpec,
@@ -607,6 +608,8 @@ impl KubernetesService {
             Quantity(format!("{}Mi", resource_spec.memory_limit_mb)),
         );
 
+        let image_pull_secrets = image_pull_secret.map(|name| vec![LocalObjectReference { name }]);
+
         let deployment = K8sDeployment {
             metadata: ObjectMeta {
                 name: Some(name.to_string()),
@@ -626,9 +629,7 @@ impl KubernetesService {
                         ..Default::default()
                     }),
                     spec: Some(PodSpec {
-                        image_pull_secrets: Some(vec![LocalObjectReference {
-                            name: image_pull_secret,
-                        }]),
+                        image_pull_secrets,
                         containers: vec![Container {
                             name: name.to_string(),
                             image: Some(image.to_string()),

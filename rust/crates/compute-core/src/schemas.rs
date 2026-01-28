@@ -68,7 +68,7 @@ pub struct CreateDeploymentRequest {
     pub name: String,
     #[validate(length(min = 1, max = 500))]
     pub image: String,
-    pub image_pull_secret: ImagePullSecret,
+    pub image_pull_secret: Option<ImagePullSecret>,
     #[validate(range(min = 1, max = 65535))]
     pub port: i32,
     #[validate(range(min = 1, max = 25))]
@@ -160,7 +160,7 @@ pub struct CreateDeploymentMessage {
     pub project_id: Uuid,
     pub deployment_id: Uuid,
     pub image: String,
-    pub image_pull_secret: ImagePullSecret,
+    pub image_pull_secret: Option<ImagePullSecret>,
     pub port: i32,
     pub desired_replicas: i32,
     pub resource_spec: ResourceSpec,

@@ -200,13 +200,6 @@ pub async fn get_deployments_handler(
         }));
     }
 
-    // if deployments.is_empty() {
-    //     return Ok(Json(ListResponse {
-    //         data: vec![],
-    //         total: 0,
-    //     }));
-    // }
-
     let deployment_ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
     let deployment_ids: Vec<&str> = deployment_ids.iter().map(|s| s.as_str()).collect();
     let deployment_metrics = CacheRepository::get_deployment_metrics(
@@ -361,10 +354,7 @@ pub async fn create_deployment_handler(
         .await?
         .await?;
 
-    info!(
-        "Published deployment creation message for {}",
-        deployment.id
-    );
+    info!(deployment_id = %deployment.id, "Published deployment creation message");
 
     // Commit transaction
     tx.commit().await?;
