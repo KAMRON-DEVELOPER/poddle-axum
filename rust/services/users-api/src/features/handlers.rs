@@ -748,10 +748,10 @@ pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
 pub async fn get_platform_stats(
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
-    let users_total = sqlx::query_scalar!("SELECT COUNT(*) as count from users")
+    let users_total = sqlx::query_scalar!("SELECT COUNT(*) from users")
         .fetch_one(&database.pool)
         .await?;
-    let deployments_total = sqlx::query!("SELECT COUNT(*) as count from users")
+    let deployments_total = sqlx::query!("SELECT COUNT(*) as count from deployments")
         .fetch_one(&database.pool)
         .await?;
 
