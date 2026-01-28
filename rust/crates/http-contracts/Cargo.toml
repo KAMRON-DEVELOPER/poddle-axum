@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-axum.workspace=true
+axum.workspace = true
 serde.workspace = true
 thiserror.workspace = true
+serde_with.workspace = true
