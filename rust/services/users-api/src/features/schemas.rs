@@ -99,3 +99,10 @@ pub struct UserOut {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PlatformStatsResponse {
+    pub users_total: i64,
+    pub deployments_total: i64,
+}

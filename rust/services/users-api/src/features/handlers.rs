@@ -5,8 +5,8 @@ use crate::{
         models::{OAuthUser, Provider},
         repository::UsersRepository,
         schemas::{
-            AuthIn, AuthOut, GithubOAuthUser, GoogleOAuthUser, OAuthCallback, RedirectResponse,
-            Tokens, UserIn, VerifyQuery,
+            AuthIn, AuthOut, GithubOAuthUser, GoogleOAuthUser, OAuthCallback,
+            PlatformStatsResponse, RedirectResponse, Tokens, UserIn, VerifyQuery,
         },
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
@@ -685,8 +685,8 @@ pub async fn refresh_handler(
     let access_token = create_token(&config, claims.sub, TokenType::Access)?;
 
     let response = Json(Tokens {
-        access_token: access_token,
-        refresh_token: refresh_token,
+        access_token,
+        refresh_token,
     });
 
     Ok((jar, response))
@@ -742,4 +742,21 @@ pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
             "message": "all cookies cleared"
         })),
     )
+}
+
+#[tracing::instrument(name = "get_platform_stats", skip_all)]
+pub async fn get_platform_stats(
+    State(database): State<Database>,
+) -> Result<impl IntoResponse, AppError> {
+    let users_total = sqlx::query_scalar!("SELECT COUNT(*) as count from users")
+        .fetch_one(&database.pool)
+        .await?;
+    let deployments_total = sqlx::query!("SELECT COUNT(*) as count from users")
+        .fetch_one(&database.pool)
+        .await?;
+
+    Ok(Json(PlatformStatsResponse {
+        users_total: users_total.unwrap_or(0),
+        deployments_total: deployments_total.count.unwrap_or(0),
+    }))
 }
