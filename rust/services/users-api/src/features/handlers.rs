@@ -463,8 +463,8 @@ pub async fn continue_with_email_handler(
 
     match mailtrap
         .send_email_verification_link(
-            &user.email,
             &user.username,
+            &user.email,
             &verification_link,
             &config.mailtrap,
         )
@@ -775,18 +775,28 @@ pub async fn get_feedbacks_handler(
 
 #[tracing::instrument(name = "create_feedback_handler", skip_all)]
 pub async fn create_feedback_handler(
+    State(cfg): State<Config>,
     State(db): State<Database>,
     Json(req): Json<CreateFeedbackRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let query_result = UsersRepository::create_feedback(&req, &db.pool).await?;
+    let query_result = UsersRepository::create_feedback(&req, &db.pool)
+        .await
+        .map_err(|e| AppError::InternalServerError(format!("Database error: {}", e)))?;
 
-    match query_result.rows_affected() {
-        0 => Err(AppError::InternalServerError(
-            "Failed to create feedback, sorry".into(),
-        )),
-        _ => {
-            let message = format!("Thank you for your feedback {}!", req.name);
-            Ok(Json(MessageResponse { message }))
-        }
+    if query_result.rows_affected() == 0 {
+        return Err(AppError::InternalServerError(
+            "Could not save feedback".into(),
+        ));
     }
+
+    let mailtrap = Mailtrap::new();
+    if let Err(err) = mailtrap
+        .send_feedback_confirmation(&req.name, &req.email, &req.message, &cfg.mailtrap)
+        .await
+    {
+        error!(name: "MailtrapError", "Email failed but DB saved: {}", err);
+    }
+
+    let message = format!("Thank you for your feedback, {}!", req.name);
+    Ok(Json(MessageResponse { message }))
 }

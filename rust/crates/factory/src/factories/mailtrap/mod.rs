@@ -18,6 +18,7 @@ pub struct MailtrapConfig {
     pub password_reset: MailtrapTemplateConfig,
     pub billing: MailtrapTemplateConfig,
     pub support: MailtrapTemplateConfig,
+    pub feedback_confirmation: MailtrapTemplateConfig,
 }
 
 pub struct Mailtrap {

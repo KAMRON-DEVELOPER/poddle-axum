@@ -29,8 +29,8 @@ impl Mailtrap {
     )]
     pub async fn send_email_verification_link(
         &self,
+        to_name: &str,
         to_email: &str,
-        name: &str,
         link: &str,
         cfg: &MailtrapConfig,
     ) -> Result<(), MailtrapError> {
@@ -45,7 +45,7 @@ impl Mailtrap {
             },
             to: vec![Mailbox {
                 email: to_email.to_string(),
-                name: name.to_string(),
+                name: to_name.to_string(),
             }],
             template_uuid: template.template_uuid,
             template_variables: serde_json::json!({
@@ -53,7 +53,60 @@ impl Mailtrap {
             }),
         };
 
-        debug!("Sending email to '{}' with email '{}'", name, to_email);
+        debug!("Sending email to '{}' with email '{}'", to_name, to_email);
+
+        let res = self
+            .client
+            .post(&self.url)
+            .header("accept", "application/json")
+            .header("content-type", "application/json")
+            .header("authorization", cfg.clone().api_key)
+            .json(&payload)
+            .send()
+            .await?;
+
+        let status_code = res.status();
+
+        if status_code == 200 {
+            let response = res.json::<SuccessResponse>().await?;
+            debug!("Mailtrap success: {:?}", response);
+            Ok(())
+        } else {
+            let response = res.json::<ErrorResponse>().await?;
+            error!("Mailtrap error: {:?}", response);
+            Err(MailtrapError::Api { error: response })
+        }
+    }
+
+    #[tracing::instrument(name = "mailtrip.send_feedback_confirmation", skip_all, fields(recipient = %to_email), err)]
+    pub async fn send_feedback_confirmation(
+        &self,
+        to_name: &str,
+        to_email: &str,
+        message: &str,
+        cfg: &MailtrapConfig,
+    ) -> Result<(), MailtrapError> {
+        debug!("Sending email...");
+
+        let template = cfg.feedback_confirmation.clone();
+
+        let payload = Payload {
+            from: Mailbox {
+                name: template.from_name,
+                email: template.from_email,
+            },
+            to: vec![Mailbox {
+                email: to_email.to_string(),
+                name: to_name.to_string(),
+            }],
+            template_uuid: template.template_uuid,
+            template_variables: serde_json::json!({
+                "name": to_name,
+                "message": message
+            }),
+        };
+
+        debug!("Sending email to '{}' with email '{}'", to_name, to_email);
 
         let res = self
             .client

@@ -15,11 +15,7 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     // create_oauth_user
     // ----------------------------------------------------------------------------
-    #[tracing::instrument(
-        "users_repository.create_oauth_user",
-        skip(picture, hash_password, provider, executor),
-        err
-    )]
+    #[tracing::instrument("users_repository.create_oauth_user", skip_all, err)]
     pub async fn create_oauth_user<'e, E>(
         id: &str,
         username: Option<&str>,
@@ -52,7 +48,7 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     // find_oauth_user_by_email
     // ----------------------------------------------------------------------------
-    #[tracing::instrument("users_repository.find_oauth_user_by_email", skip(pool), err)]
+    #[tracing::instrument("users_repository.find_oauth_user_by_email", skip_all, err)]
     pub async fn find_oauth_user_by_email(
         email: &str,
         pool: &PgPool,
@@ -80,11 +76,7 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     // create_user
     // ----------------------------------------------------------------------------
-    #[tracing::instrument(
-        "users_repository.create_user",
-        skip(hash_password, oauth_user_id, tx),
-        err
-    )]
+    #[tracing::instrument("users_repository.create_user", skip_all, err)]
     pub async fn create_user(
         username: String,
         email: String,
@@ -122,7 +114,7 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     // get_user_by_id
     // ----------------------------------------------------------------------------
-    #[tracing::instrument("users_repository.get_user_by_id", skip(pool), err)]
+    #[tracing::instrument("users_repository.get_user_by_id", skip_all, err)]
     pub async fn get_user_by_id(id: &Uuid, pool: &PgPool) -> Result<User, AppError> {
         Ok(sqlx::query_as!(
             User,
@@ -151,7 +143,7 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     // find_user_by_email
     // ----------------------------------------------------------------------------
-    #[tracing::instrument("users_repository.find_user_by_email", skip(pool), err)]
+    #[tracing::instrument("users_repository.find_user_by_email", skip_all, err)]
     pub async fn find_user_by_email(email: &str, pool: &PgPool) -> Result<Option<User>, AppError> {
         Ok(sqlx::query_as!(
             User,
@@ -176,7 +168,7 @@ impl UsersRepository {
         .await?)
     }
 
-    #[tracing::instrument("users_repository.set_user_email_verified", skip(pool), err)]
+    #[tracing::instrument("users_repository.set_user_email_verified", skip_all, err)]
     pub async fn set_user_email_verified(
         id: &Uuid,
         pool: &PgPool,
@@ -262,10 +254,13 @@ impl UsersRepository {
     // create_feedback
     // ----------------------------------------------------------------------------
     #[tracing::instrument("users_repository.create_feedback", skip_all, err)]
-    pub async fn create_feedback(
+    pub async fn create_feedback<'e, E>(
         req: &CreateFeedbackRequest,
-        pool: &PgPool,
-    ) -> Result<PgQueryResult, AppError> {
+        executor: E,
+    ) -> Result<PgQueryResult, sqlx::Error>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
         Ok(sqlx::query!(
             r#"
             INSERT INTO feedbacks (name, email, message)
@@ -275,7 +270,7 @@ impl UsersRepository {
             req.email,
             req.message,
         )
-        .execute(pool)
+        .execute(executor)
         .await?)
     }
 }
