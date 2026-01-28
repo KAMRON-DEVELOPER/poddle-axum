@@ -13,7 +13,14 @@ use axum::{
 
 pub fn get_routes() -> Router<AppState> {
     Router::new()
-        .route("/api/v1/platform-stats", get(handlers::get_platform_stats))
+        .route(
+            "/api/v1/platform-stats",
+            get(handlers::get_platform_stats_handler),
+        )
+        .route(
+            "/api/v1/feedback",
+            get(handlers::get_feedbacks_handler).post(handlers::create_feedback_handler),
+        )
         .route(
             "/api/v1/profile",
             get(handlers::get_user_handler)

@@ -63,6 +63,7 @@ pub struct GoogleOAuthUser {
     pub name: Option<String>,
     pub picture: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize, Default, Debug)]
@@ -74,6 +75,7 @@ pub struct GithubOAuthUser {
     pub name: Option<String>,
     pub email: Option<String>,
     pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(Deserialize, Default, Debug)]
@@ -105,4 +107,12 @@ pub struct UserOut {
 pub struct PlatformStatsResponse {
     pub users_total: i64,
     pub deployments_total: i64,
+}
+
+#[derive(Deserialize, Default, Debug)]
+#[serde(default, rename_all = "camelCase")]
+pub struct CreateFeedbackRequest {
+    pub name: String,
+    pub email: String,
+    pub message: String,
 }

@@ -5,15 +5,17 @@ use crate::{
         models::{OAuthUser, Provider},
         repository::UsersRepository,
         schemas::{
-            AuthIn, AuthOut, GithubOAuthUser, GoogleOAuthUser, OAuthCallback,
-            PlatformStatsResponse, RedirectResponse, Tokens, UserIn, VerifyQuery,
+            AuthIn, AuthOut, CreateFeedbackRequest, GithubOAuthUser, GoogleOAuthUser,
+            OAuthCallback, PlatformStatsResponse, RedirectResponse, Tokens, UserIn, VerifyQuery,
         },
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
 };
 use bcrypt::{hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
-use http_contracts::message::MessageResponse;
+use http_contracts::{
+    list::schema::ListResponse, message::MessageResponse, pagination::schema::Pagination,
+};
 use serde_json::json;
 use std::net::SocketAddr;
 use users_core::jwt::{Claims, TokenType, create_token, verify_token};
@@ -744,8 +746,8 @@ pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
     )
 }
 
-#[tracing::instrument(name = "get_platform_stats", skip_all)]
-pub async fn get_platform_stats(
+#[tracing::instrument(name = "get_platform_stats_handler", skip_all)]
+pub async fn get_platform_stats_handler(
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let users_total = sqlx::query_scalar!("SELECT COUNT(*) from users")
@@ -759,4 +761,32 @@ pub async fn get_platform_stats(
         users_total: users_total.unwrap_or(0),
         deployments_total: deployments_total.count.unwrap_or(0),
     }))
+}
+
+#[tracing::instrument(name = "get_feedbacks_handler", skip_all)]
+pub async fn get_feedbacks_handler(
+    Query(p): Query<Pagination>,
+    State(db): State<Database>,
+) -> Result<impl IntoResponse, AppError> {
+    let (data, total) = UsersRepository::get_feedbacks(&p, &db.pool).await?;
+
+    Ok(Json(ListResponse { data, total }))
+}
+
+#[tracing::instrument(name = "create_feedback_handler", skip_all)]
+pub async fn create_feedback_handler(
+    State(db): State<Database>,
+    Json(req): Json<CreateFeedbackRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let query_result = UsersRepository::create_feedback(&req, &db.pool).await?;
+
+    match query_result.rows_affected() {
+        0 => Err(AppError::InternalServerError(
+            "Failed to create feedback, sorry".into(),
+        )),
+        _ => {
+            let message = format!("Thank you for your feedback {}!", req.name);
+            Ok(Json(MessageResponse { message }))
+        }
+    }
 }

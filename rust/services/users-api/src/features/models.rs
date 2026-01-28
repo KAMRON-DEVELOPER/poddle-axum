@@ -38,6 +38,16 @@ pub enum Provider {
 
 #[derive(FromRow, Serialize, Deserialize, PartialEq, Eq, Debug)]
 #[serde(rename_all = "camelCase")]
+pub struct Feedback {
+    pub id: Uuid,
+    pub name: String,
+    pub email: String,
+    pub message: String,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(FromRow, Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct OAuthUser {
     pub id: String,
     pub provider: Provider,
@@ -45,8 +55,8 @@ pub struct OAuthUser {
     pub email: Option<String>,
     pub password: Option<String>,
     pub picture: Option<String>,
-    pub created_at: Option<DateTime<Utc>>,
-    pub updated_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]

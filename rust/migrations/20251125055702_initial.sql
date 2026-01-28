@@ -74,6 +74,17 @@ CREATE TABLE IF NOT EXISTS system_config (
 
 CREATE TRIGGER set_system_config_timestamp BEFORE UPDATE ON system_config FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
+-- ==============================================
+-- FEEDBACK
+-- ==============================================
+CREATE TABLE feedbacks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid (),
+    email TEXT NOT NULL,
+    name TEXT NOT NULL,
+    message TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- =====================
 -- OAUTH USERS
 -- =====================

@@ -12,8 +12,8 @@ impl From<GoogleOAuthUser> for OAuthUser {
             email: g.email,
             password: None,
             picture: g.picture,
-            created_at: None,
-            updated_at: None,
+            created_at: g.created_at,
+            updated_at: g.updated_at,
         }
     }
 }
@@ -27,8 +27,8 @@ impl From<GithubOAuthUser> for OAuthUser {
             email: g.email,
             password: None,
             picture: Some(g.avatar_url),
-            created_at: None,
-            updated_at: None,
+            created_at: g.created_at,
+            updated_at: g.updated_at,
         }
     }
 }

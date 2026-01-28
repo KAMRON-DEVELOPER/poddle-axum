@@ -1,7 +1,11 @@
 use crate::{
     error::AppError,
-    features::models::{OAuthUser, Provider, User, UserRole, UserStatus},
+    features::{
+        models::{Feedback, OAuthUser, Provider, User, UserRole, UserStatus},
+        schemas::CreateFeedbackRequest,
+    },
 };
+use http_contracts::pagination::schema::Pagination;
 use sqlx::{Executor, PgPool, Postgres, Transaction, postgres::PgQueryResult};
 use uuid::Uuid;
 
@@ -190,11 +194,7 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     // create_session
     // ----------------------------------------------------------------------------
-    #[tracing::instrument(
-        "users_repository.create_session",
-        skip(pool, user_id, user_agent, ip_address, refresh_token),
-        err
-    )]
+    #[tracing::instrument("users_repository.create_session", skip_all, err)]
     pub async fn create_session(
         pool: &PgPool,
         user_id: &Uuid,
@@ -216,5 +216,66 @@ impl UsersRepository {
         .await?;
 
         Ok(())
+    }
+
+    // ----------------------------------------------------------------------------
+    // get_feedbacks
+    // ----------------------------------------------------------------------------
+    #[tracing::instrument("users_repository.get_feedbacks", skip_all, err)]
+    pub async fn get_feedbacks(
+        p: &Pagination,
+        pool: &PgPool,
+    ) -> Result<(Vec<Feedback>, i64), AppError> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                *,
+                COUNT(*) OVER() as "total!"
+            FROM feedbacks
+            ORDER BY created_at DESC
+            LIMIT $1
+            OFFSET $2
+            "#,
+            p.limit,
+            p.offset
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let total = rows.get(0).map(|r| r.total).unwrap_or(0);
+
+        let feedbacks = rows
+            .into_iter()
+            .map(|r| Feedback {
+                id: r.id,
+                name: r.name,
+                email: r.email,
+                message: r.message,
+                created_at: r.created_at,
+            })
+            .collect();
+
+        Ok((feedbacks, total))
+    }
+
+    // ----------------------------------------------------------------------------
+    // create_feedback
+    // ----------------------------------------------------------------------------
+    #[tracing::instrument("users_repository.create_feedback", skip_all, err)]
+    pub async fn create_feedback(
+        req: &CreateFeedbackRequest,
+        pool: &PgPool,
+    ) -> Result<PgQueryResult, AppError> {
+        Ok(sqlx::query!(
+            r#"
+            INSERT INTO feedbacks (name, email, message)
+            VALUES ($1, $2, $3)
+            "#,
+            req.name,
+            req.email,
+            req.message,
+        )
+        .execute(pool)
+        .await?)
     }
 }
