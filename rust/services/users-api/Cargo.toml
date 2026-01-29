@@ -38,3 +38,4 @@ object_store = { version = "0.12.4", features = ["gcp", "aws"] }
 jsonwebtoken.workspace = true
 config.workspace = true
 async-stream = "0.3.6"
+url = "2.5.8"

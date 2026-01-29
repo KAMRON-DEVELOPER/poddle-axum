@@ -40,6 +40,7 @@ config.workspace = true
 urlencoding.workspace = true
 tokio-tungstenite.workspace = true
 async-stream.workspace = true
+url.workspace = true
 
 #anyhow.workspace = true
 #thiserror.workspace = true

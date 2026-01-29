@@ -5,7 +5,7 @@ use crate::{
         repository::{
             CacheRepository, DeploymentPresetRepository, DeploymentRepository, ProjectRepository,
         },
-        schemas::{LogQuery, ProjectPageWithPaginationQuery},
+        schemas::{LogEntry, LogQuery, LokiResponse, ProjectPageWithPaginationQuery},
     },
 };
 use axum::{
@@ -529,23 +529,52 @@ pub async fn get_logs_handler(
     Query(q): Query<LogQuery>,
     State(http): State<Client>,
     State(cfg): State<Config>,
+    State(db): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
+    ProjectRepository::get_one_by_id(&claims.sub, &project_id, &db.pool)
+        .await
+        .ok();
+
     let url = format!("{}/loki/api/v1/query_range", cfg.loki.url);
     let query = format!(
-        r#"{{project_id={}, deployment_id="{}", managed_by="poddle"}}"#,
+        r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
         project_id, deployment_id
     );
+
+    let start = q
+        .start_time
+        .unwrap_or_else(|| (chrono::Utc::now() - chrono::Duration::minutes(15)).to_rfc3339());
+    let limit = q.limit.unwrap_or_else(|| 100).to_string();
 
     let response = http
         .get(url)
         .query(&[
             ("query", query.as_str()),
-            ("limit", &q.limit.to_string()),
+            ("start", &start),
+            ("limit", &limit),
             ("direction", "backward"),
         ])
         .send()
         .await?;
 
-    let data = response.json::<LokiResponse>().await?;
-    Ok(self.parselokiresponse(data))
+    let loki_data = response.json::<LokiResponse>().await?;
+
+    // Flatten and Clean Data
+    let mut clean_logs: Vec<LogEntry> = Vec::new();
+
+    for stream in loki_data.data.result {
+        // Extract level from labels if available
+        let level = stream.stream.get("level").cloned();
+
+        for value in stream.values {
+            // value[0] is timestamp (ns), value[1] is the log line
+            clean_logs.push(LogEntry {
+                timestamp: value[0].clone(),
+                message: value[1].clone(),
+                level: level.clone(),
+            });
+        }
+    }
+
+    Ok(axum::Json(clean_logs))
 }
