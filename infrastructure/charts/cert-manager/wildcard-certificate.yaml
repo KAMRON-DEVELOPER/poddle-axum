@@ -1,10 +1,10 @@
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
-  name: wildcard-poddle-uz-certificate
+  name: wildcard-certificate
   namespace: traefik
 spec:
-  secretName: wildcard-poddle-uz-tls-secret
+  secretName: wildcard-tls-secret
   issuerRef:
     name: vault-k8s-ci
     kind: ClusterIssuer

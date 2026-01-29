@@ -16,4 +16,4 @@ spec:
           port: 8200
           serversTransport: vault-transport
   # tls:
-  #   secretName: wildcard-poddle-uz-tls-secret
+  #   secretName: wildcard-tls-secret

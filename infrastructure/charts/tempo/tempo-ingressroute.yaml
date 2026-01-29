@@ -15,4 +15,4 @@ spec:
         - name: tempo
           port: 3200
   # tls:
-  #   secretName: wildcard-poddle-uz-tls-secret
+  #   secretName: wildcard-tls-secret

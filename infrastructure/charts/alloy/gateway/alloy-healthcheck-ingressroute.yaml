@@ -15,4 +15,4 @@ spec:
         - name: alloy-gateway
           port: 12345
   # tls:
-  #   secretName: wildcard-poddle-uz-tls-secret
+  #   secretName: wildcard-tls-secret

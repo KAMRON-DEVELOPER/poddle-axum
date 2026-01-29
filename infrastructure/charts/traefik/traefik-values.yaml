@@ -91,7 +91,7 @@ gateway:
       namespacePolicy:
         from: All
       certificateRefs:
-        - name: wildcard-poddle-uz-tls-secret
+        - name: wildcard-tls-secret
           kind: Secret
 
     otlp-http:
@@ -100,7 +100,7 @@ gateway:
       namespacePolicy:
         from: All
       certificateRefs:
-        - name: wildcard-poddle-uz-tls-secret
+        - name: wildcard-tls-secret
           kind: Secret
 
     otlp-grpc:
@@ -109,14 +109,14 @@ gateway:
       namespacePolicy:
         from: All
       certificateRefs:
-        - name: wildcard-poddle-uz-tls-secret
+        - name: wildcard-tls-secret
           kind: Secret
 
 # Default TLSStore with wildcard cert
 tlsStore:
   default:
     defaultCertificate:
-      secretName: wildcard-poddle-uz-tls-secret
+      secretName: wildcard-tls-secret
 
 # ACME resolver for custom domains
 certificatesResolvers:

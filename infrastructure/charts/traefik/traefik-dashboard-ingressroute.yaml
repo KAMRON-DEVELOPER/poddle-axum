@@ -26,7 +26,7 @@ spec:
   #     middlewares:
   #       - name: dashboard-auth
   # tls:
-  #   secretName: wildcard-poddle-uz-tls
+  #   secretName: wildcard-tls-secret
 # ---
 # apiVersion: networking.k8s.io/v1
 # kind: Ingress
@@ -44,7 +44,7 @@ spec:
 #     - hosts:
 #         - traefik.poddle.uz
 #       # secretName: traefik-dashboard-tls
-#       secretName: wildcard-poddle-uz-tls
+#       secretName: wildcard-tls-secret
 #   rules:
 #     - host: traefik.poddle.uz
 #       http:

@@ -34,4 +34,4 @@ spec:
         - name: grafana
           port: 80
   # tls:
-  #   secretName: wildcard-poddle-uz-tls-secret
+  #   secretName: wildcard-tls-secret
