@@ -11,7 +11,6 @@ pub struct CertManagerConfig {
     pub namespace: String,
     pub cluster_issuer: String,
     pub wildcard_certificate: String,
-    pub wildcard_certificate_secret: String,
 }
 
 #[derive(Deserialize, Clone, Debug)]

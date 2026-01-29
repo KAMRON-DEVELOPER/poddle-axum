@@ -32,8 +32,8 @@ use kcr_secrets_hashicorp_com::v1beta1::{
     },
 };
 use kcr_traefik_io::v1alpha1::ingressroutes::{
-    IngressRoute, IngressRouteParentRefs, IngressRouteRoutes, IngressRouteRoutesServices,
-    IngressRouteSpec, IngressRouteTls, IngressRouteTlsDomains,
+    IngressRoute, IngressRouteRoutes, IngressRouteRoutesServices, IngressRouteSpec,
+    IngressRouteTls, IngressRouteTlsDomains,
 };
 
 use kube::{
@@ -762,7 +762,52 @@ impl KubernetesService {
         port: Option<IntOrString>,
         labels: BTreeMap<String, String>,
     ) -> Result<(), AppError> {
-        let mut ingrees_route = IngressRoute {
+        let mut routes = Vec::new();
+        let mut tls_domains = Vec::new();
+
+        // Uses Default TLSStore (Wildcard)
+        // We create wildcard secret from using cert-manager
+        // In Local we create wildcard secret using Vault PKI or self signed, in Prod created by Let's Encrypt
+        if let Some(sub) = subdomain {
+            let full_subdomain = format!("{}.{}", sub, self.cfg.traefik.base_domain);
+            routes.push(IngressRouteRoutes {
+                r#match: format!("Host(`{}`)", full_subdomain),
+                services: Some(vec![IngressRouteRoutesServices {
+                    name: name.clone(),
+                    port: port.clone(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            });
+
+            tls_domains.push(IngressRouteTlsDomains {
+                main: Some(full_subdomain),
+                sans: None,
+            });
+        }
+
+        // Uses CertResolver (Traefik native, Let's Encrypt)
+        if let Some(user_domain) = domain {
+            routes.push(IngressRouteRoutes {
+                r#match: format!("Host(`{}`)", user_domain),
+                services: Some(vec![IngressRouteRoutesServices {
+                    name: name.clone(),
+                    port: port.clone(),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            });
+            tls_domains.push(IngressRouteTlsDomains {
+                main: Some(user_domain),
+                sans: None,
+            });
+        }
+
+        if routes.is_empty() {
+            return Ok(());
+        }
+
+        let ingress_route = IngressRoute {
             metadata: ObjectMeta {
                 name: Some(name.clone()),
                 namespace: Some(ns.clone()),
@@ -771,64 +816,33 @@ impl KubernetesService {
             },
             spec: IngressRouteSpec {
                 entry_points: self.cfg.traefik.entry_points.clone(),
-                parent_refs: Some(vec![IngressRouteParentRefs {
-                    name: name.clone(),
-                    ..Default::default()
-                }]),
+                routes, // Pass the dynamically built vectors
                 tls: Some(IngressRouteTls {
+                    // This uses "letsencrypt"
+                    // Traefik will use this resolver for domains that don't match the TLSStore.
                     cert_resolver: Some(self.cfg.traefik.cluster_issuer.clone()),
-                    domains: Some(vec![
-                        IngressRouteTlsDomains {
-                            main: domain.clone(),
-                            sans: None,
-                        },
-                        IngressRouteTlsDomains {
-                            main: Some(format!(
-                                "{}.{}",
-                                subdomain.clone(),
-                                self.cfg.traefik.base_domain
-                            )),
-                            sans: None,
-                        },
-                    ]),
-                    secret_name: Some(self.cfg.cert_manager.wildcard_certificate_secret.clone()),
+                    domains: Some(tls_domains),
+                    // We set secret_name to NONE.
+                    // - Subdomains will match the Wildcard in the Default TLSStore automatically.
+                    // - Custom Domains will trigger the cert_resolver.
                     ..Default::default()
                 }),
                 ..Default::default()
             },
         };
 
-        if let Some(domain) = domain {
-            ingrees_route.spec.routes.push(IngressRouteRoutes {
-                r#match: domain,
-                services: Some(vec![IngressRouteRoutesServices {
-                    name: name.clone(),
-                    port,
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            });
-        }
-
-        if let Some(subdomain) = subdomain {
-            ingrees_route.spec.routes.push(IngressRouteRoutes {
-                r#match: subdomain,
-                services: Some(vec![IngressRouteRoutesServices {
-                    name,
-                    port,
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            });
-        }
-
         let api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &ns);
-        api.create(&PostParams::default(), &ingrees_route)
-            .await
-            .map_err(|e| {
-                error!(ns=%ns, "Failed to create IngressRoute");
-                AppError::InternalServerError(format!("Failed to create IngressRoute: {}", e))
-            })?;
+        // Patch allow to Create or Update in one go
+        api.patch(
+            &name,
+            &PatchParams::apply("poddle").force(),
+            &Patch::Apply(&ingress_route),
+        )
+        .await
+        .map_err(|e| {
+            error!(ns=%ns, "Failed to create IngressRoute");
+            AppError::InternalServerError(format!("Failed to create IngressRoute: {}", e))
+        })?;
 
         Ok(())
     }
