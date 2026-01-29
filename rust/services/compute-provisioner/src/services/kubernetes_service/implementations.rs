@@ -264,7 +264,15 @@ impl KubernetesService {
             None => None,
         };
 
+        let otel_service_name = msg.name.as_ref();
+        let otel_resource_attributes = format!(
+            "project_id={},deployment_id={},managed_by=poddle",
+            msg.project_id, msg.deployment_id
+        );
+
         self.create_deployment(
+            otel_service_name,
+            &otel_resource_attributes,
             &ns,
             &name,
             &msg.image,
@@ -551,6 +559,8 @@ impl KubernetesService {
     )]
     async fn create_deployment(
         &self,
+        otel_service_name: &str,
+        otel_resource_attributes: &str,
         ns: &str,
         name: &str,
         image: &str,
@@ -565,7 +575,28 @@ impl KubernetesService {
         let api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), ns);
 
         // Build environment variables
-        let mut env = vec![];
+        let mut env = vec![
+            EnvVar {
+                name: "OTEL_SERVICE_NAME".to_owned(),
+                value: Some(otel_service_name.to_string()),
+                ..Default::default()
+            },
+            EnvVar {
+                name: "OTEL_EXPORTER_OTLP_PROTOCOL".to_owned(),
+                value: Some("grpc".to_string()),
+                ..Default::default()
+            },
+            EnvVar {
+                name: "OTEL_RESOURCE_ATTRIBUTES".to_owned(),
+                value: Some(otel_resource_attributes.to_string()),
+                ..Default::default()
+            },
+            EnvVar {
+                name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_owned(),
+                value: self.cfg.otel_exporter_otlp_endpoint.clone(),
+                ..Default::default()
+            },
+        ];
         if let Some(environment_variables) = environment_variables {
             for (key, value) in environment_variables {
                 env.push(EnvVar {

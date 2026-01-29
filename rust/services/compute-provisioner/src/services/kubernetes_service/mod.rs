@@ -25,6 +25,7 @@ pub struct TraefikConfig {
 #[derive(Deserialize, Clone, Debug)]
 pub struct KubernetesServiceConfig {
     pub kubeconfig: Option<String>,
+    pub otel_exporter_otlp_endpoint: Option<String>,
     pub traefik: TraefikConfig,
     pub prometheus: PrometheusConfig,
     pub cert_manager: CertManagerConfig,
