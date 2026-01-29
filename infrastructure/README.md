@@ -774,22 +774,6 @@ EOF
 kubectl exec -n vault -i vault-0 -- vault policy write vso-policy - < infrastructure/charts/vault/vso-policy.hcl
 ```
 
-##### Create ServiceAccount for Application
-
-```bash
-kubectl create serviceaccount compute-provisioner -n poddle-system
-```
-
-##### Create Vault Role for compute-provisioner
-
-```bash
-kubectl exec -n vault -i vault-0 -- vault write auth/kubernetes/role/compute-provisioner \
-  bound_service_account_names=compute-provisioner \
-  bound_service_account_namespaces=poddle-system \
-  policies=vso-policy \
-  ttl=24h
-```
-
 ##### Setup vault policies and roles for Tenant
 
 This is the "Dynamic" policy. It uses the {{identity...}} template to lock the user into their own namespace
@@ -823,6 +807,11 @@ kubectl exec -n vault -i vault-0 -- vault write auth/kubernetes/role/tenant-role
 ```
 
 ##### Setup vault policies and roles for Admin
+
+```bash
+kubectl create -n poddle-system
+kubectl create serviceaccount compute-provisioner -n poddle-system
+```
 
 ```bash
 kubectl exec -n vault -i vault-0 -- vault policy write admin-policy - < infrastructure/charts/vault/admin-policy.hcl
