@@ -2,9 +2,22 @@ use std::{net::SocketAddr, path::PathBuf};
 
 use compute_core::configs::PrometheusConfig;
 use config::{ConfigBuilder, ConfigError, Environment, File, builder::AsyncState};
-use factory::factories::{amqp::AmqpConfig, database::DatabaseConfig, observability::ObservabilityConfig, redis::RedisConfig};
+use factory::factories::{
+    amqp::AmqpConfig, database::DatabaseConfig, observability::ObservabilityConfig,
+    redis::RedisConfig,
+};
 use serde::Deserialize;
 use users_core::jwt::JwtConfig;
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct LokiConfig {
+    pub url: String,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct TempoConfig {
+    pub url: String,
+}
 
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
@@ -16,6 +29,8 @@ pub struct Config {
     pub prometheus: PrometheusConfig,
     pub cookie_key: String,
     pub jwt: JwtConfig,
+    pub loki: LokiConfig,
+    pub tempo: TempoConfig,
 }
 
 impl Config {

@@ -4,6 +4,7 @@ use axum::extract::FromRef;
 use axum_extra::extract::cookie::Key;
 use factory::factories::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis};
 
+use reqwest::Client;
 use rustls::ClientConfig;
 use users_core::jwt::JwtCapability;
 
@@ -15,6 +16,7 @@ pub struct AppState {
     pub amqp: Amqp,
     pub kafka: Option<Kafka>,
     pub config: Config,
+    pub http_client: Client,
     pub key: Key,
 }
 
@@ -23,6 +25,9 @@ impl AppState {
         let database = Database::new(&cfg.database).await;
         let redis = Redis::new(&cfg.redis).await;
         let amqp = Amqp::new(&cfg.amqp).await;
+        let http_client = reqwest::ClientBuilder::new()
+            .build()
+            .unwrap_or_else(|e| panic!("Failed to construct http client: {}", e));
         let key = Key::from(cfg.cookie_key.as_bytes());
 
         Ok(Self {
@@ -32,6 +37,7 @@ impl AppState {
             amqp,
             kafka: None,
             config: cfg.clone(),
+            http_client,
             key,
         })
     }

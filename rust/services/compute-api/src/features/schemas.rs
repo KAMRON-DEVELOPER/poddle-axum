@@ -1,6 +1,6 @@
 use compute_core::schemas::ProjectPageQuery;
 use http_contracts::pagination::schema::Pagination;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Debug)]
 pub struct ProjectPageWithPaginationQuery {
@@ -8,4 +8,18 @@ pub struct ProjectPageWithPaginationQuery {
     pub pagination: Pagination,
     #[serde(flatten)]
     pub project_page_query: ProjectPageQuery,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct LogQuery {
+    pub start_time: Option<String>,
+    pub limit: Option<u32>,
+}
+
+#[derive(Serialize)]
+pub struct LogEntry {
+    pub container: String,
+    pub message: String,
+    pub level: Option<String>,
+    pub timestamp: String,
 }

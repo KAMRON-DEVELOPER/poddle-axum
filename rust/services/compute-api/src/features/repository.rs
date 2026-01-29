@@ -28,8 +28,8 @@ impl ProjectRepository {
         err
     )]
     pub async fn get_many(
-        user_id: Uuid,
-        pagination: Pagination,
+        user_id: &Uuid,
+        pagination: &Pagination,
         pool: &PgPool,
     ) -> Result<(Vec<Project>, i64), sqlx::Error> {
         let rows = sqlx::query!(
@@ -69,8 +69,8 @@ impl ProjectRepository {
 
     #[tracing::instrument(name = "project_repository.get_one_by_id", skip(pool), err)]
     pub async fn get_one_by_id(
-        user_id: Uuid,
-        project_id: Uuid,
+        user_id: &Uuid,
+        project_id: &Uuid,
         pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
         sqlx::query_as::<_, Project>(
@@ -88,7 +88,7 @@ impl ProjectRepository {
 
     #[tracing::instrument(name = "project_repository.create", skip(req, pool), err)]
     pub async fn create(
-        user_id: Uuid,
+        user_id: &Uuid,
         req: CreateProjectRequest,
         pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
@@ -108,8 +108,8 @@ impl ProjectRepository {
 
     #[tracing::instrument(name = "project_repository.update", skip(name, description, pool), err)]
     pub async fn update(
-        user_id: Uuid,
-        project_id: Uuid,
+        user_id: &Uuid,
+        project_id: &Uuid,
         name: Option<&str>,
         description: Option<&str>,
         pool: &PgPool,
@@ -132,7 +132,11 @@ impl ProjectRepository {
     }
 
     #[tracing::instrument(name = "project_repository.delete", skip(pool), err)]
-    pub async fn delete(user_id: Uuid, project_id: Uuid, pool: &PgPool) -> Result<(), sqlx::Error> {
+    pub async fn delete(
+        user_id: &Uuid,
+        project_id: &Uuid,
+        pool: &PgPool,
+    ) -> Result<(), sqlx::Error> {
         sqlx::query(
             r#"
                 DELETE FROM projects
@@ -188,9 +192,9 @@ impl DeploymentRepository {
         err
     )]
     pub async fn get_all_by_project(
-        user_id: Uuid,
-        project_id: Uuid,
-        pagination: Pagination,
+        user_id: &Uuid,
+        project_id: &Uuid,
+        pagination: &Pagination,
         pool: &PgPool,
     ) -> Result<(Vec<Deployment>, i64), sqlx::Error> {
         // In standard SQL, if you use COUNT(*), the database "collapses" all your rows into a single number.
@@ -275,8 +279,8 @@ impl DeploymentRepository {
 
     #[tracing::instrument(name = "deployment_repository.get_by_id", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
     pub async fn get_by_id(
-        user_id: Uuid,
-        deployment_id: Uuid,
+        user_id: &Uuid,
+        deployment_id: &Uuid,
         pool: &PgPool,
     ) -> Result<Deployment, sqlx::Error> {
         sqlx::query_as::<_, Deployment>(
@@ -295,8 +299,8 @@ impl DeploymentRepository {
 
     #[tracing::instrument(name = "deployment_repository.create", skip_all, fields(user_id = %user_id, project_id = %project_id), err)]
     pub async fn create(
-        user_id: Uuid,
-        project_id: Uuid,
+        user_id: &Uuid,
+        project_id: &Uuid,
         req: CreateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
@@ -347,7 +351,7 @@ impl DeploymentRepository {
 
     #[tracing::instrument(name = "deployment_repository.update_status", skip_all, fields(deployment_id = %deployment_id, status = %status), err)]
     pub async fn update_status(
-        deployment_id: Uuid,
+        deployment_id: &Uuid,
         status: DeploymentStatus,
         pool: &PgPool,
     ) -> Result<(), sqlx::Error> {
@@ -368,8 +372,8 @@ impl DeploymentRepository {
 
     #[tracing::instrument(name = "deployment_repository.update", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
     pub async fn update(
-        user_id: Uuid,
-        deployment_id: Uuid,
+        user_id: &Uuid,
+        deployment_id: &Uuid,
         req: UpdateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<Deployment, sqlx::Error> {
@@ -421,8 +425,8 @@ impl DeploymentRepository {
 
     #[tracing::instrument(name = "deployment_repository.delete", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
     pub async fn delete(
-        user_id: Uuid,
-        deployment_id: Uuid,
+        user_id: &Uuid,
+        deployment_id: &Uuid,
         tx: &mut Transaction<'_, Postgres>,
     ) -> Result<(), sqlx::Error> {
         sqlx::query(
@@ -446,7 +450,7 @@ pub struct DeploymentEventRepository;
 impl DeploymentEventRepository {
     #[tracing::instrument(name = "deployment_event_repository.create", skip_all, fields(deployment_id = %deployment_id, event_type = %event_type), err)]
     pub async fn create(
-        deployment_id: Uuid,
+        deployment_id: &Uuid,
         event_type: &str,
         message: Option<&str>,
         pool: &PgPool,
@@ -472,7 +476,7 @@ impl DeploymentEventRepository {
         err
     )]
     pub async fn get_recent_by_deployment(
-        deployment_id: Uuid,
+        deployment_id: &Uuid,
         limit: i64,
         pool: &PgPool,
     ) -> Result<Vec<DeploymentEvent>, sqlx::Error> {

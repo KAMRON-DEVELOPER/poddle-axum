@@ -5,7 +5,7 @@ use crate::{
         repository::{
             CacheRepository, DeploymentPresetRepository, DeploymentRepository, ProjectRepository,
         },
-        schemas::ProjectPageWithPaginationQuery,
+        schemas::{LogQuery, ProjectPageWithPaginationQuery},
     },
 };
 use axum::{
@@ -33,6 +33,7 @@ use lapin::{
     types::FieldTable,
 };
 
+use reqwest::Client;
 use tracing::{Instrument, debug, info, info_span};
 use users_core::jwt::Claims;
 use uuid::Uuid;
@@ -57,7 +58,7 @@ pub async fn get_projects(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let (data, total) = ProjectRepository::get_many(user_id, pagination, &database.pool).await?;
+    let (data, total) = ProjectRepository::get_many(&user_id, &pagination, &database.pool).await?;
 
     Ok(Json(ListResponse { data, total }))
 }
@@ -78,7 +79,7 @@ pub async fn get_project_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let project = ProjectRepository::get_one_by_id(user_id, project_id, &database.pool).await?;
+    let project = ProjectRepository::get_one_by_id(&user_id, &project_id, &database.pool).await?;
 
     Ok(Json(project))
 }
@@ -100,7 +101,7 @@ pub async fn create_project_handler(
 
     let user_id: Uuid = claims.sub;
 
-    let project = ProjectRepository::create(user_id, req, &database.pool).await?;
+    let project = ProjectRepository::create(&user_id, req, &database.pool).await?;
 
     Ok((StatusCode::CREATED, Json(project)))
 }
@@ -125,8 +126,8 @@ pub async fn update_project_handler(
     let user_id: Uuid = claims.sub;
 
     let project = ProjectRepository::update(
-        user_id,
-        project_id,
+        &user_id,
+        &project_id,
         req.name.as_deref(),
         req.description.as_deref(),
         &database.pool,
@@ -152,7 +153,7 @@ pub async fn delete_project_handler(
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    ProjectRepository::delete(user_id, project_id, &database.pool).await?;
+    ProjectRepository::delete(&user_id, &project_id, &database.pool).await?;
 
     Ok((
         StatusCode::OK,
@@ -189,9 +190,13 @@ pub async fn get_deployments_handler(
     let user_id: Uuid = claims.sub;
     let points_count = project_page_query.minutes * 60 / config.prometheus.scrape_interval_seconds;
 
-    let (deployments, total) =
-        DeploymentRepository::get_all_by_project(user_id, project_id, pagination, &database.pool)
-            .await?;
+    let (deployments, total) = DeploymentRepository::get_all_by_project(
+        &user_id,
+        &project_id,
+        &pagination,
+        &database.pool,
+    )
+    .await?;
 
     if total == 0 {
         return Ok(Json(ListResponse {
@@ -236,7 +241,7 @@ pub async fn get_deployment_handler(
     let user_id: Uuid = claims.sub;
 
     let deployment =
-        DeploymentRepository::get_by_id(user_id, deployment_id, &database.pool).await?;
+        DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
 
     Ok(Json(deployment))
 }
@@ -263,14 +268,14 @@ pub async fn create_deployment_handler(
     let user_id = claims.sub;
 
     // Verify project exists
-    ProjectRepository::get_one_by_id(user_id, project_id, &database.pool).await?;
+    ProjectRepository::get_one_by_id(&user_id, &project_id, &database.pool).await?;
 
     // Start database transaction
     let mut tx = database.pool.begin().await?;
 
     // Create deployment record
     let deployment =
-        DeploymentRepository::create(user_id, project_id, req.clone(), &mut tx).await?;
+        DeploymentRepository::create(&user_id, &project_id, req.clone(), &mut tx).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await;
@@ -387,7 +392,7 @@ pub async fn update_deployment_handler(
 
     // Update deployment in database
     let deployment =
-        DeploymentRepository::update(user_id, deployment_id, req.clone(), &mut tx).await?;
+        DeploymentRepository::update(&user_id, &deployment_id, req.clone(), &mut tx).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await;
@@ -460,7 +465,7 @@ pub async fn delete_deployment_handler(
     let mut tx = database.pool.begin().await?;
 
     // Deleting from database
-    DeploymentRepository::delete(user_id, deployment_id, &mut tx).await?;
+    DeploymentRepository::delete(&user_id, &deployment_id, &mut tx).await?;
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await;
@@ -506,4 +511,41 @@ pub async fn delete_deployment_handler(
         StatusCode::ACCEPTED,
         Json(MessageResponse::new("Deployment deletion initiated")),
     ))
+}
+
+#[tracing::instrument(
+    name = "get_logs_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+        deployment_id = %deployment_id,
+    ),
+    err
+)]
+pub async fn get_logs_handler(
+    claims: Claims,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Query(q): Query<LogQuery>,
+    State(http): State<Client>,
+    State(cfg): State<Config>,
+) -> Result<impl IntoResponse, AppError> {
+    let url = format!("{}/loki/api/v1/query_range", cfg.loki.url);
+    let query = format!(
+        r#"{{project_id={}, deployment_id="{}", managed_by="poddle"}}"#,
+        project_id, deployment_id
+    );
+
+    let response = http
+        .get(url)
+        .query(&[
+            ("query", query.as_str()),
+            ("limit", &q.limit.to_string()),
+            ("direction", "backward"),
+        ])
+        .send()
+        .await?;
+
+    let data = response.json::<LokiResponse>().await?;
+    Ok(self.parselokiresponse(data))
 }

@@ -36,12 +36,24 @@ pub fn get_routes() -> Router<AppState> {
                 .delete(handlers::delete_deployment_handler),
         )
         .route(
+            "api/v1/projects/{project_id}/deployments/{deployment_id}/logs",
+            get(handlers::get_logs_handler),
+        )
+        .route(
+            "api/v1/projects/{project_id}/deployments/{deployment_id}/logs/ws",
+            get(websocket::stream_logs_ws_handler),
+        )
+        .route(
+            "api/v1/projects/{project_id}/deployments/{deployment_id}/logs/see",
+            get(see::stream_logs_see_handler),
+        )
+        .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/ws",
-            get(websocket::ws_metrics),
+            get(websocket::stream_metrics_ws_handler),
         )
         .route(
             "/api/v1/projects/{project_id}/metrics/see",
-            get(see::stream_metrics),
+            get(see::stream_metrics_see_handler),
         )
         .route("/api/v1/github/webhook", get(webhook::github_webhook))
 }

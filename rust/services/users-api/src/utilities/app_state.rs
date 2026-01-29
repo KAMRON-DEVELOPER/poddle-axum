@@ -41,7 +41,7 @@ impl AppState {
         let http_client = reqwest::ClientBuilder::new()
             .redirect(reqwest::redirect::Policy::none())
             .build()
-            .unwrap_or_else(|e| panic!("Couldn't construct http client: {}", e));
+            .unwrap_or_else(|e| panic!("Failed to construct http client: {}", e));
         let s3 = build_s3(&cfg.s3);
 
         Ok(Self {

@@ -792,6 +792,7 @@ name = "compute-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "axum",
  "axum-core",
  "axum-extra",
@@ -817,8 +818,10 @@ dependencies = [
  "time",
  "tokio",
  "tokio-stream",
+ "tokio-tungstenite",
  "tower-http",
  "tracing",
+ "urlencoding",
  "users-core",
  "utility",
  "uuid",
@@ -5431,6 +5434,7 @@ name = "users-api"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "async-stream",
  "axum",
  "axum-core",
  "axum-extra",

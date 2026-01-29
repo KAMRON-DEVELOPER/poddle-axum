@@ -6,16 +6,19 @@ use axum::{
         sse::{Event, KeepAlive},
     },
 };
-use futures::Stream;
+use futures::{Stream, StreamExt};
 use std::convert::Infallible;
-use tokio_stream::StreamExt;
+use users_core::jwt::Claims;
 
 use compute_core::channel_names::ChannelNames;
-use factory::factories::redis::Redis;
+use factory::factories::{database::Database, redis::Redis};
+use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
 use tracing::{error, info};
 use uuid::Uuid;
 
-pub async fn stream_metrics(
+use crate::{config::Config, features::repository::ProjectRepository};
+
+pub async fn stream_metrics_see_handler(
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
@@ -43,4 +46,63 @@ pub async fn stream_metrics(
     });
 
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
+#[tracing::instrument(
+    name = "stream_logs_hander",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+        deployment_id = %deployment_id,
+    ),
+    err
+)]
+pub async fn stream_logs_see_handler(
+    claims: Claims,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    State(cfg): State<Config>,
+    State(db): State<Database>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    // TODO, for now it is enough, later we must check project and deployment beforehand
+    ProjectRepository::get_one_by_id(&claims.sub, &project_id, &db.pool)
+        .await
+        .ok();
+
+    let query = format!(
+        r#"{{project_id={}, deployment_id="{}", managed_by="poddle"}}"#,
+        project_id, deployment_id
+    );
+
+    let ws_loki_url = if cfg.loki.url.contains("https://") {
+        cfg.loki.url.replace("https://", "wss://")
+    } else if cfg.loki.url.contains("http://") {
+        cfg.loki.url.replace("http://", "ws://")
+    } else {
+        cfg.loki.url
+    };
+
+    let url = format!(
+        "{}/loki/api/v1/tail?query={}",
+        ws_loki_url,
+        urlencoding::encode(&query)
+    );
+
+    // Connect to Loki via WebSocket
+    let (ws_stream, _) = connect_async(url)
+        .await
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let (_, mut stream) = ws_stream.split();
+
+    // Transform the WS Stream into an SSE Stream
+    let sse_stream = async_stream::stream! {
+        while let Some(Ok(msg)) = stream.next().await {
+            if let Message::Text(text) = msg {
+                // Loki sends a JSON object containing the log lines
+                yield Ok(Event::default().data(text));
+            }
+        }
+    };
+
+    Ok(Sse::new(sse_stream).keep_alive(KeepAlive::default()))
 }
