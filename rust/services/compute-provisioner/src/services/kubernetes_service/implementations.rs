@@ -288,8 +288,15 @@ impl KubernetesService {
 
         self.create_service(&ns, &name, msg.port, &labels).await?;
 
-        self.create_traefik_ingressroute(ns, name, msg.domain, msg.subdomain, labels)
-            .await?;
+        self.create_traefik_ingressroute(
+            ns,
+            name,
+            msg.domain,
+            msg.subdomain,
+            Some(IntOrString::Int(msg.port)),
+            labels,
+        )
+        .await?;
 
         Ok(())
     }
@@ -752,6 +759,7 @@ impl KubernetesService {
         name: String,
         domain: Option<String>,
         subdomain: Option<String>,
+        port: Option<IntOrString>,
         labels: BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let mut ingrees_route = IngressRoute {
@@ -775,7 +783,11 @@ impl KubernetesService {
                             sans: None,
                         },
                         IngressRouteTlsDomains {
-                            main: subdomain.clone(),
+                            main: Some(format!(
+                                "{}.{}",
+                                subdomain.clone(),
+                                self.cfg.traefik.base_domain
+                            )),
                             sans: None,
                         },
                     ]),
@@ -791,6 +803,7 @@ impl KubernetesService {
                 r#match: domain,
                 services: Some(vec![IngressRouteRoutesServices {
                     name: name.clone(),
+                    port,
                     ..Default::default()
                 }]),
                 ..Default::default()
@@ -802,6 +815,7 @@ impl KubernetesService {
                 r#match: subdomain,
                 services: Some(vec![IngressRouteRoutesServices {
                     name,
+                    port,
                     ..Default::default()
                 }]),
                 ..Default::default()
