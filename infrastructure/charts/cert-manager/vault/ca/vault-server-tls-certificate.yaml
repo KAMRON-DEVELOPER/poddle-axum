@@ -8,8 +8,8 @@ spec:
   duration: 8760h # 1 year
   renewBefore: 720h # 30 days before expiry
   issuerRef:
-    name: vault-root-ca-issuer
-    kind: Issuer
+    kind: ClusterIssuer
+    name: vault-root-ca-ci
   commonName: vault
   dnsNames:
     # Core service names

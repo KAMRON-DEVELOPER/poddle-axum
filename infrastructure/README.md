@@ -887,6 +887,15 @@ kubectl apply -f infrastructure/charts/vault/vault-ingress.yaml
 ### 6. Install [`trust-manager`](https://cert-manager.io/docs/trust/trust-manager/)
 
 > [!NOTE]
+>
+> Distribute public trust bundles, not TLS identities.
+>
+> trust-manager does not and must not handle private keys.
+>
+> TLS Secrets → ❌ includeAllKeys
+>
+> CA certs → ✅ single key (tls.crt)
+>
 > `vault-secrets-operator` need vault-root-ca-secret to connect to vult but `vault` in different namespace.
 >
 > So we use `trust-manager` to resolve that.

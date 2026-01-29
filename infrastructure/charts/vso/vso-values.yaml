@@ -3,6 +3,7 @@ defaultVaultConnection:
 
   address: "https://vault-active.vault.svc:8200"
   caCertSecret: "vault-root-ca-bundle"
+  caCertSecretKey: "tls.crt"
   skipTLSVerify: false
 
 telemetry:

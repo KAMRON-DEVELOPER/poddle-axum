@@ -6,17 +6,17 @@ spec:
   sources:
     - secret:
         name: vault-root-ca-secret
-        # key: tls.crt
-        includeAllKeys: true
+        key: tls.crt
+        # includeAllKeys: true
   target:
     secret:
       key: tls.crt
     namespaceSelector:
-      # matchLabels:
-      #   kubernetes.io/metadata.name: vso
-      matchExpressions:
-        - key: kubernetes.io/metadata.name
-          operator: In
-          values:
-            - vso
-            - vault
+      matchLabels:
+        kubernetes.io/metadata.name: vso
+      # matchExpressions:
+      #   - key: kubernetes.io/metadata.name
+      #     operator: In
+      #     values:
+      #       - vso
+      #       - vault
