@@ -63,7 +63,7 @@ async fn main() -> anyhow::Result<()> {
     let database = Database::new(&cfg.database).await;
     let redis = Redis::new(&cfg.redis).await;
     let kubernetes = Kubernetes::new().await?;
-    let amqp = Amqp::new(&cfg.amqp_addr).await;
+    let amqp = Amqp::new(&cfg.amqp).await;
     // let kafka = Kafka::new(&cfg, "compute-service-group")?;
     // let http_client = reqwest::ClientBuilder::new()
     //     .redirect(reqwest::redirect::Policy::none())

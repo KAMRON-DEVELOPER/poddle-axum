@@ -1,7 +1,10 @@
 use std::{net::SocketAddr, path::PathBuf};
 
 use config::{ConfigBuilder, ConfigError, Environment, File, builder::AsyncState};
-use factory::factories::{amqp::AmqpConfig, database::DatabaseConfig, observability::ObservabilityConfig, redis::RedisConfig};
+use factory::factories::{
+    amqp::AmqpConfig, database::DatabaseConfig, observability::ObservabilityConfig,
+    redis::RedisConfig,
+};
 use serde::Deserialize;
 
 use crate::services::{
@@ -14,7 +17,7 @@ pub struct Config {
     pub observability: ObservabilityConfig,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
-    pub amqp_addr: AmqpConfig,
+    pub amqp: AmqpConfig,
     pub kubernetes: KubernetesServiceConfig,
     pub vault: VaultServiceConfig,
 }
