@@ -113,9 +113,16 @@ loki.process "default" {
 		expressions = {
 			level    = "level",
 			trace_id = "trace_id",
-			msg      = "message",
-			time     = "timestamp",
+			message  = "message",
+			msg      = "msg",
+			ts       = "timestamp",
 		}
+	}
+
+	// If JSON parsing failed (level is empty), fall back to the raw line
+	stage.template {
+		source   = "msg"
+		template = "{{ if .level }}{{ .msg }}{{ else }}{{ .Entry }}{{ end }}"
 	}
 
 	// Promotes level from extracted field → Loki label
