@@ -17,7 +17,7 @@ pub struct CertManagerConfig {
 pub struct TraefikConfig {
     pub base_domain: String,
     pub namespace: String,
-    pub cluster_issuer: String,
+    // pub cluster_issuer: String,
     pub entry_points: Option<Vec<String>>,
 }
 

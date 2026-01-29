@@ -54,7 +54,7 @@ use crate::services::repository::DeploymentRepository;
 
 impl KubernetesService {
     pub async fn preflight(&self) -> Result<(), AppError> {
-        info!("🏁Performing pre-flight infrastructure checks...");
+        info!("🏁 Performing pre-flight infrastructure checks...");
 
         // Check for ClusterIssuer
         let cluster_issuer_api: Api<ClusterIssuer> = Api::all(self.client.clone());
@@ -820,7 +820,7 @@ impl KubernetesService {
                 tls: Some(IngressRouteTls {
                     // This uses "letsencrypt"
                     // Traefik will use this resolver for domains that don't match the TLSStore.
-                    cert_resolver: Some(self.cfg.traefik.cluster_issuer.clone()),
+                    cert_resolver: Some(self.cfg.cert_manager.cluster_issuer.clone()),
                     domains: Some(tls_domains),
                     // We set secret_name to NONE.
                     // - Subdomains will match the Wildcard in the Default TLSStore automatically.
