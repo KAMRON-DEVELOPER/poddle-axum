@@ -2,7 +2,7 @@ apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: vault-root-ca-certificate
-  namespace: vault
+  namespace: cert-manager
 spec:
   isCA: true
   commonName: vault-root-ca

@@ -5,4 +5,4 @@ metadata:
   namespace: vault
 spec:
   ca:
-    secretName: vault-root-ca-secret
+    secretName: vault-root-ca-bundle

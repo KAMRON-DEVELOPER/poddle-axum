@@ -1,0 +1,22 @@
+apiVersion: trust.cert-manager.io/v1alpha1
+kind: Bundle
+metadata:
+  name: vault-root-ca-bundle
+spec:
+  sources:
+    - secret:
+        name: vault-root-ca-secret
+        # key: tls.crt
+        includeAllKeys: true
+  target:
+    secret:
+      key: tls.crt
+    namespaceSelector:
+      # matchLabels:
+      #   kubernetes.io/metadata.name: vso
+      matchExpressions:
+        - key: kubernetes.io/metadata.name
+          operator: In
+          values:
+            - vso
+            - vault

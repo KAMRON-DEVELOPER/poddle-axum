@@ -31,6 +31,7 @@ mkdir -p infrastructure/charts/vault
 mkdir -p infrastructure/charts/vso
 mkdir -p infrastructure/charts/vault-secrets-operator
 mkdir -p infrastructure/charts/cert-manager
+mkdir -p infrastructure/charts/trust-manager
 mkdir -p infrastructure/charts/grafana
 mkdir -p infrastructure/charts/alloy
 mkdir -p infrastructure/charts/loki
@@ -46,6 +47,7 @@ helm show values hashicorp/vault > infrastructure/charts/vault/values.yaml
 helm show values hashicorp/vault-secrets-operator > infrastructure/charts/vso/values.yaml
 helm show values hashicorp/vault-secrets-operator > infrastructure/charts/vault-secrets-operator/values.yaml
 helm show values jetstack/cert-manager > infrastructure/charts/cert-manager/values.yaml
+helm show values jetstack/trust-manager > infrastructure/charts/trust-manager/values.yaml
 helm show values grafana/grafana > infrastructure/charts/grafana/values.yaml
 helm show values grafana/alloy > infrastructure/charts/alloy/values.yaml
 helm show values grafana/loki > infrastructure/charts/loki/values.yaml
@@ -880,13 +882,65 @@ kubectl apply -f infrastructure/charts/vault/vault-ingress.yaml
 
 ---
 
-### 6. Install vault-secrets-operator
+---
+
+### 6. Install [`trust-manager`](https://cert-manager.io/docs/trust/trust-manager/)
+
+> [!NOTE]
+> `vault-secrets-operator` need vault-root-ca-secret to connect to vult but `vault` in different namespace.
+>
+> So we use `trust-manager` to resolve that.
+>
+> ConfigMap is the default target type, but as of v0.7.0 trust-manager also supports Secret resources as targets.
+>
+> `Sources` must be a `Secret` resource in the `trust-manager` namespace
+
+We installed `selfsigned-issuer(.yaml)` and `vault-root-ca-certificate(.yaml)` to `vault` namespace. So we need to copy it to `cert-manager` namespace. Next time we don't do that.
+
+```bash
+kubectl get secret vault-root-ca-secret -n vault -o yaml | \
+sed 's/namespace: vault/namespace: cert-manager/' | \
+kubectl apply -f -
+```
+
+```bash
+helm upgrade --install trust-manager jetstack/trust-manager \
+  -f infrastructure/charts/trust-manager/trust-manager-values.yaml \
+  --namespace cert-manager \
+  --create-namespace \
+  --wait
+```
+
+```bash
+kubectl apply -f infrastructure/charts/trust-manager/vault-root-ca-bundle.yaml
+```
+
+### 7. Install `vault-secrets-operator`
+
+> [!NOTE]
+> `vault-secrets-operator` needs `vault-root-ca-secret` to connect to Vault, but VSO is in a different namespace than where the secret is created.
+>
+> So we use `trust-manager` to automatically distribute the secret to the `vso` namespace.
+>
+> - ConfigMap is the default target type, but as of v0.7.0 trust-manager also supports Secret resources as targets.
+> - `Sources` must be a `Secret` resource in the `trust-manager` namespace (which is `cert-manager` in our case)
+
+The `vault-root-ca-certificate` creates `vault-root-ca-secret` in the `cert-manager` namespace (where cert-manager and trust-manager are installed). Trust-manager will distribute this secret to the `vso` namespace automatically.
 
 ### Prerequisites
 
 - `kubectl` configured to access your cluster
 - Vault server running and accessible
 - `vault` CLI installed and configured
+- `vault-root-ca-secret` is accesable to vso
+
+> We can copy it or use `trust-manager`
+
+```bash
+kubectl get secret vault-root-ca-secret -n vault -o yaml | \
+sed 's/namespace: vault/namespace: vso/' | \
+kubectl apply -f -
+```
 
 ```bash
 helm install vso hashicorp/vault-secrets-operator \
