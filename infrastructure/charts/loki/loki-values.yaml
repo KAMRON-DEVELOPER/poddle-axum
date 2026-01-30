@@ -64,11 +64,25 @@ loki:
     # This file is where my Axum backend will write deployment-specific settings
     per_tenant_override_config: /etc/loki/runtime-config/runtime-config.yaml
 
-  # Example: static per-tenant/stream retention
-  retention_stream:
-    - selector: '{namespace="default"}'
-      period: 1h
-      priority: 1
+    # Dynamic Retention based on Preset Label
+    # These rules apply to logs found in storage, regardless of tenant.
+    # retention_stream:
+    #   # Starter / Sandbox (e.g., Preset ID 1 & 2) -> 1 Day
+    #   - selector: '{preset_id=~"1|2"}'
+    #     priority: 1
+    #     period: 1d
+    #   # Standard / Growth (e.g., Preset ID 3 & 4) -> 7 Days
+    #   - selector: '{preset_id=~"3|4"}'
+    #     priority: 1
+    #     period: 7d
+    #   # Business / Pro (e.g., Preset ID 5 & 6) -> 14 Days
+    #   - selector: '{preset_id="4"}'
+    #     priority: 1
+    #     period: 14d
+    #   # Enterprise (e.g., Preset ID 7) -> 30 Days
+    #   - selector: '{preset_id<="7"}'
+    #     priority: 1
+    #     period: 30d
 
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig:

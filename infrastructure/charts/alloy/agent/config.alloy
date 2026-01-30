@@ -61,29 +61,24 @@ discovery.relabel "pod_logs" {
 		target_label  = "container"
 	}
 
-	rule {
-		source_labels = ["__meta_kubernetes_pod_label_app"]
-		target_label  = "app"
-	}
-
 	// Custom Labels
 	rule {
-		source_labels = ["__meta_kubernetes_pod_label_managed_by"]
+		source_labels = ["__meta_kubernetes_pod_label_poddle_io_managed_by"]
 		target_label  = "managed_by"
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_pod_label_project_id"]
+		source_labels = ["__meta_kubernetes_pod_label_poddle_io_project_id"]
 		target_label  = "project_id"
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_pod_label_deployment_id"]
+		source_labels = ["__meta_kubernetes_pod_label_poddle_io_deployment_id"]
 		target_label  = "deployment_id"
 	}
 
 	rule {
-		source_labels = ["__meta_kubernetes_pod_label_preset_id"]
+		source_labels = ["__meta_kubernetes_pod_label_poddle_io_preset_id"]
 		target_label  = "preset_id"
 	}
 }
@@ -120,6 +115,10 @@ loki.process "default" {
 
 	// The stage.decolorize strips ANSI color codes from the log lines, making it easier to parse logs.
 	// stage.decolorize { }
+
+	stage.tenant {
+		label = "preset_id"
+	}
 
 	stage.match {
 		selector = "{managed_by=\"poddle\"}"
@@ -175,10 +174,6 @@ loki.process "default" {
 			source            = "timestamp"
 			format            = "RFC3339"
 			action_on_failure = "skip"
-		}
-
-		stage.tenant {
-			label = "deployment_id"
 		}
 	}
 

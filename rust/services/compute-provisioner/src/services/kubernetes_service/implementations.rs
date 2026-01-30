@@ -240,19 +240,10 @@ impl KubernetesService {
         let name = self.format_resource_name(&msg.deployment_id);
 
         let mut labels = BTreeMap::new();
-        labels.insert(
-            "app.kubernetes.io/managed-by".to_string(),
-            "poddle".to_string(),
-        );
-        labels.insert(
-            "poddle.io/project-id".to_string(),
-            msg.project_id.to_string(),
-        );
-        labels.insert(
-            "poddle.io/deployment-id".to_string(),
-            msg.deployment_id.to_string(),
-        );
-        labels.insert("poddle.io/preset-id".to_string(), msg.preset_id.to_string());
+        labels.insert("poddle.io/managed-by".into(), "poddle".into());
+        labels.insert("poddle.io/project-id".into(), msg.project_id.into());
+        labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
+        labels.insert("poddle.io/preset-id".into(), msg.preset_id.into());
 
         self.create_vso_resources(&ns).await?;
 
