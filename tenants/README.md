@@ -5,12 +5,15 @@ Build the images:
 ```bash
 docker build -t bookshop tenants/bookshop
 docker build -t notes tenants/notes
+docker build -t notes tenants/todo
 
 docker build -t kamronbekdev/bookshop:v0.1.0 tenants/bookshop
 docker build -t kamronbekdev/notes:v0.1.0 tenants/notes
+docker build -t kamronbekdev/todo:v0.1.0 tenants/todo
 
 docker build -t ghcr.io/kamronbekdev/bookshop:v0.1.0 tenants/bookshop
 docker build -t ghcr.io/kamronbekdev/notes:v0.1.0 tenants/notes
+docker build -t ghcr.io/kamronbekdev/todo:v0.1.0 tenants/todo
 ```
 
 Tag the images:
@@ -18,12 +21,15 @@ Tag the images:
 ```bash
 docker tag bookshop:latest kamronbekdev/bookshop:latest
 docker tag notes:latest kamronbekdev/notes:latest
+docker tag notes:latest kamronbekdev/todotodo:latest
 
 docker tag bookshop:latest kamronbekdev/bookshop:v0.1.0
 docker tag notes:latest kamronbekdev/notes:v0.1.0
+docker tag notes:latest kamronbekdev/todo:v0.1.0
 
 docker tag notes:latest ghcr.io/kamron-developer/bookshop:v0.1.0
 docker tag notes:latest ghcr.io/kamron-developer/notes:v0.1.0
+docker tag notes:latest ghcr.io/kamron-developer/todo:v0.1.0
 ```
 
 Push the images:
@@ -31,12 +37,15 @@ Push the images:
 ```bash
 docker push kamronbekdev/bookshop --all-tags
 docker push kamronbekdev/notes --all-tags
+docker push kamronbekdev/todo --all-tags
 
 docker push kamronbekdev/bookshop:v0.1.0
 docker push kamronbekdev/notes:v0.1.0
+docker push kamronbekdev/todo:v0.1.0
 
 docker push ghcr.io/kamronbekdev/bookshop:v0.1.0
 docker push ghcr.io/kamronbekdev/notes:v0.1.0
+docker push ghcr.io/kamronbekdev/todo:v0.1.0
 ```
 
 ## Setup GitHub Container Registry (GHCR)
