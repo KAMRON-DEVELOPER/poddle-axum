@@ -34,7 +34,7 @@ use lapin::{
 };
 
 use reqwest::Client;
-use serde_json::{Value, json};
+use serde_json::Value;
 use tracing::{Instrument, debug, info, info_span};
 use url::Url;
 use users_core::jwt::Claims;
@@ -554,6 +554,11 @@ pub async fn get_logs_handler(
         .unwrap_or_else(|| (chrono::Utc::now() - chrono::Duration::minutes(15)).to_rfc3339());
     let limit = q.limit.unwrap_or_else(|| 100).to_string();
 
+    println!(
+        "Sending request to Loki: {} with Tenant: {}",
+        url, preset_id
+    );
+
     let response = http
         .get(url)
         .header("X-Scope-OrgID", &format!("{}", preset_id))
@@ -566,28 +571,15 @@ pub async fn get_logs_handler(
         .send()
         .await?;
 
-    let txt = response.json::<Value>().await?;
+    // Check status before parsing
+    if !response.status().is_success() {
+        let error_text = response.text().await.unwrap_or_default();
+        println!("Loki Error: {}", error_text);
+        return Err(StatusCode::BAD_GATEWAY.into());
+    }
 
-    println!("loki response: {:#?}", txt);
+    // 6. Return Raw JSON (Let frontend handle parsing for now, or use your Struct)
+    let json_body = response.json::<Value>().await?;
 
-    // let loki_data = response.json::<LokiResponse>().await?;
-
-    // // Flatten and Clean Data
-    // let mut clean_logs: Vec<LogEntry> = Vec::new();
-
-    // for stream in loki_data.data.result {
-    //     // Extract level from labels if available
-    //     let level = stream.stream.get("level").cloned();
-
-    //     for value in stream.values {
-    //         // value[0] is timestamp (ns), value[1] is the log line
-    //         clean_logs.push(LogEntry {
-    //             timestamp: value[0].clone(),
-    //             message: value[1].clone(),
-    //             level: level.clone(),
-    //         });
-    //     }
-    // }
-
-    Ok(axum::Json(json!({"ok": true})))
+    Ok(axum::Json(json_body))
 }
