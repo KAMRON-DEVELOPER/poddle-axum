@@ -305,10 +305,10 @@ Labels added by rust backend
 
 ```rust
 let mut labels = BTreeMap::new();
-labels.insert("app".to_string(), deployment_name.to_string());
-labels.insert("project-id".to_string(), project_id.to_string());
-labels.insert("deployment-id".to_string(), deployment_id.to_string());
-labels.insert("managed-by".to_string(), "poddle".to_string());
+labels.insert("poddle.io/managed-by".into(), "poddle".into());
+labels.insert("poddle.io/project-id".into(), msg.project_id.into());
+labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
+labels.insert("poddle.io/preset-id".into(), msg.preset_id.into());
 ```
 
 #### Apply minimal RBAC for agent and gateway
