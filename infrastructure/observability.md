@@ -123,19 +123,6 @@ stage.tenant {
 kubectl apply -f infrastructure/charts/loki/loki-runtime-config-cm.yaml
 ```
 
-Verify
-
-```bash
-kubectl -n loki exec -it deploy/loki -- ls -l /etc/loki/runtime-config
-kubectl -n loki exec -it deploy/loki -- cat /etc/loki/runtime-config/runtime-config.yaml
-```
-
-Ensure Loki actually loads runtime config
-
-```bash
-kubectl -n loki logs deploy/loki | grep -i runtime
-```
-
 ```bash
 helm upgrade --install loki grafana/loki \
   --values infrastructure/charts/loki/loki-values.yaml \
