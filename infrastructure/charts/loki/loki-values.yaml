@@ -18,6 +18,13 @@ global:
     - secretRef:
         name: minio-credentials
 
+  # -- Common volumes to add to all pods directly managed by this chart.
+  # scope: admin-api, backend, bloom-builder, bloom-gateway, bloom-planner, compactor, distributor, index-gateway, ingester, overrides-exporter, pattern-ingester, querier, query-frontend, query-scheduler, read, ruler, write.
+  extraVolumes: []
+  # -- Common mount points to add to all pods directly managed by this chart.
+  # scope: admin-api, backend, bloom-builder, bloom-gateway, bloom-planner, compactor, distributor, index-gateway, ingester, overrides-exporter, pattern-ingester, querier, query-frontend, query-scheduler, read, ruler, write.
+  extraVolumeMounts: []
+
 ######################################################################################################################
 #
 # Base Loki Configs including kubernetes configurations and configurations for Loki itself,
@@ -57,7 +64,7 @@ loki:
     # This file is where my Axum backend will write deployment-specific settings
     per_tenant_override_config: /etc/loki/runtime-config/runtime-config.yaml
 
-  # Optional: static per-tenant/stream retention
+  # Example: static per-tenant/stream retention
   retention_stream:
     - selector: '{namespace="default"}'
       period: 1h
@@ -97,7 +104,7 @@ loki:
           prefix: loki_index_
           period: 24h
 
-  # --  Optional compactor configuration
+  # -- Optional compactor configuration
   compactor:
     working_directory: /var/loki/compactor
     compaction_interval: 30m
@@ -105,8 +112,7 @@ loki:
     retention_delete_delay: 1h
     retention_delete_worker_count: 10
     delete_request_store: s3
-    shared_store: s3
-  # --  Optional compactor grpc client configuration
+  # -- Optional compactor grpc client configuration
   compactor_grpc_client: {}
 
 ######################################################################################################################
@@ -150,6 +156,11 @@ gateway:
 singleBinary:
   replicas: 1
 
+  # -- Volume mounts to add to the single binary pods
+  extraVolumeMounts: []
+  # -- Volumes to add to the single binary pods
+  extraVolumes: []
+  # -- Resource requests and limits for the single binary
   resources:
     requests:
       cpu: 100m
