@@ -179,7 +179,7 @@ singleBinary:
   extraVolumes:
     - name: runtime-config
       configMap:
-        name: loki-runtime-config
+        name: loki-runtime-config-cm
   # -- Resource requests and limits for the single binary
   resources:
     requests:
