@@ -86,7 +86,21 @@ loki:
 
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig:
-    file: /etc/loki/loki-runtime-config/runtime-config.yaml
+    overrides:
+      "2d78f5a4-73ea-41e0-9c84-0bde227a2f04": # Starter
+        retention_period: 1h
+      "efef9b16-0d33-4778-a7ca-8bb3fc766171": # Sandbox
+        retention_period: 2h
+      "08ce3a94-f8ba-4b45-a222-3e5fb7dd4f19": # Standard
+        retention_period: 6h
+      "dac7d3d4-d33b-4eed-bf3f-267b8d03e34a": # Growth
+        retention_period: 12h
+      "97d70daa-d10f-4e03-868c-dd4a119cdbe6": # Business
+        retention_period: 1d
+      "ad3e94c2-9a74-4312-9040-862b1ec76dcf": # Pro
+        retention_period: 7d
+      "8722a80e-1906-459c-a8f3-e09f89d2e2fc": # Enterprise
+        retention_period: 14d
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
   commonConfig:
     replication_factor: 1
