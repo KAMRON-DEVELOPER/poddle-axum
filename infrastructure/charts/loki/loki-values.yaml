@@ -212,7 +212,7 @@ singleBinary:
 
 write:
   extraArgs:
-    config.expand-env: true
+    - "-config.expand-env=true"
   replicas: 0
   resources:
     requests:
@@ -229,7 +229,7 @@ write:
 
 read:
   extraArgs:
-    config.expand-env: true
+    - "-config.expand-env=true"
   replicas: 0
   resources:
     requests:
@@ -246,7 +246,7 @@ read:
 
 backend:
   extraArgs:
-    config.expand-env: true
+    - "-config.expand-env=true"
   replicas: 0
   resources:
     requests:
