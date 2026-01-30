@@ -5,7 +5,7 @@ use crate::{
         repository::{
             CacheRepository, DeploymentPresetRepository, DeploymentRepository, ProjectRepository,
         },
-        schemas::{LogEntry, LogQuery, LokiResponse, ProjectPageWithPaginationQuery},
+        schemas::{LogQuery, ProjectPageWithPaginationQuery},
     },
 };
 use axum::{
@@ -34,7 +34,9 @@ use lapin::{
 };
 
 use reqwest::Client;
+use serde_json::{Value, json};
 use tracing::{Instrument, debug, info, info_span};
+use url::Url;
 use users_core::jwt::Claims;
 use uuid::Uuid;
 use validator::Validate;
@@ -534,7 +536,14 @@ pub async fn get_logs_handler(
     let preset_id =
         DeploymentRepository::get_prest_id(&claims.sub, &deployment_id, &db.pool).await?;
 
-    let url = format!("{}/loki/api/v1/query_range", cfg.loki.url);
+    let base_url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let host = base_url
+        .host_str()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let port = base_url
+        .port_or_known_default()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let url = format!("{}:{}/loki/api/v1/query_range", host, port);
     let query = format!(
         r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
         project_id, deployment_id
@@ -557,24 +566,28 @@ pub async fn get_logs_handler(
         .send()
         .await?;
 
-    let loki_data = response.json::<LokiResponse>().await?;
+    let txt = response.json::<Value>().await?;
 
-    // Flatten and Clean Data
-    let mut clean_logs: Vec<LogEntry> = Vec::new();
+    println!("loki response: {:#?}", txt);
 
-    for stream in loki_data.data.result {
-        // Extract level from labels if available
-        let level = stream.stream.get("level").cloned();
+    // let loki_data = response.json::<LokiResponse>().await?;
 
-        for value in stream.values {
-            // value[0] is timestamp (ns), value[1] is the log line
-            clean_logs.push(LogEntry {
-                timestamp: value[0].clone(),
-                message: value[1].clone(),
-                level: level.clone(),
-            });
-        }
-    }
+    // // Flatten and Clean Data
+    // let mut clean_logs: Vec<LogEntry> = Vec::new();
 
-    Ok(axum::Json(clean_logs))
+    // for stream in loki_data.data.result {
+    //     // Extract level from labels if available
+    //     let level = stream.stream.get("level").cloned();
+
+    //     for value in stream.values {
+    //         // value[0] is timestamp (ns), value[1] is the log line
+    //         clean_logs.push(LogEntry {
+    //             timestamp: value[0].clone(),
+    //             message: value[1].clone(),
+    //             level: level.clone(),
+    //         });
+    //     }
+    // }
+
+    Ok(axum::Json(json!({"ok": true})))
 }

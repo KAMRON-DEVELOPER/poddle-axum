@@ -29,6 +29,14 @@ impl From<lapin::Error> for AppError {
     }
 }
 
+impl From<http::StatusCode> for AppError {
+    fn from(value: http::StatusCode) -> Self {
+        match value {
+            _ => AppError::InternalServerError(value.to_string()),
+        }
+    }
+}
+
 // -------------------------------------------------------------------------------
 // --------------------------- Factory implementations ---------------------------
 // -------------------------------------------------------------------------------

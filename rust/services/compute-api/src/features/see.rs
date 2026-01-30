@@ -7,20 +7,24 @@ use axum::{
     },
 };
 use futures::{Stream, StreamExt};
+use http::{HeaderName, HeaderValue};
 use std::convert::Infallible;
 use url::Url;
 use users_core::jwt::Claims;
 
 use compute_core::channel_names::ChannelNames;
 use factory::factories::{database::Database, redis::Redis};
-use tokio_tungstenite::{connect_async, tungstenite::protocol::Message};
+use tokio_tungstenite::{
+    connect_async,
+    tungstenite::{client::IntoClientRequest, protocol::Message},
+};
 use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::{
     config::Config,
     features::{
-        repository::ProjectRepository,
+        repository::{DeploymentRepository, ProjectRepository},
         schemas::{LogEntry, LokiResponse},
     },
 };
@@ -76,6 +80,10 @@ pub async fn stream_logs_see_handler(
         .await
         .map_err(|_| StatusCode::FORBIDDEN)?;
 
+    let preset_id = DeploymentRepository::get_prest_id(&claims.sub, &deployment_id, &db.pool)
+        .await
+        .map_err(|_| StatusCode::NOT_FOUND)?;
+
     let query = format!(
         r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
         project_id, deployment_id
@@ -87,15 +95,34 @@ pub async fn stream_logs_see_handler(
     } else {
         "ws"
     };
+
+    let host = base_url
+        .host_str()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    let port = base_url
+        .port_or_known_default()
+        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+
     let url = format!(
-        "{}://{}/loki/api/v1/tail?query={}",
+        "{}://{}:{}/loki/api/v1/tail?query={}",
         ws_scheme,
-        base_url.host_str().unwrap_or("localhost"),
+        host,
+        port,
         urlencoding::encode(&query)
     );
 
     // Connect to Loki via WebSocket
-    let (ws_stream, _) = connect_async(url).await.map_err(|e| {
+    let mut request = url
+        .into_client_request()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let name = HeaderName::from_static("x-scope-orgid");
+    let value = HeaderValue::from_str(&preset_id.to_string())
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    request.headers_mut().insert(name, value);
+
+    let (ws_stream, _) = connect_async(request).await.map_err(|e| {
         tracing::error!("Failed to connect to Loki: {}", e);
         StatusCode::BAD_GATEWAY
     })?;

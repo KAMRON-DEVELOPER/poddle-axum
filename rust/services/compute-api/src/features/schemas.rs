@@ -56,18 +56,18 @@ pub struct LokiStream {
 //
 // ----------------------------------------
 
-// What gets sent to Loki
-#[derive(Debug, Serialize)]
-pub struct LogEntry {
-    // The actual log line (original or from .Entry)
-    pub message: String,
+// // What gets sent to Loki
+// #[derive(Debug, Serialize)]
+// pub struct LogEntry {
+//     // The actual log line (original or from .Entry)
+//     pub message: String,
 
-    // Labels (indexed)
-    pub labels: LogLabels,
+//     // Labels (indexed)
+//     pub labels: LogLabels,
 
-    // Structured metadata (not indexed, but queryable)
-    pub metadata: LogMetadata,
-}
+//     // Structured metadata (not indexed, but queryable)
+//     pub metadata: LogMetadata,
+// }
 
 #[derive(Debug, Serialize)]
 pub struct LogLabels {
@@ -107,18 +107,18 @@ pub struct LogMetadata {
 //
 // ----------------------------------------
 
-// Matches what you send to the React frontend
-#[derive(Serialize, Deserialize, Debug)]
-pub struct LogEntry {
-    pub timestamp: String,      // From Loki value[0]
-    pub message: String,        // The cleaned log line from stage.output
-    pub level: Option<String>,  // Extracted from Loki labels
-    pub stream: Option<String>, // "stdout" or "stderr"
-}
+// // Matches what you send to the React frontend
+// #[derive(Serialize, Deserialize, Debug)]
+// pub struct LogEntry {
+//     pub timestamp: String,      // From Loki value[0]
+//     pub message: String,        // The cleaned log line from stage.output
+//     pub level: Option<String>,  // Extracted from Loki labels
+//     pub stream: Option<String>, // "stdout" or "stderr"
+// }
 
-// Internal representation for parsing Loki's JSON response
-#[derive(Deserialize, Debug)]
-pub struct LokiStream {
-    pub stream: HashMap<String, String>, // Labels: project_id, level, pod, etc.
-    pub values: Vec<[String; 2]>,        // [timestamp_ns, log_line]
-}
+// // Internal representation for parsing Loki's JSON response
+// #[derive(Deserialize, Debug)]
+// pub struct LokiStream {
+//     pub stream: HashMap<String, String>, // Labels: project_id, level, pod, etc.
+//     pub values: Vec<[String; 2]>,        // [timestamp_ns, log_line]
+// }
