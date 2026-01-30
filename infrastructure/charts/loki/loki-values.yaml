@@ -12,7 +12,7 @@ global:
   # -- Common additional CLI arguments for all jobs (that is, -log.level debug, -config.expand-env=true or -log-config-reverse-order)
   # scope: admin-api, backend, bloom-builder, bloom-gateway, bloom-planner, compactor, distributor, index-gateway, ingester, overrides-exporter, pattern-ingester, querier, query-frontend, query-scheduler, read, ruler, write.
   extraArgs:
-    config.expand-env: true
+    - "-config.expand-env=true"
 
   extraEnvFrom:
     - secretRef:
@@ -172,7 +172,7 @@ singleBinary:
 
   # -- Labels for single binary service
   extraArgs:
-    config.expand-env: true
+    - "-config.expand-env=true"
   # -- Volume mounts to add to the single binary pods
   extraVolumeMounts:
     - name: loki-runtime-config-volume
