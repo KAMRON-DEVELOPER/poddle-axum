@@ -170,6 +170,9 @@ gateway:
 singleBinary:
   replicas: 1
 
+  # -- Labels for single binary service
+  extraArgs:
+    config.expand-env: true
   # -- Volume mounts to add to the single binary pods
   extraVolumeMounts:
     - name: loki-runtime-config-volume
