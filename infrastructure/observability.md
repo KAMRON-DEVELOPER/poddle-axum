@@ -107,6 +107,35 @@ kubectl apply -f infrastructure/charts/prometheus-community/prometheus-ingressro
 
 ### Install Loki
 
+> Since we enable auth which required each request header contain `X-Scope-OrgID = preset_id`.
+>
+> Beacuse to appy retention based on presets/plans we set `stage.tenant.label = preset_id`.
+>
+```bash
+stage.tenant {
+  label = "preset_id"
+}
+```
+>
+> If we use retention_stream it would be too static and need to add `stage.labels.values` to `config.alloy` which leads to `high-cardinality`
+
+```bash
+kubectl apply -f infrastructure/charts/loki/loki-runtime-config-cm.yaml
+```
+
+Verify
+
+```bash
+kubectl -n loki exec -it deploy/loki -- ls -l /etc/loki/runtime-config
+kubectl -n loki exec -it deploy/loki -- cat /etc/loki/runtime-config/runtime-config.yaml
+```
+
+Ensure Loki actually loads runtime config
+
+```bash
+kubectl -n loki logs deploy/loki | grep -i runtime
+```
+
 ```bash
 helm upgrade --install loki grafana/loki \
   --values infrastructure/charts/loki/loki-values.yaml \

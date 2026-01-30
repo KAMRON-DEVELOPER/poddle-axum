@@ -171,9 +171,15 @@ singleBinary:
   replicas: 1
 
   # -- Volume mounts to add to the single binary pods
-  extraVolumeMounts: []
+  extraVolumeMounts:
+    - name: runtime-config
+      mountPath: /etc/loki/runtime-config
+      readOnly: true
   # -- Volumes to add to the single binary pods
-  extraVolumes: []
+  extraVolumes:
+    - name: runtime-config
+      configMap:
+        name: loki-runtime-config
   # -- Resource requests and limits for the single binary
   resources:
     requests:
