@@ -132,6 +132,8 @@ loki.process "default" {
 				ts        = "ts",
 				trace_id  = "trace_id",
 				span_id   = "span_id",
+				latency   = "latency",
+				status    = "status",
 			}
 		}
 
@@ -146,19 +148,28 @@ loki.process "default" {
 				ts        = "ts",
 				trace_id  = "trace_id",
 				span_id   = "span_id",
+				latency   = "latency",
+				status    = "status",
 			}
 		}
 
+		// without stage.output normalized message useless
 		// Normalize message field for frontend
 		stage.template {
 			source   = "message"
-			template = "{{ if .msg }}{{ .msg }}{{ else if .message }}{{ .message }}{{ else }}{{ .Entry }}{{ end }}"
+			template = "{{ if .msg }}{{ .msg }}{{ else if .message }}{{ .message }}{{ end }}"
 		}
 
 		// Normalize timestamp field for frontend
 		stage.template {
 			source   = "timestamp"
-			template = "{{ if .ts }}{{ .ts }}{{ else if .time }}{{ .time }}{{ else if .timestamp }}{{ .timestamp }}{{ else }}{{ .Entry }}{{ end }}"
+			template = "{{ if .ts }}{{ .ts }}{{ else if .time }}{{ .time }}{{ else if .timestamp }}{{ .timestamp }}{{ end }}"
+		}
+
+		stage.timestamp {
+			source            = "timestamp"
+			format            = "RFC3339"
+			action_on_failure = "skip"
 		}
 	}
 
