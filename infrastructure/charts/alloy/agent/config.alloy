@@ -90,8 +90,14 @@ local.file_match "pod_logs" {
 
 // Read the files directly from disk (Efficient!)
 loki.source.file "pods" {
-	targets    = local.file_match.pod_logs.targets
+	targets    = discovery.relabel.pod_logs.output
 	forward_to = [loki.process.default.receiver]
+
+	file_match {
+		enabled           = true
+		ignore_older_than = "0s"
+		sync_period       = "10s"
+	}
 }
 
 loki.process "default" {
@@ -102,54 +108,72 @@ loki.process "default" {
 		drop_counter_reason = "too old"
 	}
 
-	// Tag everything as containerd (since K3s uses containerd)
-	stage.static_labels {
-		values = {
-			tmp_container_runtime = "containerd",
-		}
-	}
+	// Always parse CRI first
+	// <time> <stream> <flags> <log>
+	// "2024-01-01T10:00:00.123Z stdout F {"msg": "hello"}"
+	stage.cri { }
 
-	stage.json {
-		expressions = {
-			level    = "level",
-			trace_id = "trace_id",
-			message  = "message",
-			msg      = "msg",
-			ts       = "timestamp",
-		}
-	}
-
-	// If JSON parsing failed (level is empty), fall back to the raw line
-	stage.template {
-		source   = "msg"
-		template = "{{ if .level }}{{ .msg }}{{ else }}{{ .Entry }}{{ end }}"
-	}
-
-	// Promotes level from extracted field → Loki label
-	// You can filter {level="error"} in Loki, Improves query ergonomics
-	stage.labels {
-		values = {
-			level    = "level",
-			trace_id = "trace_id",
-		}
-	}
+	// The stage.decolorize strips ANSI color codes from the log lines, making it easier to parse logs.
+	stage.decolorize { }
 
 	stage.match {
-		selector = "{tmp_container_runtime=\"containerd\"}"
+		selector = "{managed_by=\"poddle\"}"
 
-		stage.cri { } // The CRI stage is designed to parse logs originating from containerd or CRI-O runtimes
-
-		stage.labels {
-			values = {
-				flags  = "", // Incorporates 'flags' derived from CRI parsing as a label
-				stream = "", // Incorporates 'stream' (stdout/stderr) from CRI parsing as a label
+		// Storage impact 0
+		// Query shape impact 0
+		// Attempt JSON extraction
+		stage.json {
+			expressions = {
+				level     = "level",
+				msg       = "msg",
+				message   = "message",
+				timestamp = "timestamp",
+				time      = "time",
+				ts        = "ts",
+				trace_id  = "trace_id",
+				span_id   = "span_id",
 			}
+		}
+
+		// Attempt Logfmt extraction
+		stage.logfmt {
+			mapping = {
+				level     = "level",
+				msg       = "msg",
+				message   = "message",
+				timestamp = "timestamp",
+				time      = "time",
+				ts        = "ts",
+				trace_id  = "trace_id",
+				span_id   = "span_id",
+			}
+		}
+
+		// Normalize message field for frontend
+		stage.template {
+			source   = "message"
+			template = "{{ if .msg }}{{ .msg }}{{ else if .message }}{{ .message }}{{ else }}{{ .Entry }}{{ end }}"
+		}
+
+		// Normalize timestamp field for frontend
+		stage.template {
+			source   = "timestamp"
+			template = "{{ if .ts }}{{ .ts }}{{ else if .time }}{{ .time }}{{ else if .timestamp }}{{ .timestamp }}{{ else }}{{ .Entry }}{{ end }}"
 		}
 	}
 
-	// Cleanup temporary labels
-	stage.label_drop {
-		values = ["tmp_container_runtime"]
+	stage.labels {
+		values = {
+			level  = "level",
+			stream = "",
+		}
+	}
+
+	stage.structured_metadata {
+		values = {
+			trace_id = "trace_id",
+			span_id  = "span_id",
+		}
 	}
 }
 
