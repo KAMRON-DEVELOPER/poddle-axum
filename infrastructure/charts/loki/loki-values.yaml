@@ -62,7 +62,7 @@ loki:
     # The default retention period for all logs not matching a specific retention_stream selector
     retention_period: 1d
     # This file is where my Axum backend will write deployment-specific settings
-    per_tenant_override_config: /etc/loki/loki-runtime-config/runtime-config.yaml
+    # per_tenant_override_config: /etc/loki/loki-runtime-config/runtime-config.yaml
 
     # Dynamic Retention based on Preset Label
     # These rules apply to logs found in storage, regardless of tenant.
@@ -86,7 +86,7 @@ loki:
 
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig:
-    file: /etc/loki/runtime-config/runtime-config.yaml
+    file: /etc/loki/loki-runtime-config/runtime-config.yaml
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
   commonConfig:
     replication_factor: 1
