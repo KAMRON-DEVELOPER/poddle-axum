@@ -1,0 +1,9 @@
+overrides:
+  "preset_id_1":
+    retention_period: 1h
+  "preset_id_2":
+    retention_period: 2h
+  "preset_id_3":
+    retention_period: 4h
+  "preset_id_4":
+    retention_period: 8h

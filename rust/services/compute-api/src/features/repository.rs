@@ -443,6 +443,26 @@ impl DeploymentRepository {
 
         Ok(())
     }
+
+    #[tracing::instrument(name = "deployment_repository.get_prest_id", skip_all, fields(user_id = %user_id, deployment_id = %deployment_id), err)]
+    pub async fn get_prest_id(
+        user_id: &Uuid,
+        deployment_id: &Uuid,
+        pool: &PgPool,
+    ) -> Result<Uuid, sqlx::Error> {
+        sqlx::query_scalar!(
+            r#"
+            SELECT d.preset_id
+            FROM deployments d
+            INNER JOIN projects p ON d.project_id = p.id
+            WHERE d.id = $1 AND p.owner_id = $2
+            "#,
+            deployment_id,
+            user_id
+        )
+        .fetch_one(pool)
+        .await
+    }
 }
 
 pub struct DeploymentEventRepository;

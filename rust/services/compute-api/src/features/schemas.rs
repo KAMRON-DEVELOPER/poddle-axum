@@ -14,7 +14,7 @@ pub struct ProjectPageWithPaginationQuery {
 
 #[derive(Deserialize, Debug)]
 pub struct LogQuery {
-    pub start_time: Option<String>,
+    pub start: Option<String>,
     pub limit: Option<u32>,
 }
 

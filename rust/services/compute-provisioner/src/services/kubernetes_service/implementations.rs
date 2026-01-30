@@ -252,6 +252,7 @@ impl KubernetesService {
             "poddle.io/deployment-id".to_string(),
             msg.deployment_id.to_string(),
         );
+        labels.insert("poddle.io/preset-id".to_string(), msg.preset_id.to_string());
 
         self.create_vso_resources(&ns).await?;
 

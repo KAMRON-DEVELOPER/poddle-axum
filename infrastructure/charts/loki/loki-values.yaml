@@ -48,8 +48,24 @@ loki:
   ######################################################################################################################
 
   # Should authentication be enabled
-  auth_enabled: false
+  auth_enabled: true
 
+  # -- Limits config
+  limits_config:
+    # The default retention period for all logs not matching a specific retention_stream selector
+    retention_period: 1d
+    # This file is where my Axum backend will write deployment-specific settings
+    per_tenant_override_config: /etc/loki/runtime-config/runtime-config.yaml
+
+  # Optional: static per-tenant/stream retention
+  retention_stream:
+    - selector: '{namespace="default"}'
+      period: 1h
+      priority: 1
+
+  # -- Provides a reloadable runtime configuration file for some specific configuration
+  runtimeConfig:
+    file: /etc/loki/runtime-config/runtime-config.yaml
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
   commonConfig:
     replication_factor: 1
@@ -80,6 +96,18 @@ loki:
         index:
           prefix: loki_index_
           period: 24h
+
+  # --  Optional compactor configuration
+  compactor:
+    working_directory: /var/loki/compactor
+    compaction_interval: 30m
+    retention_enabled: true
+    retention_delete_delay: 1h
+    retention_delete_worker_count: 10
+    delete_request_store: s3
+    shared_store: s3
+  # --  Optional compactor grpc client configuration
+  compactor_grpc_client: {}
 
 ######################################################################################################################
 #
