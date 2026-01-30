@@ -12,7 +12,7 @@ global:
   # -- Common additional CLI arguments for all jobs (that is, -log.level debug, -config.expand-env=true or -log-config-reverse-order)
   # scope: admin-api, backend, bloom-builder, bloom-gateway, bloom-planner, compactor, distributor, index-gateway, ingester, overrides-exporter, pattern-ingester, querier, query-frontend, query-scheduler, read, ruler, write.
   extraArgs:
-    - "-config.expand-env=true"
+    config.expand-env: true
 
   extraEnvFrom:
     - secretRef:
@@ -57,50 +57,24 @@ loki:
   # Should authentication be enabled
   auth_enabled: true
 
-  # -- Limits config
-  limits_config:
-    # The default retention period for all logs not matching a specific retention_stream selector
-    retention_period: 1d
-    # This file is where my Axum backend will write deployment-specific settings
-    # per_tenant_override_config: /etc/loki/loki-runtime-config/runtime-config.yaml
-
-    # Dynamic Retention based on Preset Label
-    # These rules apply to logs found in storage, regardless of tenant.
-    # retention_stream:
-    #   # Starter / Sandbox (e.g., Preset ID 1 & 2) -> 1 Day
-    #   - selector: '{preset_id=~"1|2"}'
-    #     priority: 1
-    #     period: 1d
-    #   # Standard / Growth (e.g., Preset ID 3 & 4) -> 7 Days
-    #   - selector: '{preset_id=~"3|4"}'
-    #     priority: 1
-    #     period: 7d
-    #   # Business / Pro (e.g., Preset ID 5 & 6) -> 14 Days
-    #   - selector: '{preset_id="4"}'
-    #     priority: 1
-    #     period: 14d
-    #   # Enterprise (e.g., Preset ID 7) -> 30 Days
-    #   - selector: '{preset_id<="7"}'
-    #     priority: 1
-    #     period: 30d
-
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig:
     overrides:
-      "2d78f5a4-73ea-41e0-9c84-0bde227a2f04": # Starter
+      "2d78f5a4-73ea-41e0-9c84-0bde227a2f04":
         retention_period: 1h
-      "efef9b16-0d33-4778-a7ca-8bb3fc766171": # Sandbox
+      "efef9b16-0d33-4778-a7ca-8bb3fc766171":
         retention_period: 2h
-      "08ce3a94-f8ba-4b45-a222-3e5fb7dd4f19": # Standard
+      "08ce3a94-f8ba-4b45-a222-3e5fb7dd4f19":
         retention_period: 6h
-      "dac7d3d4-d33b-4eed-bf3f-267b8d03e34a": # Growth
+      "dac7d3d4-d33b-4eed-bf3f-267b8d03e34a":
         retention_period: 12h
-      "97d70daa-d10f-4e03-868c-dd4a119cdbe6": # Business
+      "97d70daa-d10f-4e03-868c-dd4a119cdbe6":
         retention_period: 1d
-      "ad3e94c2-9a74-4312-9040-862b1ec76dcf": # Pro
+      "ad3e94c2-9a74-4312-9040-862b1ec76dcf":
         retention_period: 7d
-      "8722a80e-1906-459c-a8f3-e09f89d2e2fc": # Enterprise
+      "8722a80e-1906-459c-a8f3-e09f89d2e2fc":
         retention_period: 14d
+
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
   commonConfig:
     replication_factor: 1
@@ -140,8 +114,6 @@ loki:
     retention_delete_delay: 1h
     retention_delete_worker_count: 10
     delete_request_store: s3
-  # -- Optional compactor grpc client configuration
-  compactor_grpc_client: {}
 
 ######################################################################################################################
 #
@@ -187,16 +159,6 @@ singleBinary:
   # -- Labels for single binary service
   extraArgs:
     - "-config.expand-env=true"
-  # -- Volume mounts to add to the single binary pods
-  extraVolumeMounts:
-    - name: loki-runtime-config-volume
-      mountPath: /etc/loki/loki-runtime-config
-      readOnly: true
-  # -- Volumes to add to the single binary pods
-  extraVolumes:
-    - name: loki-runtime-config-volume
-      configMap:
-        name: loki-runtime-config-cm
   # -- Resource requests and limits for the single binary
   resources:
     requests:
