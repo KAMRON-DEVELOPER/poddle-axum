@@ -60,19 +60,19 @@ loki:
   # -- Provides a reloadable runtime configuration file for some specific configuration
   runtimeConfig:
     overrides:
-      "2d78f5a4-73ea-41e0-9c84-0bde227a2f04":
+      "680377c6-0a6c-4cd0-a663-fd97d1a57332":
         retention_period: 1h
-      "efef9b16-0d33-4778-a7ca-8bb3fc766171":
+      "5d92bed4-60e1-44aa-9063-91151ff9d315":
         retention_period: 2h
-      "08ce3a94-f8ba-4b45-a222-3e5fb7dd4f19":
+      "257f802e-a1ec-4447-bf76-45b6f83ff427":
         retention_period: 6h
-      "dac7d3d4-d33b-4eed-bf3f-267b8d03e34a":
+      "ff7ae406-596b-4dd7-be2c-49d5ecce6a21":
         retention_period: 12h
-      "97d70daa-d10f-4e03-868c-dd4a119cdbe6":
+      "ece5f5cd-12d6-4a6c-833d-55e4e2ff1361":
         retention_period: 1d
-      "ad3e94c2-9a74-4312-9040-862b1ec76dcf":
+      "bdb1600f-275e-448f-8466-f2035f8d35e3":
         retention_period: 7d
-      "8722a80e-1906-459c-a8f3-e09f89d2e2fc":
+      "5713b9ce-b99d-4602-b742-21af70902a55":
         retention_period: 14d
 
   # -- Check https://grafana.com/docs/loki/latest/configuration/#common_config for more info on how to provide a common configuration
