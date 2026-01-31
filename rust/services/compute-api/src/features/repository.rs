@@ -330,7 +330,28 @@ impl DeploymentRepository {
                 subdomain
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-            RETURNING *
+            RETURNING
+                id,
+                user_id,
+                project_id,
+                name,
+                image,
+                port,
+                desired_replicas,
+                ready_replicas,
+                available_replicas,
+                preset_id,
+                addon_cpu_millicores,
+                addon_memory_mb,
+                vault_secret_path,
+                secret_keys,
+                environment_variables AS "environment_variables: Json<Option<HashMap<String, String>>>",
+                labels AS "labels: Json<Option<HashMap<String, String>>>",
+                status AS "status: DeploymentStatus",
+                domain,
+                subdomain,
+                created_at,
+                updated_at
             "#,
             user_id,
             project_id,
@@ -343,8 +364,8 @@ impl DeploymentRepository {
             req.addon_memory_mb,
             environment_variables,
             labels,
-            &req.domain,
-            &req.subdomain,
+            req.domain,
+            req.subdomain,
         )
         .fetch_one(&mut **tx)
         .await
