@@ -1,6 +1,7 @@
 use crate::factories::amqp::error::AmqpError;
 use crate::factories::amqp::{Amqp, AmqpConfig, AmqpPropagator};
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
+use lapin::ExchangeKind;
 use lapin::options::{
     BasicQosOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
 };
@@ -67,7 +68,7 @@ impl Amqp {
         channel
             .exchange_declare(
                 exchange,
-                lapin::ExchangeKind::Topic,
+                ExchangeKind::Topic,
                 ExchangeDeclareOptions {
                     durable: true,
                     auto_delete: false,
