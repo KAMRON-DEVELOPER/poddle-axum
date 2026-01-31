@@ -9,10 +9,7 @@ use factory::factories::{
 use futures::StreamExt;
 use lapin::{
     Consumer,
-    options::{
-        BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicQosOptions,
-        BasicRejectOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
-    },
+    options::{BasicAckOptions, BasicConsumeOptions, BasicNackOptions, BasicRejectOptions},
     types::{AMQPValue, FieldTable},
 };
 
@@ -34,54 +31,6 @@ pub struct ConsumerContext {
 
 pub async fn start_consumer(ctx: ConsumerContext) -> Result<(), AppError> {
     let channel = ctx.amqp.channel().await;
-
-    // Declare exchange
-    channel
-        .exchange_declare(
-            "compute",
-            lapin::ExchangeKind::Topic,
-            ExchangeDeclareOptions {
-                durable: true,
-                auto_delete: false,
-                internal: false,
-                nowait: false,
-                passive: false,
-            },
-            FieldTable::default(),
-        )
-        .await?;
-
-    // Declare queues
-    for queue_name in &["compute.create", "compute.update", "compute.delete"] {
-        let mut queue_args = FieldTable::default();
-        queue_args.insert(
-            "x-dead-letter-exchange".into(),
-            AMQPValue::LongString("compute.dead_letter".into()),
-        );
-        channel
-            .queue_declare(
-                queue_name,
-                QueueDeclareOptions {
-                    durable: true,
-                    ..Default::default()
-                },
-                queue_args,
-            )
-            .await?;
-
-        channel
-            .queue_bind(
-                queue_name,
-                "compute",
-                queue_name,
-                QueueBindOptions::default(),
-                FieldTable::default(),
-            )
-            .await?;
-    }
-
-    // Set QoS (prefetch)
-    channel.basic_qos(10, BasicQosOptions::default()).await?;
 
     // Start consumers
     let create_consumer = channel

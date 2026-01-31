@@ -27,11 +27,7 @@ use factory::factories::{
 use http_contracts::{
     list::schema::ListResponse, message::MessageResponse, pagination::schema::Pagination,
 };
-use lapin::{
-    BasicProperties,
-    options::{BasicPublishOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions},
-    types::FieldTable,
-};
+use lapin::{BasicProperties, options::BasicPublishOptions, types::FieldTable};
 
 use reqwest::Client;
 use serde_json::Value;
@@ -281,48 +277,6 @@ pub async fn create_deployment_handler(
 
     // Get RabbitMQ channel
     let channel = amqp.channel().await;
-
-    // Declare exchange (idempotent)
-    channel
-        .exchange_declare(
-            "compute",
-            lapin::ExchangeKind::Topic,
-            ExchangeDeclareOptions {
-                durable: true,
-                auto_delete: false,
-                internal: false,
-                nowait: false,
-                passive: false,
-            },
-            FieldTable::default(),
-        )
-        .await?;
-
-    // Declare queue for provisioner
-    channel
-        .queue_declare(
-            "compute.create",
-            QueueDeclareOptions {
-                durable: true,
-                exclusive: false,
-                auto_delete: false,
-                nowait: false,
-                passive: false,
-            },
-            FieldTable::default(),
-        )
-        .await?;
-
-    // Bind queue to exchange
-    channel
-        .queue_bind(
-            "compute.create",
-            "compute",
-            "compute.create",
-            QueueBindOptions::default(),
-            FieldTable::default(),
-        )
-        .await?;
 
     // Prepare message
     let preset = DeploymentPresetRepository::get_by_id(&req.preset_id, &mut *tx).await?;

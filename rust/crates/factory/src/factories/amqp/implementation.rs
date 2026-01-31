@@ -1,6 +1,9 @@
 use crate::factories::amqp::error::AmqpError;
 use crate::factories::amqp::{Amqp, AmqpConfig, AmqpPropagator};
 use axum::{Json, http::StatusCode, response::IntoResponse, response::Response};
+use lapin::options::{
+    BasicQosOptions, ExchangeDeclareOptions, QueueBindOptions, QueueDeclareOptions,
+};
 use lapin::tcp::OwnedIdentity;
 use lapin::{
     BasicProperties, Channel, Connection, ConnectionProperties, options::BasicPublishOptions,
@@ -52,10 +55,72 @@ impl Amqp {
     }
 
     pub async fn channel(&self) -> Channel {
-        self.connection
+        let channel = self
+            .connection
             .create_channel()
             .await
-            .expect("Failed to create channel")
+            .expect("Failed to create channel");
+
+        let exchange = "compute";
+
+        // Declare exchange
+        channel
+            .exchange_declare(
+                exchange,
+                lapin::ExchangeKind::Topic,
+                ExchangeDeclareOptions {
+                    durable: true,
+                    auto_delete: false,
+                    internal: false,
+                    nowait: false,
+                    passive: false,
+                },
+                FieldTable::default(),
+            )
+            .await
+            .expect("Failed to declare exchange");
+
+        // Declare queues
+        for queue in &["compute.create", "compute.update", "compute.delete"] {
+            let mut args = FieldTable::default();
+            args.insert(
+                "x-dead-letter-exchange".into(),
+                AMQPValue::LongString("compute.dead_letter".into()),
+            );
+            channel
+                .queue_declare(
+                    queue,
+                    QueueDeclareOptions {
+                        durable: true,
+                        exclusive: false,
+                        auto_delete: false,
+                        nowait: false,
+                        passive: false,
+                    },
+                    args,
+                )
+                .await
+                .expect("Failed to declare queue");
+
+            channel
+                .queue_bind(
+                    queue,
+                    exchange,
+                    queue,
+                    QueueBindOptions::default(),
+                    FieldTable::default(),
+                )
+                .await
+                .expect("Failed to bind queue");
+        }
+
+        // Set QoS (prefetch)
+        channel
+            .basic_qos(10, BasicQosOptions::default())
+            .await
+            .expect("Failed to set basic QoS");
+
+        channel
     }
 
     pub async fn basic_publish<T: Serialize>(
