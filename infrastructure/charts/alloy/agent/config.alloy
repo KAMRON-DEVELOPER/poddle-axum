@@ -103,10 +103,10 @@ loki.source.file "pods" {
 loki.process "default" {
 	forward_to = [loki.write.default.receiver]
 
-	stage.drop {
-		older_than          = "5m"
-		drop_counter_reason = "too old"
-	}
+	// stage.drop {
+	// 	older_than          = "30m"
+	// 	drop_counter_reason = "too old"
+	// }
 
 	// Always parse CRI first
 	// <time> <stream> <flags> <log>
