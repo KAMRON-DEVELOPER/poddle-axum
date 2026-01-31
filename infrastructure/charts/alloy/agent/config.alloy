@@ -104,7 +104,7 @@ loki.process "default" {
 	forward_to = [loki.write.default.receiver]
 
 	// stage.drop {
-	// 	older_than          = "30m"
+	// 	older_than          = "1h"
 	// 	drop_counter_reason = "too old"
 	// }
 
