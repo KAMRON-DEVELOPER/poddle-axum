@@ -94,9 +94,8 @@ loki.source.file "pods" {
 	forward_to = [loki.process.default.receiver]
 
 	file_match {
-		enabled           = true
-		ignore_older_than = "0s"
-		sync_period       = "10s"
+		enabled     = true
+		sync_period = "10s"
 	}
 }
 
