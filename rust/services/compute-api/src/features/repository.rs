@@ -311,7 +311,8 @@ impl DeploymentRepository {
             .as_ref()
             .map(|l| serde_json::to_value(l).unwrap());
 
-        sqlx::query_as::<_, Deployment>(
+        sqlx::query_as!(
+            Deployment,
             r#"
             INSERT INTO deployments (
                 user_id,
@@ -328,23 +329,23 @@ impl DeploymentRepository {
                 domain,
                 subdomain
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
             RETURNING *
             "#,
+            user_id,
+            project_id,
+            &req.name,
+            &req.image,
+            req.port,
+            req.desired_replicas,
+            req.preset_id,
+            req.addon_cpu_millicores,
+            req.addon_memory_mb,
+            environment_variables,
+            labels,
+            &req.domain,
+            &req.subdomain,
         )
-        .bind(user_id)
-        .bind(project_id)
-        .bind(&req.name)
-        .bind(&req.image)
-        .bind(req.port)
-        .bind(req.desired_replicas)
-        .bind(req.preset_id)
-        .bind(req.addon_cpu_millicores)
-        .bind(req.addon_memory_mb)
-        .bind(environment_variables)
-        .bind(labels)
-        .bind(&req.domain)
-        .bind(&req.subdomain)
         .fetch_one(&mut **tx)
         .await
     }
