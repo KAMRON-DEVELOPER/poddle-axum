@@ -392,7 +392,9 @@ INSERT INTO
         memory_mb,
         description,
         currency,
-        monthly_price
+        monthly_price,
+        max_addon_cpu_millicores,
+        max_addon_memory_mb
     )
 VALUES (
         'Starter',
@@ -400,16 +402,19 @@ VALUES (
         128,
         'Perfect for testing and small projects',
         'UZS',
-        12000
+        12000,
+        0,
+        128
     ),
     (
         'Sandbox',
         200,
         256,
-        'Development
-and staging environments',
+        'Development and staging environments',
         'UZS',
-        20000
+        20000,
+        200,
+        256
     ),
     (
         'Standard',
@@ -417,7 +422,9 @@ and staging environments',
         512,
         'Small production workloads',
         'UZS',
-        35000
+        35000,
+        400,
+        512
     ),
     (
         'Growth',
@@ -425,7 +432,9 @@ and staging environments',
         1024,
         'Growing applications',
         'UZS',
-        50000
+        50000,
+        900,
+        1024
     ),
     (
         'Business',
@@ -433,7 +442,8 @@ and staging environments',
         2048,
         'Business applications',
         'UZS',
-        85000
+        85000 1900,
+        2048
     ),
     (
         'Pro',
@@ -441,7 +451,9 @@ and staging environments',
         4096,
         'High - performance applications',
         'UZS',
-        180000
+        180000,
+        0,
+        4096
     ),
     (
         'Enterprise',
@@ -449,7 +461,9 @@ and staging environments',
         8192,
         'High - Enterprise workloads',
         'UZS',
-        210000
+        210000,
+        0,
+        0
     );
 
 -- ==============================================
