@@ -129,6 +129,10 @@ helm upgrade --install loki grafana/loki \
   --namespace loki --create-namespace
 ```
 
+```bash
+kubectl apply -f infrastructure/charts/loki/loki-ingressroute.yaml
+```
+
 Verify
 
 ```bash
