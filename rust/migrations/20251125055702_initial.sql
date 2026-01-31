@@ -442,7 +442,8 @@ VALUES (
         2048,
         'Business applications',
         'UZS',
-        85000 1900,
+        85000,
+        1900,
         2048
     ),
     (
