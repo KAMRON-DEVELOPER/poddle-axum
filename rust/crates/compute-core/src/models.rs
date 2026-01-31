@@ -58,7 +58,7 @@ pub struct Project {
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentPreset {
+pub struct Preset {
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
@@ -70,8 +70,8 @@ pub struct DeploymentPreset {
     pub max_addon_cpu_millicores: i32,
     pub max_addon_memory_mb: i32,
     pub is_active: bool,
-    pub created_at: String,
-    pub updated_at: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
@@ -83,8 +83,8 @@ pub struct AddonPrices {
     pub memory_monthly_unit_price: BigDecimal,
     pub memory_hourly_unit_price: BigDecimal,
     pub currency: String,
-    pub created_at: String,
-    pub updated_at: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
 }
 
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
@@ -118,8 +118,8 @@ pub struct Deployment {
 pub struct DeploymentEvent {
     pub id: Uuid,
     pub deployment_id: Uuid,
-    #[sqlx(rename = "type")]
     #[serde(rename = "type")]
+    #[sqlx(rename = "type")]
     pub event_type: String,
     pub message: Option<String>,
     pub created_at: DateTime<Utc>,

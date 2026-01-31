@@ -1,6 +1,6 @@
 use compute_core::{
     cache_keys::CacheKeys,
-    models::{Deployment, DeploymentEvent, DeploymentPreset, DeploymentStatus, Project},
+    models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentMetrics, MetricSnapshot,
         UpdateDeploymentRequest,
@@ -73,15 +73,16 @@ impl ProjectRepository {
         project_id: &Uuid,
         pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
-        sqlx::query_as::<_, Project>(
+        sqlx::query_as!(
+            Project,
             r#"
             SELECT id, owner_id, name, description, created_at, updated_at
             FROM projects
             WHERE id = $1 AND owner_id = $2
             "#,
+            project_id,
+            user_id
         )
-        .bind(project_id)
-        .bind(user_id)
         .fetch_one(pool)
         .await
     }
@@ -92,16 +93,17 @@ impl ProjectRepository {
         req: CreateProjectRequest,
         pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
-        sqlx::query_as::<_, Project>(
+        sqlx::query_as!(
+            Project,
             r#"
             INSERT INTO projects (owner_id, name, description)
             VALUES ($1, $2, $3)
             RETURNING id, owner_id, name, description, created_at, updated_at
             "#,
+            user_id,
+            req.name,
+            req.description
         )
-        .bind(user_id)
-        .bind(req.name)
-        .bind(req.description)
         .fetch_one(pool)
         .await
     }
@@ -114,7 +116,8 @@ impl ProjectRepository {
         description: Option<&str>,
         pool: &PgPool,
     ) -> Result<Project, sqlx::Error> {
-        sqlx::query_as::<_, Project>(
+        sqlx::query_as!(
+            Project,
             r#"
             UPDATE projects
             SET name = COALESCE($3, name),
@@ -122,11 +125,11 @@ impl ProjectRepository {
             WHERE id = $1 AND owner_id = $2
             RETURNING id, owner_id, name, description, created_at, updated_at
             "#,
+            project_id,
+            user_id,
+            name,
+            description
         )
-        .bind(project_id)
-        .bind(user_id)
-        .bind(name)
-        .bind(description)
         .fetch_one(pool)
         .await
     }
@@ -159,21 +162,19 @@ pub struct DeploymentPresetRepository;
 
 impl DeploymentPresetRepository {
     #[tracing::instrument(name = "deployment_preset_repository.get_by_id", skip(executor), err)]
-    pub async fn get_by_id<'e, E>(
-        preset_id: &Uuid,
-        executor: E,
-    ) -> Result<DeploymentPreset, sqlx::Error>
+    pub async fn get_by_id<'e, E>(preset_id: &Uuid, executor: E) -> Result<Preset, sqlx::Error>
     where
         E: Executor<'e, Database = Postgres>,
     {
-        sqlx::query_as::<_, DeploymentPreset>(
+        sqlx::query_as!(
+            Preset,
             r#"
             SELECT *
-            FROM deployment_presets
-            WHERE d.id = $1
+            FROM presets
+            WHERE id = $1
             "#,
+            preset_id
         )
-        .bind(preset_id)
         .fetch_one(executor)
         .await
     }
@@ -283,16 +284,38 @@ impl DeploymentRepository {
         deployment_id: &Uuid,
         pool: &PgPool,
     ) -> Result<Deployment, sqlx::Error> {
-        sqlx::query_as::<_, Deployment>(
+        sqlx::query_as!(
+            Deployment,
             r#"
-            SELECT d.*
+            SELECT
+                d.id,
+                d.user_id,
+                d.project_id,
+                d.name,
+                d.image,
+                d.port,
+                d.desired_replicas,
+                d.ready_replicas,
+                d.available_replicas,
+                d.preset_id,
+                d.addon_cpu_millicores,
+                d.addon_memory_mb,
+                d.vault_secret_path,
+                d.secret_keys,
+                d.environment_variables AS "environment_variables: Json<Option<HashMap<String, String>>>",
+                d.labels AS "labels: Json<Option<HashMap<String, String>>>",
+                d.status AS "status: DeploymentStatus",
+                d.domain,
+                d.subdomain,
+                d.created_at,
+                d.updated_at
             FROM deployments d
             INNER JOIN projects p ON d.project_id = p.id
             WHERE d.id = $1 AND p.owner_id = $2
             "#,
+            deployment_id,
+            user_id
         )
-        .bind(deployment_id)
-        .bind(user_id)
         .fetch_one(pool)
         .await
     }
@@ -408,39 +431,65 @@ impl DeploymentRepository {
             .as_ref()
             .map(|l| l.as_ref().map(|v| serde_json::to_value(v).unwrap()));
 
-        sqlx::query_as::<_, Deployment>(
+        sqlx::query_as!(
+            Deployment,
             r#"
-            UPDATE deployments d
+            UPDATE deployments AS d
             SET
                 name = COALESCE($3, d.name),
                 image = COALESCE($4, d.image),
                 port = COALESCE($5, d.port),
                 desired_replicas = COALESCE($6, d.desired_replicas),
-                preset_id = COALESCE($6, d.preset_id),
-                addon_cpu_millicores = COALESCE($7, d.addon_cpu_millicores),
-                addon_memory_mb = COALESCE($7, d.addon_memory_mb),
-                environment_variables = COALESCE($8, d.environment_variables),
-                labels = COALESCE($9, d.labels),
-                domain = COALESCE($10, d.domain)
-                subdomain = COALESCE($11, d.subdomain)
+                preset_id = COALESCE($7, d.preset_id),
+                addon_cpu_millicores = COALESCE($8, d.addon_cpu_millicores),
+                addon_memory_mb = COALESCE($9, d.addon_memory_mb),
+                environment_variables = COALESCE($10, d.environment_variables),
+                labels = COALESCE($11, d.labels),
+                domain = COALESCE($12, d.domain),
+                subdomain = COALESCE($13, d.subdomain)
             FROM projects p
-            WHERE d.id = $1 AND d.project_id = p.id AND p.owner_id = $2
-            RETURNING d.*
+            JOIN deployments d2 ON d2.project_id = p.id
+            WHERE
+                d.id = d2.id
+                AND d.id = $2
+                AND p.owner_id = $1
+            RETURNING
+                d.id,
+                d.user_id,
+                d.project_id,
+                d.name,
+                d.image,
+                d.port,
+                d.desired_replicas,
+                d.ready_replicas,
+                d.available_replicas,
+                d.preset_id,
+                d.addon_cpu_millicores,
+                d.addon_memory_mb,
+                d.vault_secret_path,
+                d.secret_keys,
+                d.environment_variables AS "environment_variables: Json<Option<HashMap<String, String>>>",
+                d.labels AS "labels: Json<Option<HashMap<String, String>>>",
+                d.status AS "status: DeploymentStatus",
+                d.domain,
+                d.subdomain,
+                d.created_at,
+                d.updated_at
             "#,
+            user_id,
+            deployment_id,
+            req.name,
+            req.image,
+            req.port,
+            req.desired_replicas,
+            req.preset_id,
+            req.addon_cpu_millicores,
+            req.addon_memory_mb,
+            environment_variables,
+            labels.flatten(),
+            req.domain,
+            req.subdomain
         )
-        .bind(deployment_id)
-        .bind(user_id)
-        .bind(&req.name)
-        .bind(&req.image)
-        .bind(req.port)
-        .bind(req.desired_replicas)
-        .bind(req.preset_id)
-        .bind(req.addon_cpu_millicores)
-        .bind(req.addon_memory_mb)
-        .bind(environment_variables)
-        .bind(labels.flatten())
-        .bind(&req.domain)
-        .bind(&req.subdomain)
         .fetch_one(&mut **tx)
         .await
     }
@@ -497,16 +546,22 @@ impl DeploymentEventRepository {
         message: Option<&str>,
         pool: &PgPool,
     ) -> Result<DeploymentEvent, sqlx::Error> {
-        sqlx::query_as::<_, DeploymentEvent>(
+        sqlx::query_as!(
+            DeploymentEvent,
             r#"
-            INSERT INTO deployment_events (deployment_id, event_type, message)
+            INSERT INTO deployment_events (deployment_id, type, message)
             VALUES ($1, $2, $3)
-            RETURNING *
+            RETURNING
+                id,
+                deployment_id,
+                type AS "event_type",
+                message,
+                created_at
             "#,
+            deployment_id,
+            event_type,
+            message
         )
-        .bind(deployment_id)
-        .bind(event_type)
-        .bind(message)
         .fetch_one(pool)
         .await
     }
@@ -522,16 +577,23 @@ impl DeploymentEventRepository {
         limit: i64,
         pool: &PgPool,
     ) -> Result<Vec<DeploymentEvent>, sqlx::Error> {
-        sqlx::query_as::<_, DeploymentEvent>(
+        sqlx::query_as!(
+            DeploymentEvent,
             r#"
-            SELECT * FROM deployment_events
+            SELECT
+                id,
+                deployment_id,
+                type AS "event_type",
+                message,
+                created_at
+            FROM deployment_events
             WHERE deployment_id = $1
             ORDER BY created_at DESC
             LIMIT $2
             "#,
+            deployment_id,
+            limit
         )
-        .bind(deployment_id)
-        .bind(limit)
         .fetch_all(pool)
         .await
     }

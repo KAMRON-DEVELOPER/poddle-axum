@@ -3,7 +3,7 @@ use std::fmt;
 use uuid::Uuid;
 
 use crate::{
-    models::{Deployment, DeploymentPreset, ResourceSpec},
+    models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentMetrics, DeploymentResponse,
         UpdateDeploymentMessage, UpdateDeploymentRequest,
@@ -68,7 +68,7 @@ impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
     }
 }
 
-impl From<(Uuid, Uuid, Uuid, DeploymentPreset, CreateDeploymentRequest)>
+impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)>
     for CreateDeploymentMessage
 {
     fn from(
@@ -76,7 +76,7 @@ impl From<(Uuid, Uuid, Uuid, DeploymentPreset, CreateDeploymentRequest)>
             Uuid,
             Uuid,
             Uuid,
-            DeploymentPreset,
+            Preset,
             CreateDeploymentRequest,
         ),
     ) -> Self {
@@ -114,7 +114,7 @@ impl
         Uuid,
         Uuid,
         Uuid,
-        Option<DeploymentPreset>,
+        Option<Preset>,
         UpdateDeploymentRequest,
     )> for UpdateDeploymentMessage
 {
@@ -123,7 +123,7 @@ impl
             Uuid,
             Uuid,
             Uuid,
-            Option<DeploymentPreset>,
+            Option<Preset>,
             UpdateDeploymentRequest,
         ),
     ) -> Self {
