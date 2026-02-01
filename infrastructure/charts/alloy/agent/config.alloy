@@ -97,6 +97,12 @@ loki.source.file "pods" {
 }
 
 loki.process "default" {
+	// Sets the tenant ID for the log entry by obtaining it from a field in the
+	// extracted data map, a label, or a provided value.
+	stage.tenant {
+		label = "preset_id"
+	}
+
 	stage.drop {
 		older_than          = "10m"
 		drop_counter_reason = "too old"
@@ -182,12 +188,6 @@ loki.process "default" {
 			level     = "level", // Sets up a 'level' label, based on the 'level' extracted value.
 			stream    = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
 		}
-	}
-
-	// Sets the tenant ID for the log entry by obtaining it from a field in the
-	// extracted data map, a label, or a provided value.
-	stage.tenant {
-		label = "preset_id"
 	}
 
 	// Can read data from the extracted values map and add them to log entries as structured metadata
