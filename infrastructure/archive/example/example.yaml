@@ -1,0 +1,99 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: user-167927f2
+  labels:
+    user-id: "167927f2-0000-0000-0000-000000000000"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-ae37790b
+  namespace: user-167927f2
+  labels:
+    poddle.io/managed-by: poddle
+    poddle.io/project-id: abf56546-37b5-4264-a104-15c05c237ff6
+    poddle.io/deployment-id: ae37790b-3e74-405e-bf86-257151da31db
+    poddle.io/preset-id: 680377c6-0a6c-4cd0-a663-fd97d1a57332
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      poddle.io/managed-by: poddle
+      poddle.io/project-id: abf56546-37b5-4264-a104-15c05c237ff6
+      poddle.io/deployment-id: ae37790b-3e74-405e-bf86-257151da31db
+      poddle.io/preset-id: 680377c6-0a6c-4cd0-a663-fd97d1a57332
+  template:
+    metadata:
+      labels:
+        poddle.io/managed-by: poddle
+        poddle.io/project-id: abf56546-37b5-4264-a104-15c05c237ff6
+        poddle.io/deployment-id: ae37790b-3e74-405e-bf86-257151da31db
+        poddle.io/preset-id: 680377c6-0a6c-4cd0-a663-fd97d1a57332
+    spec:
+      containers:
+        - name: app-ae37790b
+          image: kamronbekdev/todo:v0.1.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+              protocol: TCP
+          env:
+            - name: OTEL_SERVICE_NAME
+              value: "todo"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: "grpc"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability:4317"
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: "project_id=abf56546-37b5-4264-a104-15c05c237ff6,deployment_id=ae37790b-3e74-405e-bf86-257151da31db,managed_by=poddle"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "100m"
+              memory: "256Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-ae37790b
+  namespace: user-167927f2
+  labels:
+    poddle.io/managed-by: poddle
+    poddle.io/project-id: abf56546-37b5-4264-a104-15c05c237ff6
+    poddle.io/deployment-id: ae37790b-3e74-405e-bf86-257151da31db
+    poddle.io/preset-id: 680377c6-0a6c-4cd0-a663-fd97d1a57332
+spec:
+  type: ClusterIP
+  selector:
+    poddle.io/managed-by: poddle
+    poddle.io/project-id: abf56546-37b5-4264-a104-15c05c237ff6
+    poddle.io/deployment-id: ae37790b-3e74-405e-bf86-257151da31db
+    poddle.io/preset-id: 680377c6-0a6c-4cd0-a663-fd97d1a57332
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8000
+      protocol: TCP
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: app-ae37790b
+  namespace: user-167927f2
+  labels:
+    poddle.io/managed-by: poddle
+    poddle.io/project-id: abf56546-37b5-4264-a104-15c05c237ff6
+    poddle.io/deployment-id: ae37790b-3e74-405e-bf86-257151da31db
+    poddle.io/preset-id: 680377c6-0a6c-4cd0-a663-fd97d1a57332
+spec:
+  entryPoints: []
+  routes:
+    - match: Host(`todo.poddle.uz`)
+      kind: Rule
+      services:
+        - name: app-ae37790b
+          port: 80

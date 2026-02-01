@@ -2,6 +2,9 @@
 ## chart, this field may also be called "agent". Naming this field "agent" is
 ## deprecated and will be removed in a future release.
 alloy:
+  liveDebugging:
+    enabled: false
+
   configMap:
     # -- Create a new ConfigMap for the config file.
     create: false

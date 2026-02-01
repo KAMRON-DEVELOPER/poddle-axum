@@ -16,33 +16,22 @@ discovery.kubernetes "pods" {
 	}
 }
 
-discovery.relabel "pod_logs" {
+discovery.relabel "logs" {
 	targets = discovery.kubernetes.pods.targets
 
-	// Construct the path to the log file on the host
-	// Source: namespace/pod_name/uid/container_name
-	// Target: /var/log/pods/namespace_pod_name_uid/container_name/*.log
-	// Path format: /var/log/pods/<namespace>_<pod_name>_<uid>/<container_name>/*.log
+	// Drop any targets that do not have the value "poddle" in their "managed_by" label.
 	rule {
-		source_labels = [
-			"__meta_kubernetes_namespace",
-			"__meta_kubernetes_pod_name",
-			"__meta_kubernetes_pod_uid",
-			"__meta_kubernetes_pod_container_name",
-		]
-		separator = "/"
-		// Capture: (namespace) / (pod_name) / (uid) / (container)
-		regex = "([^/]+)/([^/]+)/([^/]+)/([^/]+)"
-		// K8s standard path: /var/log/pods/<ns>_<name>_<uid>/<container>/*.log
-		replacement  = "/var/log/pods/$1_$2_$3/$4/*.log"
-		target_label = "__path__"
+		source_labels = ["__meta_kubernetes_pod_label_poddle_io_managed_by"]
+		regex         = "poddle"
+		action        = "keep"
 	}
 
-	// Assign Job Label
+	// Construct the path to the log file on the host
 	rule {
-		source_labels = ["__meta_kubernetes_namespace", "__meta_kubernetes_pod_name"]
+		source_labels = ["__meta_kubernetes_pod_uid", "__meta_kubernetes_pod_container_name"]
 		separator     = "/"
-		target_label  = "job"
+		replacement   = "/var/log/pods/*$1/*.log"
+		target_label  = "__path__"
 	}
 
 	// Standard Labels
@@ -84,116 +73,143 @@ discovery.relabel "pod_logs" {
 }
 
 // Expand the wildcards (*.log) into actual file paths
-local.file_match "pod_logs" {
-	path_targets = discovery.relabel.pod_logs.output
-}
+// local.file_match "logs" {
+// 	path_targets = discovery.relabel.logs.output
+// }
 
 // Read the files directly from disk (Efficient!)
 loki.source.file "pods" {
-	targets    = discovery.relabel.pod_logs.output
-	forward_to = [loki.process.default.receiver]
+	// targets    = local.file_match.logs.targets
+	targets = discovery.relabel.logs.output
 
+	// Configure file discovery using glob patterns for automatic target discovery.
+	// Enables built-in file discovery directly within loki.source.file. When
+	// enabled, the component discovers files on the local filesystem using glob patterns and
+	// the doublestar library.
+	// Can use glob patterns, for example, /tmp/*.log or /var/log/**/*.log, directly
+	// in the targets argument’s __path__ label.
 	file_match {
 		enabled     = true
 		sync_period = "10s"
 	}
+
+	forward_to = [loki.process.default.receiver]
 }
 
 loki.process "default" {
-	forward_to = [loki.write.default.receiver]
+	stage.drop {
+		older_than          = "10m"
+		drop_counter_reason = "too old"
+	}
 
-	// stage.drop {
-	// 	older_than          = "1h"
-	// 	drop_counter_reason = "too old"
-	// }
-
-	// Always parse CRI first
-	// <time> <stream> <flags> <log>
-	// "2024-01-01T10:00:00.123Z stdout F {"msg": "hello"}"
+	// Enables a predefined pipeline which reads log lines using the CRI logging format.
+	// CRI specifies log lines as single space-delimited values with the following components:
+	//	`time`: The timestamp string of the log.
+	//	`stream`: Either stdout or stderr.
+	//	`flags`: CRI flags including F or P.
+	//	`log`: The contents of the log line.
 	stage.cri { }
 
-	// The stage.decolorize strips ANSI color codes from the log lines, making it easier to parse logs.
+	// Strips ANSI color codes from the log lines, making it easier to parse logs.
 	// stage.decolorize { }
 
+	// Sets the tenant ID for the log entry by obtaining it from a field in the
+	// extracted data map, a label, or a provided value.
 	stage.tenant {
 		label = "preset_id"
 	}
 
-	stage.match {
-		selector = "{managed_by=\"poddle\"}"
-
-		// Storage impact 0
-		// Query shape impact 0
-		// Attempt JSON extraction
-		stage.json {
-			expressions = {
-				level     = "level",
-				msg       = "msg",
-				message   = "message",
-				timestamp = "timestamp",
-				time      = "time",
-				ts        = "ts",
-				trace_id  = "trace_id",
-				span_id   = "span_id",
-				latency   = "latency",
-				status    = "status",
-			}
-		}
-
-		// Attempt Logfmt extraction
-		stage.logfmt {
-			mapping = {
-				level     = "level",
-				msg       = "msg",
-				message   = "message",
-				timestamp = "timestamp",
-				time      = "time",
-				ts        = "ts",
-				trace_id  = "trace_id",
-				span_id   = "span_id",
-				latency   = "latency",
-				status    = "status",
-			}
-		}
-
-		// without stage.output normalized message useless
-		// Normalize message field for frontend
-		stage.template {
-			source   = "message"
-			template = "{{ if .msg }}{{ .msg }}{{ else if .message }}{{ .message }}{{ end }}"
-		}
-
-		// Normalize timestamp field for frontend
-		stage.template {
-			source   = "timestamp"
-			template = "{{ if .ts }}{{ .ts }}{{ else if .time }}{{ .time }}{{ else if .timestamp }}{{ .timestamp }}{{ end }}"
-		}
-
-		stage.timestamp {
-			source            = "timestamp"
-			format            = "RFC3339"
-			action_on_failure = "skip"
+	// The source field defines the source of data to parse as logfmt. When source is missing or empty,
+	// the stage parses the log line itself, but it can also be used to parse a previously extracted value.
+	stage.logfmt {
+		source  = "" // Default
+		mapping = {
+			level     = "level",
+			at        = "at",
+			msg       = "msg",
+			message   = "message",
+			timestamp = "timestamp",
+			time      = "time",
+			ts        = "ts",
+			trace_id  = "trace_id",
+			span_id   = "span_id",
+			latency   = "latency",
+			status    = "status",
 		}
 	}
 
+	// Attempt JSON extraction
+	stage.json {
+		expressions = {
+			level     = "level",
+			at        = "at",
+			msg       = "msg",
+			message   = "message",
+			timestamp = "timestamp",
+			time      = "time",
+			ts        = "ts",
+			trace_id  = "trace_id",
+			span_id   = "span_id",
+			latency   = "latency",
+			status    = "status",
+		}
+	}
+
+	// Manipulating and standardizing data from previous stages before setting them as labels in a subsequent stage.
+	stage.template {
+		source   = "message"
+		template = "{{ if .msg }}{{ .msg }}{{ else if .message }}{{ .message }}{{ end }}"
+	}
+
+	stage.template {
+		source   = "timestamp"
+		template = "{{ if .ts }}{{ .ts }}{{ else if .time }}{{ .time }}{{ else if .timestamp }}{{ .timestamp }}{{ end }}"
+	}
+
+	// When no timestamp stage is set, the log entry timestamp defaults to the time when the log entry was scraped.
+	stage.timestamp {
+		source           = "timestamp"
+		format           = "RFC3339"
+		fallback_formats = ["RFC3339Nano", "Unix", "UnixMs", "UnixUs", "UnixNs"]
+		// fudge (default): Change the timestamp to the last known timestamp, summing up 1 nanosecond to guarantee log entries ordering.
+		// skip: Don’t change the timestamp and keep the time when the log entry was scraped.
+		action_on_failure = "skip"
+	}
+
+	// Can read data from the extracted values map and set new labels on incoming log entries
 	stage.labels {
 		values = {
-			level  = "level",
-			stream = "",
+			level  = "level", // Sets up a 'level' label, based on the 'level' extracted value.
+			stream = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
 		}
 	}
 
+	// Can read data from the extracted values map and add them to log entries as structured metadata
+	// If you add labels to structured metadata, the labels are removed from the label map.
 	stage.structured_metadata {
 		values = {
 			trace_id = "trace_id",
 			span_id  = "span_id",
 		}
 	}
+
+	// Configures a processing stage that filters the label set of an incoming log entry down to a subset
+	stage.label_keep {
+		values = ["namespace", "project_id", "deployment_id", "managed_by", "stream", "level"]
+	}
+
+	forward_to = [loki.write.default.receiver]
 }
 
 loki.write "default" {
 	endpoint {
-		url = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+		url                 = "http://loki.loki.svc.cluster.local:3100/loki/api/v1/push"
+		batch_size          = "1MiB"
+		batch_wait          = "1s"
+		max_backoff_period  = "5m"
+		max_backoff_retries = 10
+		min_backoff_period  = "500ms"
+		remote_timeout      = "10s"
 	}
 }
 
@@ -207,7 +223,7 @@ discovery.kubernetes "nodes" {
 }
 
 // Relabel to construct kubelet metrics endpoint
-discovery.relabel "cadvisor" {
+discovery.relabel "kubelet" {
 	targets = discovery.kubernetes.nodes.targets
 
 	// Keep only the current node
@@ -244,20 +260,21 @@ discovery.relabel "cadvisor" {
 }
 
 // Scrape container metrics from kubelet
-prometheus.scrape "cadvisor" {
-	targets           = discovery.relabel.cadvisor.output
-	job_name          = "cadvisor"
-	scheme            = "https"
-	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+prometheus.scrape "kubelet" {
+	targets         = discovery.relabel.kubelet.output
+	job_name        = "kubelet"
+	scrape_interval = "10s"
+	scheme          = "https"
 
 	tls_config {
 		// Point to the K3s CA via the host mount
-		ca_file              = "/host/root/var/lib/rancher/k3s/agent/server-ca.crt"
 		server_name          = env("NODE_NAME")
+		ca_file              = "/host/root/var/lib/rancher/k3s/agent/server-ca.crt"
 		insecure_skip_verify = false
 		// K3s generates self-signed certificates for kubelets
 		// Using bearer token auth is sufficient, no client certs needed
 	}
+	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
 	forward_to = [prometheus.remote_write.default.receiver]
 }
@@ -274,9 +291,11 @@ prometheus.exporter.unix "host" {
 	// set_collectors = ["cpu", "diskstats", "filesystem", "loadavg", "meminfo", "netdev", "stat", "time", "uname"]
 }
 
-prometheus.scrape "node" {
-	targets    = prometheus.exporter.unix.host.targets
-	job_name   = "node"
+prometheus.scrape "host" {
+	targets         = prometheus.exporter.unix.host.targets
+	job_name        = "host"
+	scrape_interval = "10s"
+
 	forward_to = [prometheus.remote_write.default.receiver]
 }
 
