@@ -195,7 +195,7 @@ loki.process "default" {
 
 	// Configures a processing stage that filters the label set of an incoming log entry down to a subset
 	stage.label_keep {
-		values = ["namespace", "project_id", "deployment_id", "managed_by", "stream", "level"]
+		values = ["namespace", "managed_by", "project_id", "deployment_id", "preset_id", "stream", "level"]
 	}
 
 	forward_to = [loki.write.default.receiver]
