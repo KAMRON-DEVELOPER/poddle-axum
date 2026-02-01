@@ -115,12 +115,6 @@ loki.process "default" {
 	// Strips ANSI color codes from the log lines, making it easier to parse logs.
 	// stage.decolorize { }
 
-	// Sets the tenant ID for the log entry by obtaining it from a field in the
-	// extracted data map, a label, or a provided value.
-	stage.tenant {
-		label = "preset_id"
-	}
-
 	// The source field defines the source of data to parse as logfmt. When source is missing or empty,
 	// the stage parses the log line itself, but it can also be used to parse a previously extracted value.
 	stage.logfmt {
@@ -185,6 +179,12 @@ loki.process "default" {
 			level  = "level", // Sets up a 'level' label, based on the 'level' extracted value.
 			stream = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
 		}
+	}
+
+	// Sets the tenant ID for the log entry by obtaining it from a field in the
+	// extracted data map, a label, or a provided value.
+	stage.tenant {
+		label = "preset_id"
 	}
 
 	// Can read data from the extracted values map and add them to log entries as structured metadata
