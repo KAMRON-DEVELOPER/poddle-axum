@@ -3,7 +3,7 @@
 ## deprecated and will be removed in a future release.
 alloy:
   liveDebugging:
-    enabled: false
+    enabled: true
 
   configMap:
     # -- Create a new ConfigMap for the config file.
