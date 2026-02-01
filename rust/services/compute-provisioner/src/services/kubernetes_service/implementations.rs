@@ -1143,7 +1143,7 @@ impl KubernetesService {
     }
 
     // --------------------------------------------------------------------------------------------
-    // update
+    // delete
     // --------------------------------------------------------------------------------------------
 
     /// Starting point
@@ -1176,6 +1176,9 @@ impl KubernetesService {
         let secret_name = format!("{}-registry", name);
         let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
         let _ = secret_api.delete(&secret_name, &dp).await;
+
+        let ns_api: Api<Namespace> = Api::all(self.client.clone());
+        let _ = ns_api.delete(&ns, &dp).await;
 
         info!("✅ K8s resources deleted for deployment {}", deployment_id);
         Ok(())
