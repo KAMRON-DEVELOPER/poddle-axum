@@ -176,8 +176,9 @@ loki.process "default" {
 	// Can read data from the extracted values map and set new labels on incoming log entries
 	stage.labels {
 		values = {
-			level  = "level", // Sets up a 'level' label, based on the 'level' extracted value.
-			stream = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
+			preset_id = "preset_id",
+			level     = "level", // Sets up a 'level' label, based on the 'level' extracted value.
+			stream    = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
 		}
 	}
 
