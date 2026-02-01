@@ -108,6 +108,8 @@ loki.process "default" {
 	//	`stream`: Either stdout or stderr.
 	//	`flags`: CRI flags including F or P.
 	//	`log`: The contents of the log line.
+	// The cri processing stage extracts the following k/v pairs: log, stream, time, flags
+	// https://github.com/grafana/k8s-monitoring-helm/blob/main/charts/k8s-monitoring/docs/examples/pod-labels-and-annotations/alloy-logs.alloy
 	stage.cri { }
 
 	// Strips ANSI color codes from the log lines, making it easier to parse logs.
@@ -122,7 +124,7 @@ loki.process "default" {
 	// The source field defines the source of data to parse as logfmt. When source is missing or empty,
 	// the stage parses the log line itself, but it can also be used to parse a previously extracted value.
 	stage.logfmt {
-		source  = "" // Default
+		source  = "log"
 		mapping = {
 			level     = "level",
 			at        = "at",
@@ -140,6 +142,7 @@ loki.process "default" {
 
 	// Attempt JSON extraction
 	stage.json {
+		source      = "log"
 		expressions = {
 			level     = "level",
 			at        = "at",
