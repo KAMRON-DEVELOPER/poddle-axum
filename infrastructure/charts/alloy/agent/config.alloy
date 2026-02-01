@@ -131,6 +131,7 @@ loki.process "default" {
 			span_id   = "span_id",
 			latency   = "latency",
 			status    = "status",
+			preset_id = "preset_id",
 		}
 	}
 
@@ -149,6 +150,7 @@ loki.process "default" {
 			span_id   = "span_id",
 			latency   = "latency",
 			status    = "status",
+			preset_id = "preset_id",
 		}
 	}
 
