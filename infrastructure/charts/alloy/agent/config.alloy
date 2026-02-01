@@ -97,12 +97,6 @@ loki.source.file "pods" {
 }
 
 loki.process "default" {
-	// Sets the tenant ID for the log entry by obtaining it from a field in the
-	// extracted data map, a label, or a provided value.
-	stage.tenant {
-		label = "preset_id"
-	}
-
 	stage.drop {
 		older_than          = "10m"
 		drop_counter_reason = "too old"
@@ -137,7 +131,6 @@ loki.process "default" {
 			span_id   = "span_id",
 			latency   = "latency",
 			status    = "status",
-			preset_id = "preset_id",
 		}
 	}
 
@@ -156,7 +149,6 @@ loki.process "default" {
 			span_id   = "span_id",
 			latency   = "latency",
 			status    = "status",
-			preset_id = "preset_id",
 		}
 	}
 
@@ -184,9 +176,8 @@ loki.process "default" {
 	// Can read data from the extracted values map and set new labels on incoming log entries
 	stage.labels {
 		values = {
-			preset_id = "preset_id",
-			level     = "level", // Sets up a 'level' label, based on the 'level' extracted value.
-			stream    = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
+			level  = "level", // Sets up a 'level' label, based on the 'level' extracted value.
+			stream = "",      // Sets up an 'stream' label, based on the 'stream' extracted value.
 		}
 	}
 
@@ -202,6 +193,12 @@ loki.process "default" {
 	// Configures a processing stage that filters the label set of an incoming log entry down to a subset
 	stage.label_keep {
 		values = ["namespace", "managed_by", "project_id", "deployment_id", "preset_id", "stream", "level"]
+	}
+
+	// Sets the tenant ID for the log entry by obtaining it from a field in the
+	// extracted data map, a label, or a provided value.
+	stage.tenant {
+		label = "preset_id"
 	}
 
 	forward_to = [loki.write.default.receiver]
