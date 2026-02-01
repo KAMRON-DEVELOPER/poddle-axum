@@ -120,14 +120,12 @@ stage.tenant {
 > If we use retention_stream it would be too static and need to add `stage.labels.values` to `config.alloy` which leads to `high-cardinality`
 
 ```bash
-kubectl apply -f infrastructure/charts/loki/loki-runtime-config-cm.yaml
-```
-
-```bash
 helm upgrade --install loki grafana/loki \
   --values infrastructure/charts/loki/loki-values.yaml \
   --namespace loki --create-namespace
 ```
+
+#### We may need to create IngressRoute(Traefik) for Loki, so axum microservices can access
 
 ```bash
 kubectl apply -f infrastructure/charts/loki/loki-ingressroute.yaml
@@ -152,12 +150,6 @@ kubectl get all -n loki
 ```bash
 kubectl get pod loki-0 -n loki -o jsonpath='{.spec.containers[*].name}'
 # loki loki-sc-rules
-```
-
-#### We may need to create IngressRoute(Traefik) for Loki, so axum microservices can access
-
-```bash
-kubectl apply -f infrastructure/charts/loki/loki-ingressroute.yaml
 ```
 
 ### Install Tempo
