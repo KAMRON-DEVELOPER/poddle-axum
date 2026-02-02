@@ -31,7 +31,7 @@ use lapin::{BasicProperties, options::BasicPublishOptions, types::FieldTable};
 
 use reqwest::Client;
 use serde_json::Value;
-use tracing::{Instrument, debug, info, info_span};
+use tracing::{Instrument, debug, error, info, info_span};
 use url::Url;
 use users_core::jwt::Claims;
 use uuid::Uuid;
@@ -491,13 +491,17 @@ pub async fn get_logs_handler(
         DeploymentRepository::get_prest_id(&claims.sub, &deployment_id, &db.pool).await?;
 
     let base_url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    println!("base_url: {}", base_url);
     let host = base_url
         .host_str()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    println!("host: {}", host);
     let port = base_url
         .port_or_known_default()
         .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
+    println!("port: {}", port);
     let url = format!("{}:{}/loki/api/v1/query_range", host, port);
+    println!("url: {}", url);
     let query = format!(
         r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
         project_id, deployment_id
@@ -508,7 +512,7 @@ pub async fn get_logs_handler(
         .unwrap_or_else(|| (chrono::Utc::now() - chrono::Duration::minutes(15)).to_rfc3339());
     let limit = q.limit.unwrap_or_else(|| 100).to_string();
 
-    println!(
+    info!(
         "Sending request to Loki: {} with Tenant: {}",
         url, preset_id
     );
@@ -528,7 +532,7 @@ pub async fn get_logs_handler(
     // Check status before parsing
     if !response.status().is_success() {
         let error_text = response.text().await.unwrap_or_default();
-        println!("Loki Error: {}", error_text);
+        error!("Loki Error: {}", error_text);
         return Err(StatusCode::BAD_GATEWAY.into());
     }
 
