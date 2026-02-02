@@ -7,10 +7,10 @@ edition = "2024"
 [dependencies]
 factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
-users-core = { path = "../../crates/users-core" }
 http-contracts = { path = "../../crates/http-contracts" }
 http-common = { path = "../../crates/http-common" }
 compute-core = { path = "../../crates/compute-core" }
+users-core = { path = "../../crates/users-core" }
 thiserror.workspace = true
 anyhow.workspace = true
 rustls.workspace = true
@@ -20,13 +20,13 @@ axum.workspace = true
 axum-core.workspace = true
 axum-extra.workspace = true
 redis.workspace = true
+tower-http.workspace = true
 chrono.workspace = true
 lapin.workspace = true
 rand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sqlx.workspace = true
-tower-http.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 validator.workspace = true

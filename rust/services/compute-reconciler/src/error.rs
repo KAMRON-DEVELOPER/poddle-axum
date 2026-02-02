@@ -47,9 +47,6 @@ pub enum AppError {
     #[error("Redis error: {0}")]
     RedisError(#[from] redis::RedisError),
 
-    #[error("PrometheusHttpQueryError, {0}")]
-    PrometheusHttpQueryError(#[from] prometheus_http_query::Error),
-
     #[error("Token creation error")]
     TokenCreationError,
     #[error("Invalid token error")]
@@ -138,10 +135,6 @@ impl IntoResponse for AppError {
                 format!("Internal server error: {}", e),
             ),
             Self::RedisError(e) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                format!("Internal server error: {}", e),
-            ),
-            Self::PrometheusHttpQueryError(e) => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 format!("Internal server error: {}", e),
             ),

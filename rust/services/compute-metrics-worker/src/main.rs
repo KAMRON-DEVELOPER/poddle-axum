@@ -10,16 +10,15 @@ use std::result::Result::Ok;
 use std::{env, net::SocketAddr};
 
 use config::Config;
-use factory::factories::{
-    amqp::Amqp, database::Database, kubernetes::Kubernetes, observability::Observability,
-    redis::Redis,
-};
+use factory::factories::{observability::Observability, redis::Redis};
 
 use tokio::task::JoinSet;
 use tracing::{error, info};
 use utility::shutdown_signal::shutdown_signal;
 
 use crate::error::AppError;
+use crate::services::prometheus::Prometheus;
+use crate::services::prometheus::implementations::start_metrics_scraper;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -55,9 +54,10 @@ async fn main() -> anyhow::Result<()> {
     let redis = Redis::new(&cfg.redis).await;
 
     let mut set = JoinSet::new();
+    let prometheus = Prometheus::new(&cfg.prometheus).await?;
 
     // Spawn background tasks
-    set.spawn(start_consumer(ctx));
+    set.spawn(start_metrics_scraper(redis, prometheus));
     set.spawn(start_health_server(
         cargo_pkg_name,
         cargo_pkg_version,

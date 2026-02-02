@@ -19,10 +19,9 @@ use utility::shutdown_signal::shutdown_signal;
 use crate::{
     config::Config,
     error::AppError,
-    services::prometheus::Prometheus,
     utilities::{
         deployment_status_syncer::start_deployment_status_syncer,
-        metrics_scraper::start_metrics_scraper, reconcilation_loop::start_reconciliation_loop,
+        reconcilation_loop::start_reconciliation_loop,
     },
 };
 
@@ -59,10 +58,6 @@ async fn main() -> anyhow::Result<()> {
     let kubernetes = Kubernetes::new().await?;
     let database = Database::new(&cfg.database).await;
     let redis = Redis::new(&cfg.redis).await;
-    let http_client = reqwest::ClientBuilder::new()
-        .redirect(reqwest::redirect::Policy::none())
-        .build()?;
-    let prometheus = Prometheus::new(&cfg.prometheus.url, http_client.clone()).await?;
 
     let mut set = JoinSet::new();
 
@@ -72,7 +67,6 @@ async fn main() -> anyhow::Result<()> {
         redis.connection.clone(),
         kubernetes.client.clone(),
     ));
-    set.spawn(start_metrics_scraper(cfg.clone(), redis, prometheus.client));
     set.spawn(start_reconciliation_loop(
         database.pool.clone(),
         kubernetes.client.clone(),

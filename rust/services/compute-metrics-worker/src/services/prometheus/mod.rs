@@ -1,5 +1,5 @@
+use compute_core::configs::PrometheusConfig;
 use prometheus_http_query::Client;
-use reqwest::Client as HttpClient;
 use tracing::info;
 pub mod implementations;
 use crate::error::AppError;
@@ -11,19 +11,18 @@ pub struct Prometheus {
 }
 
 impl Prometheus {
-    pub async fn new(url: &str, http_client: HttpClient) -> Result<Self, AppError> {
-        let client = Client::from(http_client, url)?;
+    pub async fn new(cfg: &PrometheusConfig) -> Result<Self, AppError> {
+        let cfg = cfg.clone();
 
-        match client.query("up").get().await {
-            Ok(_) => info!("✅ Successfully connected to Prometheus!"),
-            Err(e) => {
-                return Err(AppError::InternalServerError(format!(
-                    "Failed to connect to Prometheus: {}. Check URL and credentials.",
-                    e
-                )));
-            }
-        }
+        let client = reqwest::ClientBuilder::new()
+            .redirect(reqwest::redirect::Policy::none())
+            .build()?;
 
-        Ok(Self { client })
+        let client = Client::from(client, &cfg.url)?;
+
+        client.query("up").get().await?;
+        info!("✅ Successfully connected to Prometheus!");
+
+        Ok(Self { client, cfg })
     }
 }
