@@ -10,7 +10,7 @@ use http_contracts::pagination::schema::Pagination;
 use redis::{aio::MultiplexedConnection, pipe};
 use sqlx::{Executor, types::Json};
 use std::collections::HashMap;
-use tracing::error;
+use tracing::{error, info};
 
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -633,7 +633,10 @@ impl CacheRepository {
             error!(error = %e, "❌ Redis pipeline failed");
             AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
         })?;
-        let pipeline_elapsed = pipeline_start.elapsed().as_millis();
+        info!(
+            pipeline_elapsed = pipeline_start.elapsed().as_millis(),
+            "🏁 Pipeline query completed"
+        );
 
         // Extract MGET Results safely
         // Take the first result, flatten the Option, and default to empty Vec on failure
