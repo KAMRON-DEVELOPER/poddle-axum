@@ -2,7 +2,7 @@ pub mod app;
 pub mod config;
 pub mod error;
 pub mod implementations;
-pub mod utilities;
+pub mod services;
 
 use std::path::PathBuf;
 use std::result::Result::Ok;
@@ -19,7 +19,7 @@ use utility::shutdown_signal::shutdown_signal;
 use crate::{
     config::Config,
     error::AppError,
-    utilities::{
+    services::{
         deployment_status_syncer::start_deployment_status_syncer,
         reconcilation_loop::start_reconciliation_loop,
     },
