@@ -490,42 +490,36 @@ pub async fn get_logs_handler(
     let preset_id =
         DeploymentRepository::get_prest_id(&claims.sub, &deployment_id, &db.pool).await?;
 
-    let base_url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    println!("base_url: {}", base_url);
-    let host = base_url
-        .host_str()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    println!("host: {}", host);
-    let port = base_url
-        .port_or_known_default()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    println!("port: {}", port);
-    let url = format!("{}:{}/loki/api/v1/query_range", host, port);
-    println!("url: {}", url);
+    // Parse Base URL
+    let mut url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Set Path
+    // This turns "https://loki.poddle.uz/" into "https://loki.poddle.uz/loki/api/v1/query_range"
+    url.set_path("/loki/api/v1/query_range");
+
     let query = format!(
-        r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
+        r#"{{project_id="{}", deployment_id="{}"}}"#,
         project_id, deployment_id
     );
-
-    let start = q
-        .start
-        .unwrap_or_else(|| (chrono::Utc::now() - chrono::Duration::minutes(15)).to_rfc3339());
-    let limit = q.limit.unwrap_or_else(|| 100).to_string();
+    let start = q.start.timestamp_nanos_opt().unwrap().to_string();
+    let end = q.end.timestamp_nanos_opt().unwrap().to_string();
+    let direction = "backward".to_owned();
+    let query = [
+        ("query", &query),
+        ("start", &start),
+        ("end", &end),
+        ("direction", &direction),
+    ];
 
     info!(
         "Sending request to Loki: {} with Tenant: {}",
-        url, preset_id
+        &url, preset_id
     );
 
     let response = http
         .get(url)
-        .header("X-Scope-OrgID", &format!("{}", preset_id))
-        .query(&[
-            ("query", query.as_str()),
-            ("start", &start),
-            ("limit", &limit),
-            ("direction", "backward"),
-        ])
+        .header("X-Scope-OrgID", &preset_id.to_string())
+        .query(&query)
         .send()
         .await?;
 
@@ -536,7 +530,6 @@ pub async fn get_logs_handler(
         return Err(StatusCode::BAD_GATEWAY.into());
     }
 
-    // 6. Return Raw JSON (Let frontend handle parsing for now, or use your Struct)
     let json_body = response.json::<Value>().await?;
 
     Ok(axum::Json(json_body))

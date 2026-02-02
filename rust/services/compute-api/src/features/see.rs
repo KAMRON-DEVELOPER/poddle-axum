@@ -84,35 +84,35 @@ pub async fn stream_logs_see_handler(
         .await
         .map_err(|_| StatusCode::NOT_FOUND)?;
 
+    // Parse Base URL
+    let mut url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    // Switch Scheme safely
+    match url.scheme() {
+        "https" => url
+            .set_scheme("wss")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        "http" => url
+            .set_scheme("ws")
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?,
+        _ => {}
+    };
+
+    // Set Path
+    url.set_path("/loki/api/v1/tail");
+
     let query = format!(
         r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
         project_id, deployment_id
     );
 
-    let base_url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-    let ws_scheme = if base_url.scheme() == "https" {
-        "wss"
-    } else {
-        "ws"
-    };
+    // Set Query Params directly on the URL object
+    // This handles encoding automatically
+    url.query_pairs_mut().append_pair("query", &query);
 
-    let host = base_url
-        .host_str()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-    let port = base_url
-        .port_or_known_default()
-        .ok_or(StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    let url = format!(
-        "{}://{}:{}/loki/api/v1/tail?query={}",
-        ws_scheme,
-        host,
-        port,
-        urlencoding::encode(&query)
-    );
-
-    // Connect to Loki via WebSocket
+    // Build Request
     let mut request = url
+        .as_str()
         .into_client_request()
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
