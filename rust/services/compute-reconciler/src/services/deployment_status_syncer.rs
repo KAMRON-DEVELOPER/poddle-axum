@@ -18,11 +18,11 @@ pub async fn start_deployment_status_syncer(
 ) -> Result<(), AppError> {
     let watcher_config = Config::default().labels("managed-by=poddle");
 
-    let deployments: Api<K8sDeployment> = Api::all(client.clone());
-    let pods: Api<Pod> = Api::all(client.clone());
+    let deployment: Api<K8sDeployment> = Api::all(client.clone());
+    let pod: Api<Pod> = Api::all(client.clone());
 
-    let mut deployment_stream = kube::runtime::watcher(deployments, watcher_config.clone()).boxed();
-    let mut pod_stream = kube::runtime::watcher(pods, watcher_config).boxed();
+    let mut deployment_stream = kube::runtime::watcher(deployment, watcher_config.clone()).boxed();
+    let mut pod_stream = kube::runtime::watcher(pod, watcher_config).boxed();
 
     info!("🔍 Starting Kubernetes watchers (filtered by managed-by=poddle)");
     loop {
