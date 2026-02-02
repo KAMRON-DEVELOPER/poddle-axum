@@ -8,7 +8,6 @@ use axum::{
 };
 use futures::{Stream, StreamExt};
 use http::{HeaderName, HeaderValue};
-use serde_json::Value;
 use std::convert::Infallible;
 use url::Url;
 use users_core::jwt::Claims;
@@ -26,7 +25,7 @@ use crate::{
     config::Config,
     features::{
         repository::{DeploymentRepository, ProjectRepository},
-        schemas::{LogResponse, LokiResponse},
+        schemas::{LogResponse, LokiTailResponse},
     },
 };
 
@@ -103,7 +102,7 @@ pub async fn stream_logs_see_handler(
     url.set_path("/loki/api/v1/tail");
 
     let query = format!(
-        r#"{{project_id="{}", deployment_id="{}", managed_by="poddle"}}"#,
+        r#"{{project_id="{}", deployment_id="{}"}}"#,
         project_id, deployment_id
     );
 
@@ -137,11 +136,7 @@ pub async fn stream_logs_see_handler(
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
-
-                    let parsed_json = serde_json::from_str::<Value>(&text);
-                    println!("parsed_json: {:#?}", parsed_json);
-
-                    if let Ok(loki_push) = serde_json::from_str::<LokiResponse>(&text) {
+                    if let Ok(loki_push) = serde_json::from_str::<LokiTailResponse>(&text) {
                         let log_batch = LogResponse::from(loki_push);
 
                         // Yield each entry individually to the frontend

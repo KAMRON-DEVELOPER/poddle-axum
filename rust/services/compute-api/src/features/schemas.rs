@@ -43,6 +43,11 @@ pub struct LokiData {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+pub struct LokiTailResponse {
+    pub streams: Vec<LokiStreamResult>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 pub struct LokiStreamResult {
     // pub stream: LokiStream,
     pub stream: HashMap<String, String>,
