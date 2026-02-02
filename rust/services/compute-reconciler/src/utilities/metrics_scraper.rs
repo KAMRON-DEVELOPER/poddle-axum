@@ -5,7 +5,7 @@ use compute_core::{
     schemas::{DeploymentMetrics, MetricSnapshot},
 };
 use factory::factories::redis::Redis;
-use prometheus_http_query::Client as PrometheusClient;
+use prometheus_http_query::Client;
 use serde_json::json;
 use std::collections::HashMap;
 use std::time::Duration;
@@ -16,7 +16,7 @@ use crate::{config::Config, error::AppError};
 pub async fn start_metrics_scraper(
     cfg: Config,
     redis: Redis,
-    prometheus: PrometheusClient,
+    prometheus: Client,
 ) -> Result<(), AppError> {
     info!("📈 Starting Prometheus metrics scraper");
     info!(
@@ -36,11 +36,7 @@ pub async fn start_metrics_scraper(
     }
 }
 
-async fn scrape(
-    cfg: &Config,
-    prometheus: &PrometheusClient,
-    mut redis: Redis,
-) -> Result<(), AppError> {
+async fn scrape(cfg: &Config, prometheus: &Client, mut redis: Redis) -> Result<(), AppError> {
     // labels are stored in kube-state-metrics and it exports a specific metric called kube_pod_labels
     // JOIN kube_pod_labels with container metrics
     // container_cpu_usage_seconds_total comes from cAdvisor (embedded in Kubelet).

@@ -1,12 +1,13 @@
 use prometheus_http_query::Client;
 use reqwest::Client as HttpClient;
 use tracing::info;
-
+pub mod implementations;
 use crate::error::AppError;
 
 #[derive(Clone)]
 pub struct Prometheus {
     pub client: Client,
+    pub cfg: PrometheusConfig,
 }
 
 impl Prometheus {

@@ -36,11 +36,7 @@ kcr_secrets_hashicorp_com.workspace = true
 vaultrs.workspace = true
 vaultrs-login.workspace = true
 prometheus-client.workspace = true
-base64 = "0.22.1"
-
-opentelemetry_sdk.workspace = true
-opentelemetry-otlp.workspace = true
-tracing-opentelemetry.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 config.workspace = true
+base64 = "0.22.1"
+tracing-opentelemetry.workspace = true

@@ -851,6 +851,23 @@ dependencies = [
 [[package]]
 name = "compute-metrics-worker"
 version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "axum",
+ "compute-core",
+ "config",
+ "dotenvy",
+ "factory",
+ "prometheus-client",
+ "redis",
+ "reqwest",
+ "rustls",
+ "serde",
+ "thiserror 2.0.17",
+ "tokio",
+ "tracing",
+ "utility",
+]
 
 [[package]]
 name = "compute-provisioner"
@@ -874,8 +891,6 @@ dependencies = [
  "kube",
  "kube-client",
  "lapin",
- "opentelemetry-otlp",
- "opentelemetry_sdk",
  "prometheus-client",
  "redis",
  "reqwest",
@@ -890,7 +905,6 @@ dependencies = [
  "tower-http",
  "tracing",
  "tracing-opentelemetry",
- "tracing-subscriber",
  "utility",
  "uuid",
  "vaultrs",

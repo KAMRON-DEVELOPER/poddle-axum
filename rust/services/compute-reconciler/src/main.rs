@@ -2,7 +2,6 @@ pub mod app;
 pub mod config;
 pub mod error;
 pub mod implementations;
-pub mod services;
 pub mod utilities;
 
 use std::path::PathBuf;
