@@ -21,6 +21,12 @@ pub struct LogQuery {
     pub end: DateTime<Utc>,
 }
 
+#[derive(Deserialize)]
+pub struct TailQuery {
+    #[serde(default = "default_start")]
+    pub start: DateTime<Utc>,
+}
+
 fn default_start() -> DateTime<Utc> {
     Utc::now() - Duration::minutes(15)
 }

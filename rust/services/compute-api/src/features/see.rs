@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{
         Sse,
@@ -25,7 +25,7 @@ use crate::{
     config::Config,
     features::{
         repository::{DeploymentRepository, ProjectRepository},
-        schemas::{LogResponse, LokiTailResponse},
+        schemas::{LogQuery, LogResponse, LokiTailResponse},
     },
 };
 
@@ -73,6 +73,7 @@ pub async fn stream_metrics_see_handler(
 pub async fn stream_logs_see_handler(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Query(q): Query<LogQuery>,
     State(cfg): State<Config>,
     State(db): State<Database>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
@@ -105,10 +106,12 @@ pub async fn stream_logs_see_handler(
         r#"{{project_id="{}", deployment_id="{}"}}"#,
         project_id, deployment_id
     );
+    let start = q.start.timestamp_nanos_opt().unwrap().to_string();
 
     // Set Query Params directly on the URL object
     // This handles encoding automatically
     url.query_pairs_mut().append_pair("query", &query);
+    url.query_pairs_mut().append_pair("start", &start);
 
     // Build Request
     let mut request = url
