@@ -53,7 +53,6 @@ pub async fn stream_metrics_see_handler(
         let payload: String = msg.get_payload().unwrap_or_default();
         info!(channel = %channel, payload = %payload, "pubsub payload received");
 
-        // Ok(Event::default().event(channel).data(payload))
         Ok(Event::default().event("compute").data(payload))
     });
 
@@ -134,7 +133,7 @@ pub async fn stream_logs_see_handler(
     // Create the SSE Stream
     let stream = async_stream::stream! {
         // Send an initial "connected" event
-        yield Ok(Event::default().event("status").data("connected"));
+        yield Ok(Event::default().event("log").data("connected"));
 
         while let Some(msg) = stream.next().await {
             match msg {
@@ -145,7 +144,7 @@ pub async fn stream_logs_see_handler(
                         // Yield each entry individually to the frontend
                         for entry in log_batch.entries {
                             if let Ok(json) = serde_json::to_string(&entry) {
-                                yield Ok(Event::default().data(json));
+                                yield Ok(Event::default().event("log").data(json));
                             }
                         }
                     }

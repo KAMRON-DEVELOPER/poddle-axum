@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
-use chrono::Utc;
+use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::{DeploymentStatus, ResourceSpec};
 use compute_core::schemas::ImagePullSecret;
 use compute_core::{
@@ -145,19 +145,15 @@ impl KubernetesService {
         .await?;
 
         if query_result.rows_affected() == 0 {
-            // TODO We might change later
             let channel = ChannelNames::project_metrics(&project_id.to_string());
-            let now = Utc::now().timestamp();
-            let message = json!({
-                "type": "message",
-                "message": "Internal server error",
-                "deployment_id": &deployment_id,
-                "timestamp": now,
-            });
-            let _ = con
-                .publish(channel, message.to_string())
+            let message = ComputeEvent::SystemMessage {
+                deployment_id: &deployment_id,
+                level: EventLevel::Error,
+                message: "Internal server error".to_string(),
+            };
+            con.publish(channel, message)
                 .instrument(info_span!("pubsub.message"))
-                .await;
+                .await?;
             warn!(
                 user_id = %user_id,
                 project_id = %project_id,
@@ -166,19 +162,14 @@ impl KubernetesService {
             );
         }
 
-        // TODO We might change later
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let now = Utc::now().timestamp();
-        let message = json!({
-            "type": "status_update",
-            "status": "provisioning",
-            "deployment_id": &deployment_id,
-            "timestamp": now,
-        });
-        let _ = con
-            .publish(channel, message.to_string())
+        let message = ComputeEvent::StatusUpdate {
+            deployment_id: &deployment_id,
+            status: DeploymentStatus::Provisioning,
+        };
+        con.publish(channel, message)
             .instrument(info_span!("pubsub.status_update"))
-            .await;
+            .await?;
 
         self.create_resources(msg).await?;
 
@@ -187,19 +178,15 @@ impl KubernetesService {
                 .await?;
 
         if query_result.rows_affected() == 0 {
-            // TODO We might change later
             let channel = ChannelNames::project_metrics(&project_id.to_string());
-            let now = Utc::now().timestamp();
-            let message = json!({
-                "type": "message",
-                "message": "Internal server error",
-                "deployment_id": &deployment_id,
-                "timestamp": now,
-            });
-            let _ = con
-                .publish(channel, message.to_string())
+            let message = ComputeEvent::SystemMessage {
+                deployment_id: &deployment_id,
+                level: EventLevel::Error,
+                message: "Internal server error".to_string(),
+            };
+            con.publish(channel, message)
                 .instrument(info_span!("pubsub.message"))
-                .await;
+                .await?;
             warn!(
                 user_id = %user_id,
                 project_id = %project_id,
@@ -208,19 +195,14 @@ impl KubernetesService {
             );
         }
 
-        // TODO We might change later
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let now = Utc::now().timestamp();
-        let message = json!({
-            "type": "status_update",
-            "status": "running",
-            "deployment_id": &deployment_id,
-            "timestamp": now,
-        });
-        let _ = con
-            .publish(channel, message.to_string())
+        let message = ComputeEvent::StatusUpdate {
+            deployment_id: &deployment_id,
+            status: DeploymentStatus::Running,
+        };
+        con.publish(channel, message)
             .instrument(info_span!("pubsub.status_update"))
-            .await;
+            .await?;
 
         info!("✅ K8s resources created for deployment {}", deployment_id);
 
@@ -872,14 +854,13 @@ impl KubernetesService {
 
         // Notify user
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let now = Utc::now().timestamp();
-        let message = json!({
-            "type": "status_update",
-            "status": "updating",
-            "deployment_id": &deployment_id,
-            "timestamp": now,
-        });
-        let _ = con.publish(channel, message.to_string()).await;
+        let message = ComputeEvent::StatusUpdate {
+            deployment_id: &deployment_id,
+            status: DeploymentStatus::Updating,
+        };
+        con.publish(channel, message)
+            .instrument(info_span!("pubsub.status_update"))
+            .await?;
 
         // Update Deployment (replicas, image, port, resource_spec, image_pull_secret)
         if msg.desired_replicas.is_some()
@@ -918,25 +899,24 @@ impl KubernetesService {
 
         if query_result.rows_affected() == 0 {
             let channel = ChannelNames::project_metrics(&project_id.to_string());
-            let now = Utc::now().timestamp();
-            let message = json!({
-                "type": "message",
-                "message": "Internal server error",
-                "deployment_id": &deployment_id,
-                "timestamp": now,
-            });
-            let _ = con.publish(channel, message.to_string()).await;
+            let message = ComputeEvent::SystemMessage {
+                deployment_id: &deployment_id,
+                level: EventLevel::Error,
+                message: "Internal server error".to_string(),
+            };
+            con.publish(channel, message)
+                .instrument(info_span!("pubsub.message"))
+                .await?;
         }
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let now = Utc::now().timestamp();
-        let message = json!({
-            "type": "status_update",
-            "status": "running",
-            "deployment_id": &deployment_id,
-            "timestamp": now,
-        });
-        let _ = con.publish(channel, message.to_string()).await;
+        let message = ComputeEvent::StatusUpdate {
+            deployment_id: &deployment_id,
+            status: DeploymentStatus::Running,
+        };
+        con.publish(channel, message)
+            .instrument(info_span!("pubsub.status_update"))
+            .await?;
 
         info!("✅ K8s resources updated for deployment {}", deployment_id);
 

@@ -143,6 +143,7 @@ pub struct DeploymentResponse {
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentEventResponse {
     pub id: Uuid,
+    #[serde(rename = "type")]
     pub event_type: String,
     pub message: Option<String>,
     pub created_at: DateTime<Utc>,
