@@ -1,2 +1,2 @@
-pub mod deployment_status_syncer;
+pub mod event_watcher;
 pub mod reconcilation_loop;

@@ -1,4 +1,5 @@
 use compute_core::{
+    determiners::determine_deployment_status,
     formatters::{format_namespace, format_resource_name},
     models::DeploymentStatus,
 };
@@ -65,7 +66,8 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
                 let available = status.and_then(|s| s.available_replicas).unwrap_or(0);
                 let updated = status.and_then(|s| s.updated_replicas).unwrap_or(0);
 
-                let computed_status = determine_status(desired, ready, available, updated);
+                let computed_status =
+                    determine_deployment_status(desired, ready, available, updated);
 
                 // Check for drift
                 if computed_status != db_deployment.status {
@@ -139,28 +141,4 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
     }
 
     Ok(())
-}
-
-fn determine_status(desired: i32, ready: i32, available: i32, updated: i32) -> DeploymentStatus {
-    if desired == 0 {
-        return DeploymentStatus::Suspended;
-    }
-
-    if ready == 0 && available == 0 {
-        return DeploymentStatus::Starting;
-    }
-
-    if ready == desired && available == desired && updated == desired {
-        return DeploymentStatus::Running;
-    }
-
-    if ready > 0 && ready < desired {
-        return DeploymentStatus::Degraded;
-    }
-
-    if updated != desired {
-        return DeploymentStatus::Updating;
-    }
-
-    DeploymentStatus::Unhealthy
 }

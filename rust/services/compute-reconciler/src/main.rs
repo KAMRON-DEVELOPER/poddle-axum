@@ -19,10 +19,7 @@ use utility::shutdown_signal::shutdown_signal;
 use crate::{
     config::Config,
     error::AppError,
-    services::{
-        deployment_status_syncer::start_deployment_status_syncer,
-        reconcilation_loop::start_reconciliation_loop,
-    },
+    services::{event_watcher::event_watcher, reconcilation_loop::start_reconciliation_loop},
 };
 
 #[tokio::main]
@@ -62,7 +59,7 @@ async fn main() -> anyhow::Result<()> {
     let mut set = JoinSet::new();
 
     // Spawn tasks into the set
-    set.spawn(start_deployment_status_syncer(
+    set.spawn(event_watcher(
         database.pool.clone(),
         redis.connection.clone(),
         kubernetes.client.clone(),

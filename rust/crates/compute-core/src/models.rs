@@ -23,6 +23,7 @@ pub enum DeploymentStatus {
     Updating,
     Suspended,
     Failed,
+    Deleted,
 }
 
 impl std::fmt::Display for DeploymentStatus {
@@ -37,6 +38,7 @@ impl std::fmt::Display for DeploymentStatus {
             Self::Updating => write!(f, "scaling"),
             Self::Suspended => write!(f, "suspended"),
             Self::Failed => write!(f, "failed"),
+            Self::Deleted => write!(f, "deleted"),
         }
     }
 }
