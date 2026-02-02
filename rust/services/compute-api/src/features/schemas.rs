@@ -1,8 +1,9 @@
+use std::collections::HashMap;
+
 use chrono::{DateTime, Duration, Utc};
 use compute_core::schemas::ProjectPageQuery;
 use http_contracts::pagination::schema::Pagination;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Deserialize, Debug)]
 pub struct ProjectPageWithPaginationQuery {
@@ -28,35 +29,45 @@ fn default_end() -> DateTime<Utc> {
     Utc::now()
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct LokiResponse {
     pub status: String,
-    pub data: LogResult,
+    pub data: LokiData,
 }
 
-#[derive(Serialize, Debug)]
-pub struct LogResult {
+#[derive(Deserialize, Serialize, Debug)]
+pub struct LokiData {
+    #[serde(rename = "resultType")]
     pub result_type: String,
-    pub result: Vec<LogEntry>,
+    pub result: Vec<LokiStreamResult>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct LokiStreamResult {
+    // pub stream: LokiStream,
+    pub stream: HashMap<String, String>,
+    pub values: Vec<[String; 2]>,
+}
+
+// #[derive(Deserialize, Serialize, Debug)]
+// pub struct LokiStream {
+//     pub stream: String,
+//     pub detected_level: String,
+//     pub namespace: String,
+//     pub preset_id: Uuid,
+//     pub project_id: Uuid,
+//     pub deployment_id: Uuid,
+// }
+
+#[derive(Serialize, Debug)]
+pub struct LogResponse {
+    pub entries: LogEntry,
 }
 
 #[derive(Serialize, Debug)]
 pub struct LogEntry {
-    pub stream: LogStream,
-    pub values: Vec<LogValue>,
-}
-
-#[derive(Serialize, Debug)]
-pub struct LogStream {
-    pub stream: String,
-    pub detected_level: String,
-    pub namespace: String,
-    pub preset_id: Uuid,
-    pub project_id: Uuid,
-    pub deployment_id: Uuid,
-}
-
-#[derive(Serialize, Debug)]
-pub struct LogValue {
-    pub value: Vec<[String; 2]>,
+    pub timestamp: String,
+    pub message: String,
+    pub level: Option<String>,
+    pub stream: Option<String>,
 }
