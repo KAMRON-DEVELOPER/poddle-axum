@@ -6,3 +6,6 @@ autosharding:
   enabled: false
 
 replicas: 1
+
+metricLabelsAllowlist:
+  - pods=[poddle.io/managed-by,poddle.io/deployment-id,poddle.io/project-id]
