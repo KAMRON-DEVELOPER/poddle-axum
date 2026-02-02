@@ -35,11 +35,11 @@ pub async fn start_metrics_scraper(redis: Redis, prometheus: Prometheus) -> Resu
     }
 }
 
-/// labels are stored in kube-state-metrics and it exports a specific metric called kube_pod_labels
-/// JOIN kube_pod_labels with container metrics
-/// container_cpu_usage_seconds_total comes from cAdvisor (embedded in Kubelet).
-/// It knows about low-level details like pod, namespace, and image, but it is unaware of your high-level Kubernetes labels
-#[tracing::instrument("scrape", skip_all, fields(scrape_id  = tracing::field::Empty))]
+/// labels are stored in `kube-state-metrics` and it exports a specific metric called `kube_pod_labels`
+/// JOIN `kube_pod_labels` with container metrics
+/// `container_cpu_usage_seconds_total` comes from `cAdvisor` (embedded in `Kubelet`).
+/// It knows about low-level details like `pod`, `namespace`, and `image`, but it is unaware of your high-level Kubernetes `labels`
+#[tracing::instrument("scrape", skip_all, fields(scrape_id  = tracing::field::Empty), err)]
 async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Result<(), AppError> {
     let scrape_id = Uuid::new_v4();
     tracing::Span::current().record("scrape_id", &scrape_id.to_string());

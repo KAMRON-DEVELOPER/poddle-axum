@@ -68,6 +68,7 @@ async fn main() -> anyhow::Result<()> {
         kubernetes.client.clone(),
     ));
     set.spawn(start_reconciliation_loop(
+        cfg.reconciliation_interval_secs,
         database.pool.clone(),
         kubernetes.client.clone(),
     ));

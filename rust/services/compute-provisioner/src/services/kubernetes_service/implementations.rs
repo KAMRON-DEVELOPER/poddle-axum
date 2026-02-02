@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
 use compute_core::event::{ComputeEvent, EventLevel};
+use compute_core::formatters::{format_namespace, format_resource_name};
 use compute_core::models::{DeploymentStatus, ResourceSpec};
 use compute_core::schemas::ImagePullSecret;
 use compute_core::{
@@ -219,7 +220,7 @@ impl KubernetesService {
     )]
     async fn create_resources(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
         let ns = self.ensure_namespace(&msg.user_id).await?;
-        let name = self.format_resource_name(&msg.deployment_id);
+        let name = format_resource_name(&msg.deployment_id);
 
         let mut labels = BTreeMap::new();
         labels.insert("poddle.io/managed-by".into(), "poddle".into());
@@ -277,15 +278,7 @@ impl KubernetesService {
 
     #[tracing::instrument(name = "kubernetes_service.ensure_namespace", skip_all, fields(user_id = %user_id), err)]
     async fn ensure_namespace(&self, user_id: &Uuid) -> Result<String, AppError> {
-        let name = format!(
-            "user-{}",
-            user_id
-                .as_simple()
-                .to_string()
-                .chars()
-                .take(8)
-                .collect::<String>()
-        );
+        let name = format_namespace(&user_id);
 
         let api: Api<Namespace> = Api::all(self.client.clone());
 
@@ -338,19 +331,6 @@ impl KubernetesService {
         info!(user_id = %user_id, "Namespace {} created successfully", name);
 
         Ok(name)
-    }
-
-    /// generate resource name from `deployment_id` like `app-{deployment_id[:8]}`
-    fn format_resource_name(&self, deployment_id: &Uuid) -> String {
-        format!(
-            "app-{}",
-            deployment_id
-                .as_simple()
-                .to_string()
-                .chars()
-                .take(8)
-                .collect::<String>()
-        )
     }
 
     /// Creates VaultConnection & VaultAuth
@@ -843,7 +823,7 @@ impl KubernetesService {
         let deployment_id = msg.deployment_id;
 
         let ns = self.ensure_namespace(&user_id).await?;
-        let name = self.format_resource_name(&deployment_id);
+        let name = format_resource_name(&deployment_id);
 
         info!(
             user_id = %user_id,
@@ -1132,7 +1112,7 @@ impl KubernetesService {
         let deployment_id = msg.deployment_id;
 
         let ns = self.ensure_namespace(&user_id).await?;
-        let name = self.format_resource_name(&deployment_id);
+        let name = format_resource_name(&deployment_id);
 
         let dp = DeleteParams::default();
 

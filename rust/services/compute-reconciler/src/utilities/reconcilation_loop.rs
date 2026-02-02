@@ -1,59 +1,45 @@
-use compute_core::models::DeploymentStatus;
+use compute_core::{
+    formatters::{format_namespace, format_resource_name},
+    models::DeploymentStatus,
+};
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use kube::{Api, Client};
 use sqlx::PgPool;
 use std::time::Duration;
 use tracing::{error, info, warn};
-use uuid::Uuid;
 
 use crate::error::AppError;
 
 /// Periodic reconciliation to catch missed events and fix drift
-pub async fn start_reconciliation_loop(pool: PgPool, client: Client) -> Result<(), AppError> {
-    let mut interval = tokio::time::interval(Duration::from_secs(120)); // Every 2 minutes
+pub async fn start_reconciliation_loop(
+    reconciliation_interval_secs: u64,
+    pool: PgPool,
+    client: Client,
+) -> Result<(), AppError> {
+    let mut interval = tokio::time::interval(Duration::from_secs(reconciliation_interval_secs));
 
-    info!("🔄 Starting reconciliation loop");
+    info!(
+        "🔄 Starting reconciliation loop, interval: {}",
+        reconciliation_interval_secs
+    );
 
     loop {
         interval.tick().await;
 
-        if let Err(e) = reconcile_all_deployments(&pool, &client).await {
-            error!("Reconciliation failed: {}", e);
+        if let Err(e) = reconcile_deployments(&pool, &client).await {
+            error!(error = %e, "❌ Reconciliation failed");
         }
     }
 }
 
-fn format_namespace(user_id: &Uuid) -> String {
-    format!(
-        "app-{}",
-        user_id
-            .as_simple()
-            .to_string()
-            .chars()
-            .take(8)
-            .collect::<String>()
-    )
-}
-
-fn format_resource_name(deployment_id: &Uuid) -> String {
-    format!(
-        "app-{}",
-        deployment_id
-            .as_simple()
-            .to_string()
-            .chars()
-            .take(8)
-            .collect::<String>()
-    )
-}
-
-async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(), AppError> {
+#[tracing::instrument("reconcile_deployments", skip_all, err)]
+async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), AppError> {
     // Fetch all active deployments from database
     let db_deployments = sqlx::query!(
         r#"
-            SELECT id, user_id, status as "status: DeploymentStatus", desired_replicas, ready_replicas, available_replicas
-            FROM deployments
-            WHERE status NOT IN ('failed', 'suspended')
+        SELECT id, user_id, status as "status: DeploymentStatus", desired_replicas, ready_replicas, available_replicas
+        FROM deployments
+        WHERE status NOT IN ('failed', 'suspended')
         "#
     )
     .fetch_all(pool)
@@ -63,15 +49,14 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
 
     for db_deployment in db_deployments {
         let namespace = &format_namespace(&db_deployment.user_id);
-        let deployment_name = &format_resource_name(&db_deployment.id);
-        let deployment_id = db_deployment.id;
+        let name = &format_resource_name(&db_deployment.id);
+        let id = db_deployment.id;
 
         // Try to fetch from Kubernetes
-        let deployments_api: Api<K8sDeployment> = Api::namespaced(client.clone(), namespace);
+        let deployment_api: Api<K8sDeployment> = Api::namespaced(client.clone(), namespace);
 
-        match deployments_api.get(deployment_name).await {
+        match deployment_api.get(name).await {
             Ok(k8s_deployment) => {
-                // Deployment exists in K8s, check if status matches
                 let spec = k8s_deployment.spec.as_ref().unwrap();
                 let status = k8s_deployment.status.as_ref();
 
@@ -85,31 +70,33 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
                 // Check for drift
                 if computed_status != db_deployment.status {
                     warn!(
-                        "⚠️ Status drift detected for {}: DB={:?}, K8s={:?}",
-                        deployment_id, db_deployment.status, computed_status
+                        id = %id,
+                        "⚠️ Status drift detected: DB={:?}, K8s={:?}",
+                        db_deployment.status, computed_status
                     );
 
                     // Fix the drift
                     sqlx::query!(
                         r#"
                         UPDATE deployments
-                        SET status = $2, updated_at = NOW()
+                        SET status = $2
                         WHERE id = $1
                         "#,
-                        deployment_id,
+                        id,
                         computed_status as DeploymentStatus
                     )
                     .execute(pool)
                     .await?;
 
-                    info!("✅ Fixed status drift for {}", deployment_id);
+                    info!(id = %id, "✅ Fixed status drift");
                 }
 
                 // Check replica count drift
                 if desired != db_deployment.desired_replicas {
                     warn!(
-                        "⚠️ Replica drift for {}: DB={}, K8s={}",
-                        deployment_id, db_deployment.desired_replicas, desired
+                        id = %id,
+                        "⚠️ Replica drift detected: DB={}, K8s={}",
+                        db_deployment.desired_replicas, desired
                     );
 
                     // Update DB to match K8s (K8s is source of truth for actual state)
@@ -119,18 +106,19 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
                         SET desired_replicas = $2
                         WHERE id = $1
                         "#,
-                        deployment_id,
+                        id,
                         desired
                     )
                     .execute(pool)
                     .await?;
                 }
             }
-            Err(kube::Error::Api(api_error)) if api_error.code == 404 => {
+            Err(kube::Error::Api(e)) if e.code == 404 => {
                 // Deployment deleted from K8s but still in DB
                 warn!(
+                    id = %id,
                     "⚠️ Deployment {} exists in DB but not in K8s - marking as failed",
-                    deployment_id
+                    id
                 );
 
                 sqlx::query!(
@@ -139,13 +127,13 @@ async fn reconcile_all_deployments(pool: &PgPool, client: &Client) -> Result<(),
                         SET status = 'failed', updated_at = NOW()
                         WHERE id = $1
                     "#,
-                    deployment_id
+                    id
                 )
                 .execute(pool)
                 .await?;
             }
             Err(e) => {
-                error!("Failed to check K8s deployment {}: {}", deployment_id, e);
+                error!(error = %e, id = %id, "❌ Failed to check K8s deployment");
             }
         }
     }

@@ -16,6 +16,7 @@ pub struct Config {
     pub redis: RedisConfig,
     pub amqp: AmqpConfig,
     pub prometheus: PrometheusConfig,
+    pub reconciliation_interval_secs: u64,
 }
 
 impl Config {
