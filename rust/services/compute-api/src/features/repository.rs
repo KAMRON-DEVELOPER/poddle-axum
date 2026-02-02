@@ -2,7 +2,7 @@ use compute_core::{
     cache_keys::CacheKeys,
     models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
     schemas::{
-        CreateDeploymentRequest, CreateProjectRequest, DeploymentMetrics, MetricSnapshot,
+        CreateDeploymentRequest, CreateProjectRequest, MetricHistory, MetricSnapshot,
         UpdateDeploymentRequest,
     },
 };
@@ -10,6 +10,7 @@ use http_contracts::pagination::schema::Pagination;
 use redis::{aio::MultiplexedConnection, pipe};
 use sqlx::{Executor, types::Json};
 use std::collections::HashMap;
+use tracing::error;
 
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
@@ -605,50 +606,54 @@ impl CacheRepository {
     #[tracing::instrument(name = "cache_repository.get_deployment_metrics", skip_all, err)]
     pub async fn get_deployment_metrics(
         points_count: u64,
-        deployment_ids: Vec<&str>,
-        connection: &mut MultiplexedConnection,
-    ) -> Result<Vec<DeploymentMetrics>, AppError> {
+        ids: Vec<&str>,
+        con: &mut MultiplexedConnection,
+    ) -> Result<Vec<MetricHistory>, AppError> {
         // Safety check for Redis syntax
-        if deployment_ids.is_empty() {
+        if ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        let keys = CacheKeys::deployments_metrics(&deployment_ids);
+        let keys = CacheKeys::deployments_metrics(&ids);
         let path = format!("$.history[-{}:]", points_count);
 
-        let mut p = pipe();
+        let pipeline_start = std::time::Instant::now();
+        let mut p: redis::Pipeline = pipe();
         // Runs JSON.GET if key is singular, JSON.MGET if there are multiple keys
-        let _ = p.json_get(&keys, &path);
+        // With RedisJSON commands, you have to note that all results will be wrapped in square brackets (or empty brackets if not found).
+        // If you want to deserialize it with e.g. serde_json you have to use Vec<T> for your output type instead of T.
+        p.json_get(&keys, &path)?;
 
         // Avoid auto-switch behavior:
         // p.cmd("JSON.MGET").arg(&keys).arg(&path);
         // This makes result shape predictable.
 
         // We expect `results` to have length 1 (because we sent 1 command: JSON.MGET)
-        let results: Vec<Option<Vec<String>>> = p
-            .query_async(connection)
-            .await
-            .map_err(|e| AppError::InternalServerError(format!("Redis pipeline failed: {}", e)))?;
+        let results: Vec<Option<Vec<String>>> = p.query_async(con).await.map_err(|e| {
+            error!(error = %e, "❌ Redis pipeline failed");
+            AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
+        })?;
+        let pipeline_elapsed = pipeline_start.elapsed().as_millis();
 
         // Extract MGET Results safely
         // Take the first result, flatten the Option, and default to empty Vec on failure
         let mget_results = results.into_iter().next().flatten().unwrap_or_default();
 
         // Map to Domain Objects with Length Guarantee
-        // We iterate over the INPUT length (deployment_ids), not the Redis result length.
+        // We iterate over the INPUT length (ids), not the Redis result length.
         // This ensures that if Redis returns fewer items or fails, we pad with empty metrics
         // rather than dropping the deployment from the UI.
-        let deployment_metrics = (0..deployment_ids.len())
+        let deployment_metrics = (0..ids.len())
             .map(|i| {
                 // Try to get the JSON string at index `i`
                 let history = mget_results
                     .get(i)
                     // If found, try to parse it
-                    .and_then(|json_str| serde_json::from_str::<Vec<MetricSnapshot>>(json_str).ok())
+                    .and_then(|s| serde_json::from_str::<Vec<MetricSnapshot>>(s).ok())
                     // If index missing OR parsing failed, return empty history
                     .unwrap_or_default();
 
-                DeploymentMetrics { history }
+                MetricHistory { history }
             })
             .collect();
 

@@ -179,8 +179,6 @@ pub async fn get_deployments_handler(
         pagination,
         project_page_query,
     }): Query<ProjectPageWithPaginationQuery>,
-    // Query(pagination): Query<Pagination>,
-    // Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
     State(config): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
@@ -203,18 +201,14 @@ pub async fn get_deployments_handler(
         }));
     }
 
-    let deployment_ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
-    let deployment_ids: Vec<&str> = deployment_ids.iter().map(|s| s.as_str()).collect();
-    let deployment_metrics = CacheRepository::get_deployment_metrics(
-        points_count,
-        deployment_ids,
-        &mut redis.connection,
-    )
-    .await?;
+    let ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
+    let ids: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
+    let metrics =
+        CacheRepository::get_deployment_metrics(points_count, ids, &mut redis.connection).await?;
 
     let data: Vec<DeploymentResponse> = deployments
         .into_iter()
-        .zip(deployment_metrics.into_iter())
+        .zip(metrics.into_iter())
         .map(|pair| pair.into())
         .collect();
 

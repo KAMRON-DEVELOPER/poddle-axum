@@ -5,13 +5,13 @@ use uuid::Uuid;
 use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
-        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentMetrics, DeploymentResponse,
+        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, MetricHistory,
         UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
 impl DeploymentResponse {
-    pub fn from_parts(d: Deployment, dm: DeploymentMetrics) -> Self {
+    pub fn from_parts(d: Deployment, dm: MetricHistory) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -39,8 +39,8 @@ impl DeploymentResponse {
     }
 }
 
-impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
-    fn from((d, dm): (Deployment, DeploymentMetrics)) -> Self {
+impl From<(Deployment, MetricHistory)> for DeploymentResponse {
+    fn from((d, dm): (Deployment, MetricHistory)) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -68,9 +68,7 @@ impl From<(Deployment, DeploymentMetrics)> for DeploymentResponse {
     }
 }
 
-impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)>
-    for CreateDeploymentMessage
-{
+impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)> for CreateDeploymentMessage {
     fn from(
         (user_id, project_id, deployment_id, preset, req): (
             Uuid,
@@ -109,15 +107,7 @@ impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)>
     }
 }
 
-impl
-    From<(
-        Uuid,
-        Uuid,
-        Uuid,
-        Option<Preset>,
-        UpdateDeploymentRequest,
-    )> for UpdateDeploymentMessage
-{
+impl From<(Uuid, Uuid, Uuid, Option<Preset>, UpdateDeploymentRequest)> for UpdateDeploymentMessage {
     fn from(
         (user_id, project_id, deployment_id, preset, req): (
             Uuid,

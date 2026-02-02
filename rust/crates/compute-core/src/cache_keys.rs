@@ -5,9 +5,8 @@ impl CacheKeys {
         format!("deployment:{}:metrics", deployment_id)
     }
 
-    pub fn deployments_metrics(deployment_ids: &Vec<&str>) -> Vec<String> {
-        deployment_ids
-            .iter()
+    pub fn deployments_metrics(ids: &Vec<&str>) -> Vec<String> {
+        ids.iter()
             .map(|id| format!("deployment:{}:metrics", id))
             .collect()
     }

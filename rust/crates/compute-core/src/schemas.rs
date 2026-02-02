@@ -207,7 +207,7 @@ pub struct DeleteDeploymentMessage {
 }
 
 // -----------------------------------------------
-// POD METRICS
+// POD & DEPLOYMENT METRICS
 // -----------------------------------------------
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -223,6 +223,13 @@ pub enum PodPhase {
 /// Redis Storage model
 /// CacheKeys::deployment_metrics(deployment_id)
 /// deployment:{}:metrics
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricHistory {
+    #[serde(default)]
+    pub history: Vec<MetricSnapshot>,
+}
+
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct MetricSnapshot {
     pub ts: i64,
@@ -238,23 +245,4 @@ pub struct PodMetrics {
     pub restarts: u32,
     pub history: Vec<MetricSnapshot>,
     pub started_at: Option<i64>,
-}
-
-// -----------------------------------------------
-// DEPLOYMENT METRICS
-// -----------------------------------------------
-
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct DeploymentMetrics {
-    #[serde(default)]
-    pub history: Vec<MetricSnapshot>,
-}
-
-/// Pub/Sub Streaming model
-#[derive(Serialize, Clone, Debug)]
-pub struct DeploymentMetricUpdate {
-    pub deployment_id: String,
-    pub cpu: f64,
-    pub memory: f64,
 }
