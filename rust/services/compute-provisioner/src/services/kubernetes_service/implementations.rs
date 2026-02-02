@@ -721,7 +721,7 @@ impl KubernetesService {
                 selector: Some(labels.clone()),
                 ports: Some(vec![ServicePort {
                     name: Some("http".to_string()),
-                    port: 80,
+                    port,
                     target_port: Some(IntOrString::Int(port)),
                     protocol: Some("TCP".to_string()),
                     ..Default::default()
