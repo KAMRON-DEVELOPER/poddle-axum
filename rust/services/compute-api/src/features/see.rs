@@ -25,7 +25,7 @@ use crate::{
     config::Config,
     features::{
         repository::{DeploymentRepository, ProjectRepository},
-        schemas::{LogEntry, LokiResponse},
+        schemas::{LogResponse, LokiResponse},
     },
 };
 
@@ -136,22 +136,13 @@ pub async fn stream_logs_see_handler(
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
-                    // PARSE the Loki WebSocket JSON frame
                     if let Ok(loki_push) = serde_json::from_str::<LokiResponse>(&text) {
-                        for stream in loki_push.data.result {
-                            let level = stream.stream.get("level").cloned();
-                            for value in stream.values {
-                                // Create our clean structure
-                                let entry = LogEntry {
-                                    timestamp: value[0].clone(),
-                                    message: value[1].clone(), // Actual log line
-                                    level: level.clone(),
-                                };
+                        let log_batch = LogResponse::from(loki_push);
 
-                                // Send as JSON event
-                                if let Ok(json) = serde_json::to_string(&entry) {
-                                    yield Ok(Event::default().data(json));
-                                }
+                        // Yield each entry individually to the frontend
+                        for entry in log_batch.entries {
+                            if let Ok(json) = serde_json::to_string(&entry) {
+                                yield Ok(Event::default().data(json));
                             }
                         }
                     }

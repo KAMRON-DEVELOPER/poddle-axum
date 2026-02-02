@@ -61,7 +61,7 @@ pub struct LokiStreamResult {
 
 #[derive(Serialize, Debug)]
 pub struct LogResponse {
-    pub entries: LogEntry,
+    pub entries: Vec<LogEntry>,
 }
 
 #[derive(Serialize, Debug)]
