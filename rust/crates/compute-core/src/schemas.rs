@@ -220,6 +220,9 @@ pub enum PodPhase {
     Unknown,
 }
 
+/// Redis Storage model
+/// CacheKeys::deployment_metrics(deployment_id)
+/// deployment:{}:metrics
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct MetricSnapshot {
     pub ts: i64,
@@ -246,4 +249,12 @@ pub struct PodMetrics {
 pub struct DeploymentMetrics {
     #[serde(default)]
     pub history: Vec<MetricSnapshot>,
+}
+
+/// Pub/Sub Streaming model
+#[derive(Serialize, Clone, Debug)]
+pub struct DeploymentMetricUpdate {
+    pub deployment_id: String,
+    pub cpu: f64,
+    pub memory: f64,
 }

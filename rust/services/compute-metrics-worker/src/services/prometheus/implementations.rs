@@ -4,14 +4,14 @@ use compute_core::{
     channel_names::ChannelNames,
     configs::PrometheusConfig,
     event::ComputeEvent,
-    schemas::{DeploymentMetrics, MetricSnapshot},
+    schemas::{DeploymentMetricUpdate, DeploymentMetrics, MetricSnapshot},
 };
 use factory::factories::redis::Redis;
-use prometheus_http_query::Client;
-use serde_json::json;
+use prometheus_http_query::{Client, response::Data};
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::{Instrument, error, info, info_span};
+use tracing::{error, info};
+use uuid::Uuid;
 
 use crate::{error::AppError, services::prometheus::Prometheus};
 
@@ -36,27 +36,33 @@ pub async fn start_metrics_scraper(redis: Redis, prometheus: Prometheus) -> Resu
     }
 }
 
+#[tracing::instrument(skip(cfg, client, redis), fields(scrape_id  = tracing::field::Empty))]
 async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Result<(), AppError> {
+    let start = std::time::Instant::now();
+    let scrape_id = Uuid::new_v4();
+    tracing::Span::current().record("scrape_id", &scrape_id.to_string());
+
     // labels are stored in kube-state-metrics and it exports a specific metric called kube_pod_labels
     // JOIN kube_pod_labels with container metrics
     // container_cpu_usage_seconds_total comes from cAdvisor (embedded in Kubelet).
     // It knows about low-level details like pod, namespace, and image, but it is unaware of your high-level Kubernetes labels
+
     let cpu_query = r#"
         sum(
             rate(
                 container_cpu_usage_seconds_total{container!="",container!="POD",namespace=~"user-.*"}[5m]
             )
-            * on(pod, namespace) group_left(label_deployment_id, label_project_id)
-            kube_pod_labels{label_managed_by="poddle"}
-        ) by (pod, namespace, label_deployment_id, label_project_id)
+            * on(pod, namespace) group_left(label_poddle_io_deployment_id, label_poddle_io_project_id)
+            kube_pod_labels{label_poddle_io_managed_by="poddle"}
+        ) by (pod, namespace, label_poddle_io_deployment_id, label_poddle_io_project_id)
     "#;
 
     let memory_query = r#"
         sum(
             container_memory_working_set_bytes{container!="",container!="POD",namespace=~"user-.*"}
-            * on(pod, namespace) group_left(label_deployment_id, label_project_id)
-            kube_pod_labels{label_managed_by="poddle"}
-        ) by (pod, namespace, label_deployment_id, label_project_id)
+            * on(pod, namespace) group_left(label_poddle_io_deployment_id, label_poddle_io_project_id)
+            kube_pod_labels{label_poddle_io_managed_by="poddle"}
+        ) by (pod, namespace, label_poddle_io_deployment_id, label_poddle_io_project_id)
     "#;
 
     // Execute queries
@@ -64,7 +70,20 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         client.query(cpu_query).get(),
         client.query(memory_query).get()
     )
-    .map_err(|e| AppError::InternalServerError(format!("Prometheus query failed: {}", e)))?;
+    .map_err(|e| {
+        error!(error = %e, "Prometheus query failed");
+        AppError::InternalServerError(format!("Prometheus query failed: {}", e))
+    })?;
+
+    let query_duration = start.elapsed();
+    info!(
+        duration_ms = query_duration.as_millis(),
+        "Prometheus query completed"
+    );
+
+    if query_duration > Duration::from_secs(5) {
+        tracing::warn!("Prometheus query is taking dangerously long!");
+    }
 
     // info!("cpu_result: {:?}", cpu_result);
     // info!("memory_result: {:?}", memory_result);
@@ -75,15 +94,15 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     let now = Utc::now().timestamp();
 
     // Helper closure to process vector results
-    let mut process_vector = |data: &prometheus_http_query::response::Data, is_cpu: bool| {
-        if let prometheus_http_query::response::Data::Vector(vec) = data {
+    let mut process_vector = |data: &Data, is_cpu: bool| {
+        if let Data::Vector(vec) = data {
             for instant_vector in vec {
                 let metric = instant_vector.metric();
 
                 // Safely extract labels
                 if let (Some(project_id), Some(deployment_id)) = (
-                    metric.get("label_project_id"),
-                    metric.get("label_deployment_id"),
+                    metric.get("label_poddle_io_project_id"),
+                    metric.get("label_poddle_io_deployment_id"),
                 ) {
                     let value = instant_vector.sample().value();
 
@@ -110,24 +129,21 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     process_vector(memory_result.data(), false);
 
     // Pipeline to Redis
+    let pipeline_start = std::time::Instant::now();
+
     let mut pipe = redis::pipe();
     let metric_snapshots_to_keep = cfg.metric_snapshots_to_keep;
     let mut total_deployments = 0;
 
     for (project_id, deployment_map) in project_map {
-        let mut project_payloads: Vec<MetricSnapshot> = Vec::new();
+        let mut deployment_metrics: Vec<DeploymentMetricUpdate> = Vec::new();
 
         for (deployment_id, aggregated_value) in deployment_map {
             total_deployments += 1;
 
             // Add to Project Payload
-            project_payloads.push(json!({
-                "id": deployment_id,
-                "cpu": aggregated_value.cpu,
-                "memory": aggregated_value.memory
-            }));
-            project_payloads.push(MetricSnapshot {
-                ts: deployment_id,
+            deployment_metrics.push(DeploymentMetricUpdate {
+                deployment_id: deployment_id.clone(),
                 cpu: aggregated_value.cpu,
                 memory: aggregated_value.memory,
             });
@@ -153,19 +169,15 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         }
 
         // Publish Project Batch Message
-        if !project_payloads.is_empty() {
+        if !deployment_metrics.is_empty() {
             let channel = ChannelNames::project_metrics(&project_id);
-            let message = json!({
-                "type": "metrics_update",
-                "timestamp": now,
-                "deployments": project_payloads
-            });
             let message = ComputeEvent::MetricsUpdate {
-                deployments: project_payloads,
+                deployments: deployment_metrics,
             };
-            pipe.publish(channel, message)
-                .ignore()
-                .instrument(info_span!("pubsub.message"));
+
+            if let Ok(payload) = serde_json::to_string(&message) {
+                pipe.publish(channel, payload).ignore();
+            }
         }
     }
 
@@ -176,7 +188,11 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             .await
             .map_err(|e| AppError::InternalServerError(format!("Redis pipeline failed: {}", e)))?;
 
-        info!("✅ Updated metrics for {} deployments", total_deployments);
+        info!(
+            deployments_updated = total_deployments,
+            duration_ms = pipeline_start.elapsed().as_millis(),
+            "✅ Redis pipeline executed"
+        );
     }
 
     Ok(())

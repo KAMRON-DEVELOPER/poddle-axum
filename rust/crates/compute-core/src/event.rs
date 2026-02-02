@@ -2,14 +2,14 @@ use redis_macros::ToRedisArgs;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::{models::DeploymentStatus, schemas::MetricSnapshot};
+use crate::{models::DeploymentStatus, schemas::DeploymentMetricUpdate};
 
 #[derive(ToRedisArgs, Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
     // Corresponds to: { "type": "MetricsUpdate", "deployments": [...], ... }
     MetricsUpdate {
-        deployments: Vec<MetricSnapshot>,
+        deployments: Vec<DeploymentMetricUpdate>,
     },
     // Corresponds to: { "type": "StatusUpdate", "deployment_id": "...", "status": "...", ... }
     StatusUpdate {
