@@ -8,6 +8,7 @@ use axum::{
 };
 use futures::{Stream, StreamExt};
 use http::{HeaderName, HeaderValue};
+use serde_json::Value;
 use std::convert::Infallible;
 use url::Url;
 use users_core::jwt::Claims;
@@ -136,6 +137,10 @@ pub async fn stream_logs_see_handler(
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
+
+                    let parsed_json = serde_json::from_str::<Value>(&text);
+                    println!("parsed_json: {:#?}", parsed_json);
+
                     if let Ok(loki_push) = serde_json::from_str::<LokiResponse>(&text) {
                         let log_batch = LogResponse::from(loki_push);
 
