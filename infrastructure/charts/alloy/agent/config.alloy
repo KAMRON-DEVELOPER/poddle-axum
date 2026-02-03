@@ -192,7 +192,7 @@ loki.process "default" {
 
 	// Configures a processing stage that filters the label set of an incoming log entry down to a subset
 	stage.label_keep {
-		values = ["namespace", "managed_by", "project_id", "deployment_id", "preset_id", "stream", "level"]
+		values = ["namespace", "pod", "managed_by", "project_id", "deployment_id", "preset_id", "stream", "level"]
 	}
 
 	// Sets the tenant ID for the log entry by obtaining it from a field in the
