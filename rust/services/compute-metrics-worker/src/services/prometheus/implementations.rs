@@ -172,6 +172,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             for (name, snapshot) in pod_map {
                 pods_count += 1;
                 let key = CacheKeys::deployment_pod_metrics(&id, &name);
+                let names_key = CacheKeys::deployment_pod_names(&id);
 
                 // Ensures key exist
                 p.cmd("JSON.SET")
@@ -185,6 +186,9 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 p.json_arr_append(&key, "$.snapshots", &snapshot)?;
                 p.json_arr_trim(&key, "$.snapshots", -cfg.metric_snapshots_to_keep, -1)?;
                 p.expire(&key, ttl).ignore();
+
+                p.zadd(&names_key, &name, snapshot.ts).ignore();
+                p.expire(&names_key, ttl).ignore();
 
                 pod_messages.push(PodMetricUpdate { name, snapshot });
             }
