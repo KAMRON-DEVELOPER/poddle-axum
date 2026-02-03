@@ -71,14 +71,14 @@ pub struct LokiStreamResult {
 // }
 
 #[derive(Serialize, Debug)]
-pub struct LogResponse {
-    pub entries: Vec<LogEntry>,
-}
-
-#[derive(Serialize, Debug)]
 pub struct LogEntry {
     pub timestamp: String,
     pub message: String,
     pub level: Option<String>,
     pub stream: Option<String>,
+}
+
+#[derive(Serialize, Debug)]
+pub struct LogResponse {
+    pub entries: Vec<LogEntry>,
 }
