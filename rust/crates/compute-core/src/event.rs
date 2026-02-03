@@ -14,7 +14,7 @@ pub enum ComputeEvent<'a> {
     },
     // Corresponds to: { "type": "StatusUpdate", "deployment_id": "...", "status": "...", ... }
     StatusUpdate {
-        deployment_id: &'a Uuid,
+        id: &'a Uuid,
         status: DeploymentStatus,
     },
     // Corresponds to: { "type": "SystemMessage", "deployment_id": "...", "message": "...", "level": "...", ... }

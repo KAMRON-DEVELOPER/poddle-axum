@@ -42,15 +42,15 @@ pub struct LokiResponse {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+pub struct LokiTailResponse {
+    pub streams: Vec<LokiStreamResult>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
 pub struct LokiData {
     #[serde(rename = "resultType")]
     pub result_type: String,
     pub result: Vec<LokiStreamResult>,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
-pub struct LokiTailResponse {
-    pub streams: Vec<LokiStreamResult>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]

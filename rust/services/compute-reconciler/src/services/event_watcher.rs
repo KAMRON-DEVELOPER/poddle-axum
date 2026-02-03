@@ -115,7 +115,7 @@ async fn handle_deployment_event(
             }
 
             let message = ComputeEvent::StatusUpdate {
-                deployment_id: &deployment_id,
+                id: &deployment_id,
                 status: new_status,
             };
             send_message(&project_id, message, con).await?
@@ -144,7 +144,7 @@ async fn handle_deployment_event(
             );
 
             let message = ComputeEvent::StatusUpdate {
-                deployment_id: &deployment_id,
+                id: &deployment_id,
                 status: DeploymentStatus::Deleted,
             };
             send_message(&project_id, message, con).await?

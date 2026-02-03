@@ -165,7 +165,7 @@ impl KubernetesService {
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
         let message = ComputeEvent::StatusUpdate {
-            deployment_id: &deployment_id,
+            id: &deployment_id,
             status: DeploymentStatus::Provisioning,
         };
         con.publish(channel, message)
@@ -198,7 +198,7 @@ impl KubernetesService {
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
         let message = ComputeEvent::StatusUpdate {
-            deployment_id: &deployment_id,
+            id: &deployment_id,
             status: DeploymentStatus::Running,
         };
         con.publish(channel, message)
@@ -835,7 +835,7 @@ impl KubernetesService {
         // Notify user
         let channel = ChannelNames::project_metrics(&project_id.to_string());
         let message = ComputeEvent::StatusUpdate {
-            deployment_id: &deployment_id,
+            id: &deployment_id,
             status: DeploymentStatus::Updating,
         };
         con.publish(channel, message)
@@ -891,7 +891,7 @@ impl KubernetesService {
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
         let message = ComputeEvent::StatusUpdate {
-            deployment_id: &deployment_id,
+            id: &deployment_id,
             status: DeploymentStatus::Running,
         };
         con.publish(channel, message)
