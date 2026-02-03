@@ -3,7 +3,7 @@ use compute_core::{
     channel_names::ChannelNames,
     configs::PrometheusConfig,
     event::ComputeEvent,
-    schemas::{MetricHistory, MetricSnapshot},
+    schemas::{MetricHistory, MetricSnapshot, MetricUpdate},
 };
 use factory::factories::redis::Redis;
 use prometheus_http_query::{Client, response::Data};
@@ -131,7 +131,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
     for (project_id, deployment_map) in project_map {
         projects_count += 1;
-        let mut messages = Vec::new(); // Vec<ComputeEvent<'_>>
+        let mut updates = Vec::new();
         for (id, snapshot) in deployment_map {
             deployments_count += 1;
             // Ensure key exists
@@ -150,13 +150,15 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             p.expire(&key, ttl).ignore();
 
             // Add to Project inside deployment metrics
-            messages.push(ComputeEvent::MetricsUpdate { id, snapshot });
+            updates.push(MetricUpdate { id, snapshot });
         }
 
         // Publish message
-        if !messages.is_empty() {
+        if !updates.is_empty() {
             let channel = ChannelNames::project_metrics(&project_id);
-            if let Ok(message) = serde_json::to_string(&messages) {
+
+            let message = ComputeEvent::MetricsUpdate { updates };
+            if let Ok(message) = serde_json::to_string(&message) {
                 p.publish(channel, message).ignore();
             }
         }

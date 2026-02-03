@@ -246,3 +246,10 @@ pub struct PodMetrics {
     pub history: Vec<MetricSnapshot>,
     pub started_at: Option<i64>,
 }
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MetricUpdate {
+    pub id: String,
+    pub snapshot: MetricSnapshot,
+}
