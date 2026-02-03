@@ -1,21 +1,13 @@
 use compute_core::{
-    cache_keys::CacheKeys,
     models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
-    schemas::{
-        CreateDeploymentRequest, CreateProjectRequest, MetricHistory, MetricSnapshot,
-        PodMetricHistory, UpdateDeploymentRequest,
-    },
+    schemas::{CreateDeploymentRequest, CreateProjectRequest, UpdateDeploymentRequest},
 };
 use http_contracts::pagination::schema::Pagination;
-use redis::{aio::MultiplexedConnection, pipe};
 use sqlx::{Executor, types::Json};
 use std::collections::HashMap;
-use tracing::{error, info};
 
 use sqlx::{PgPool, Postgres, Transaction};
 use uuid::Uuid;
-
-use crate::error::AppError;
 
 // --------------------------------------------------------------------------
 // DeploymentPresetRepository
@@ -597,131 +589,5 @@ impl DeploymentEventRepository {
         )
         .fetch_all(pool)
         .await
-    }
-}
-
-pub struct CacheRepository;
-
-impl CacheRepository {
-    /// Produce deployment inside pod level metrics
-    #[tracing::instrument(name = "cache_repository.get_deployment_metrics", skip_all, err)]
-    pub async fn get_deployment_metrics(
-        points_count: u64,
-        id: &str,
-        con: &mut MultiplexedConnection,
-    ) -> Result<MetricHistory, AppError> {
-        let key = CacheKeys::deployment_metrics(&id);
-        let history_path = format!("$.history[-{}:]", points_count);
-        let pods_path = "$.pods";
-
-        let redis_query_start = std::time::Instant::now();
-        let result: Option<String> = redis::cmd("JSON.GET")
-            .arg(&key)
-            .arg(&history_path)
-            .arg(&pods_path)
-            .query_async(con)
-            .await
-            .map_err(|e| AppError::InternalServerError(format!("❌ Redis query error: {}", e)))?;
-
-        info!(
-            redis_query_start = redis_query_start.elapsed().as_millis(),
-            "🏁 Redis query completed"
-        );
-
-        match result {
-            Some(json_str) => {
-                // When JSON.GET has multiple paths, it returns a JSON object:
-                // { "$.history[-N:]": [...], "$.pods": { ... } }
-                // We need to parse this dynamic key structure.
-                let root: serde_json::Value =
-                    serde_json::from_str(&json_str).unwrap_or(serde_json::Value::Null);
-
-                // Extract history
-                let history = root
-                    .get(&history_path)
-                    .and_then(|v| serde_json::from_value::<Vec<MetricSnapshot>>(v.clone()).ok())
-                    .unwrap_or_default();
-
-                // Extract pods
-                // Note: We might want to slice the pod history here in Rust if 'points_count'
-                // is much smaller than stored history to save bandwidth/processing on frontend.
-                let pods = root
-                    .get(pods_path)
-                    .and_then(|v| {
-                        serde_json::from_value::<HashMap<String, PodMetricHistory>>(v.clone()).ok()
-                    })
-                    .unwrap_or_default();
-
-                Ok(MetricHistory { history, pods })
-            }
-            None => Ok(MetricHistory {
-                history: vec![],
-                pods: HashMap::new(),
-            }),
-        }
-    }
-
-    /// Produce project inside agregated/total deployment metrics (sum of pods)
-    #[tracing::instrument(name = "cache_repository.get_deployments_metrics", skip_all, err)]
-    pub async fn get_deployments_metrics(
-        points_count: u64,
-        ids: Vec<&str>,
-        con: &mut MultiplexedConnection,
-    ) -> Result<Vec<MetricHistory>, AppError> {
-        // Safety check for Redis syntax
-        if ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let keys = CacheKeys::deployments_metrics(&ids);
-        let path = format!("$.history[-{}:]", points_count);
-
-        let pipeline_start = std::time::Instant::now();
-        let mut p: redis::Pipeline = pipe();
-        // Runs JSON.GET if key is singular, JSON.MGET if there are multiple keys
-        // With RedisJSON commands, you have to note that all results will be wrapped in square brackets (or empty brackets if not found).
-        // If you want to deserialize it with e.g. serde_json you have to use Vec<T> for your output type instead of T.
-        p.json_get(&keys, &path)?;
-
-        // Avoid auto-switch behavior:
-        // p.cmd("JSON.MGET").arg(&keys).arg(&path);
-        // This makes result shape predictable.
-
-        // We expect `results` to have length 1 (because we sent 1 command: JSON.MGET)
-        let results: Vec<Option<Vec<String>>> = p.query_async(con).await.map_err(|e| {
-            error!(error = %e, "❌ Redis pipeline failed");
-            AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
-        })?;
-        info!(
-            pipeline_elapsed = pipeline_start.elapsed().as_millis(),
-            "🏁 Pipeline query completed"
-        );
-
-        // Extract MGET Results safely
-        // Take the first result, flatten the Option, and default to empty Vec on failure
-        let mget_results = results.into_iter().next().flatten().unwrap_or_default();
-
-        // Map to Domain Objects with Length Guarantee
-        // We iterate over the INPUT length (ids), not the Redis result length.
-        // This ensures that if Redis returns fewer items or fails, we pad with empty metrics
-        // rather than dropping the deployment from the UI.
-        let deployment_metrics = (0..ids.len())
-            .map(|i| {
-                // Try to get the JSON string at index `i`
-                let history = mget_results
-                    .get(i)
-                    // If found, try to parse it
-                    .and_then(|s| serde_json::from_str::<Vec<MetricSnapshot>>(s).ok())
-                    // If index missing OR parsing failed, return empty history
-                    .unwrap_or_default();
-
-                MetricHistory {
-                    history,
-                    pods: HashMap::new(),
-                }
-            })
-            .collect();
-
-        Ok(deployment_metrics)
     }
 }

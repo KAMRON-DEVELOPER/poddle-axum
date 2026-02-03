@@ -135,8 +135,34 @@ pub struct DeploymentResponse {
     pub subdomain: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub history: Vec<MetricSnapshot>,
-    pub pods: HashMap<String, PodMetricHistory>,
+    pub pods: Vec<Pod>,
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentsResponse {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub project_id: Uuid,
+    pub name: String,
+    pub image: String,
+    pub port: i32,
+    pub desired_replicas: i32,
+    pub ready_replicas: i32,
+    pub available_replicas: i32,
+    pub preset_id: Uuid,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
+    pub secret_keys: Option<Vec<String>>,
+    pub vault_secret_path: Option<String>,
+    pub environment_variables: Option<HashMap<String, String>>,
+    pub labels: Option<HashMap<String, String>>,
+    pub status: DeploymentStatus,
+    pub domain: Option<String>,
+    pub subdomain: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub metrics: Vec<MetricSnapshot>,
 }
 
 #[derive(Serialize, Debug)]
@@ -220,22 +246,18 @@ pub enum PodPhase {
     Unknown,
 }
 
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct MetricHistory {
-    #[serde(default)]
-    pub history: Vec<MetricSnapshot>,
-    #[serde(default)]
-    pub pods: HashMap<String, PodMetricHistory>,
+pub struct Pod {
+    pub name: String,
+    pub metrics: Vec<MetricSnapshot>,
 }
 
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct PodMetricHistory {
-    pub name: String,
-    pub phase: PodPhase,
+pub struct MetricHistory {
     #[serde(default)]
-    pub history: Vec<MetricSnapshot>,
+    pub snapshots: Vec<MetricSnapshot>,
 }
 
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
@@ -256,6 +278,5 @@ pub struct DeploymentMetricUpdate {
 #[serde(rename_all = "camelCase")]
 pub struct PodMetricUpdate {
     pub name: String,
-    pub phase: PodPhase,
     pub snapshot: MetricSnapshot,
 }

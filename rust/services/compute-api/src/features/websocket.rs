@@ -1,22 +1,21 @@
 use crate::{
     config::Config,
-    error::AppError,
     features::{
         repository::DeploymentRepository,
         schemas::{LogResponse, LokiTailResponse},
     },
+    services::cache_service::CacheService,
 };
 use axum::{
     extract::{
-        Path, State,
+        Path, Query, State,
         ws::{Message as WSMessage, WebSocket, WebSocketUpgrade},
     },
     response::IntoResponse,
 };
-use compute_core::schemas::PodMetricHistory;
 use factory::factories::{database::Database, redis::Redis};
 use http::{HeaderName, HeaderValue, StatusCode};
-use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
+use http_contracts::pagination::schema::Pagination;
 use serde_json::json;
 use tokio::time::{self, Duration};
 use tracing::instrument;
@@ -32,13 +31,20 @@ use tokio_tungstenite::{
 
 pub async fn stream_metrics_ws_handler(
     ws: WebSocketUpgrade,
+    Query(p): Query<Pagination>,
     Path(deployment_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_stream_metrics(deployment_id, redis, socket))
+    ws.on_upgrade(move |socket| handle_stream_metrics(deployment_id, 32, p, redis, socket))
 }
 
-async fn handle_stream_metrics(deployment_id: Uuid, redis: Redis, mut socket: WebSocket) {
+async fn handle_stream_metrics(
+    deployment_id: Uuid,
+    points_count: u64,
+    p: Pagination,
+    redis: Redis,
+    mut socket: WebSocket,
+) {
     let mut conn = redis.connection.clone();
     let deployment_id = deployment_id.to_string();
 
@@ -47,7 +53,7 @@ async fn handle_stream_metrics(deployment_id: Uuid, redis: Redis, mut socket: We
     loop {
         tokio::select! {
             _ = interval.tick() => {
-                match get_deployment_metrics(&mut conn, &deployment_id).await {
+                match CacheService::get_deployment_pods(&deployment_id, points_count, &p, &mut conn).await {
                     Ok(metrics) => {
                         let payload = serde_json::to_string(&metrics).unwrap();
                         if socket.send(WSMessage::Text(payload.into())).await.is_err() {
@@ -68,17 +74,6 @@ async fn handle_stream_metrics(deployment_id: Uuid, redis: Redis, mut socket: We
 
         }
     }
-}
-
-async fn get_deployment_metrics(
-    connection: &mut MultiplexedConnection,
-    deployment_id: &str,
-) -> Result<Vec<PodMetricHistory>, AppError> {
-    let key = format!("deployment:{}:metrics", deployment_id);
-    let metrics = connection
-        .json_get::<_, _, Vec<PodMetricHistory>>(&key, "$")
-        .await?;
-    Ok(metrics)
 }
 
 #[instrument(

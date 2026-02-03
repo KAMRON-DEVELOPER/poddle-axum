@@ -3,10 +3,7 @@ use compute_core::{
     channel_names::ChannelNames,
     configs::PrometheusConfig,
     event::ComputeEvent,
-    schemas::{
-        DeploymentMetricUpdate, MetricHistory, MetricSnapshot, PodMetricHistory, PodMetricUpdate,
-        PodPhase,
-    },
+    schemas::{DeploymentMetricUpdate, MetricHistory, MetricSnapshot, PodMetricUpdate},
 };
 use factory::factories::redis::Redis;
 use prometheus_http_query::{Client, response::Data};
@@ -39,7 +36,7 @@ pub async fn start_metrics_scraper(redis: Redis, prometheus: Prometheus) -> Resu
 }
 
 #[derive(Default)]
-struct ScrapedDeployment {
+struct DeploymentBuffer {
     snapshot: MetricSnapshot,
     pod_map: HashMap<String, MetricSnapshot>,
 }
@@ -93,10 +90,8 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         tracing::warn!("⚠️ Prometheus query is taking dangerously long!");
     }
 
-    // Structure: { ProjectID: { DeploymentID: { aggregated: MetricSnapshot, pods: { name: MetricSnapshot } } } }
-    let mut project_map: HashMap<String, HashMap<String, ScrapedDeployment>> = HashMap::new();
-    // Structure: { DeploymentID: { aggregated: MetricSnapshot, pods: { name: MetricSnapshot } } }
-    // let mut deployment_map: HashMap<String, ScrapedDeployment> = HashMap::new();
+    // Structure: { ProjectID: { DeploymentID: { snapshot: MetricSnapshot, pod_map: { name: MetricSnapshot } } } }
+    let mut project_map: HashMap<String, HashMap<String, DeploymentBuffer>> = HashMap::new();
 
     // Helper closure to process vector results
     let mut process_data = |data: &Data, is_cpu: bool| {
@@ -113,26 +108,23 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                     let value = vec.sample().value();
                     let ts = vec.sample().timestamp();
 
-                    let deployment_entry = project_map
+                    let DeploymentBuffer { snapshot, pod_map } = project_map
                         .entry(project_id.clone())
                         .or_default()
                         .entry(deployment_id.clone())
                         .or_default();
 
-                    let pod_entry = deployment_entry
-                        .pod_map
-                        .entry(pod_name.clone())
-                        .or_default();
+                    let pod_entry = pod_map.entry(pod_name.clone()).or_default();
 
-                    deployment_entry.snapshot.ts = ts as i64;
+                    snapshot.ts = ts as i64;
                     pod_entry.ts = ts as i64;
                     if is_cpu {
                         // CPU is usually in cores, multiply by 1000 for millicores
-                        deployment_entry.snapshot.cpu += value * 1000.0;
+                        snapshot.cpu += value * 1000.0;
                         pod_entry.cpu += value * 1000.0;
                     } else {
                         // Memory is in bytes, convert to MB if needed, or keep bytes.
-                        deployment_entry.snapshot.memory += value / 1024.0 / 1024.0;
+                        snapshot.memory += value / 1024.0 / 1024.0;
                         pod_entry.memory += value / 1024.0 / 1024.0;
                     }
                 }
@@ -153,19 +145,17 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
     for (id, deployment_map) in project_map {
         projects_count += 1;
-        let mut deployment_updates = Vec::new();
+        let mut deployment_messages = Vec::new();
 
-        for (id, ScrapedDeployment { snapshot, pod_map }) in deployment_map {
+        // We send deployment message after deployment_map loop
+        for (id, DeploymentBuffer { snapshot, pod_map }) in deployment_map {
             deployments_count += 1;
-            let mut pod_updates = Vec::new();
+            let mut pod_messages = Vec::new();
             let key = CacheKeys::deployment_metrics(&id);
             let ttl = cfg.scrape_interval_seconds as i64 * cfg.metric_snapshots_to_keep;
 
-            // Ensures $.history and $.pods exist
-            let initial = MetricHistory {
-                history: vec![],
-                pods: HashMap::new(),
-            };
+            // Ensures key exist
+            let initial = MetricHistory { snapshots: vec![] };
             p.cmd("JSON.SET")
                 .arg(&key)
                 .arg("$")
@@ -173,66 +163,52 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 .arg("NX")
                 .ignore();
 
-            // Update Aggregated History
-            p.json_arr_append(&key, "$.history", &snapshot)?;
-            p.json_arr_trim(&key, "$.history", -cfg.metric_snapshots_to_keep, -1)?;
+            // Update snapshots
+            p.json_arr_append(&key, "$.snapshots", &snapshot)?;
+            p.json_arr_trim(&key, "$.snapshots", -cfg.metric_snapshots_to_keep, -1)?;
             p.expire(&key, ttl).ignore();
 
-            deployment_updates.push(DeploymentMetricUpdate {
-                id: id.clone(),
-                snapshot,
-            });
-
+            // We send pod message after pod_map loop
             for (name, snapshot) in pod_map {
                 pods_count += 1;
-                // Safe JSON Path for map keys: $.pods["pod-name"]
-                let pod_path = format!("$.pods[\"{}\"]", name);
-                let history_path = format!("{}.history", pod_path);
+                let key = CacheKeys::deployment_pod_metrics(&id, &name);
 
-                // TODO: Get real phase from K8s/kube-state-metrics if available in query
-                let phase = PodPhase::Running;
-                let initial = PodMetricHistory {
-                    name: name.clone(),
-                    phase: phase.clone(),
-                    history: vec![],
-                };
-
+                // Ensures key exist
                 p.cmd("JSON.SET")
                     .arg(&key)
-                    .arg(&pod_path)
                     .arg("$")
                     .arg(&initial)
                     .arg("NX")
                     .ignore();
 
-                // Append History & Trim
-                p.json_arr_append(&key, &history_path, &snapshot)?;
-                p.json_arr_trim(&key, &history_path, -cfg.metric_snapshots_to_keep, -1)?;
+                // Update snapshots
+                p.json_arr_append(&key, "$.snapshots", &snapshot)?;
+                p.json_arr_trim(&key, "$.snapshots", -cfg.metric_snapshots_to_keep, -1)?;
+                p.expire(&key, ttl).ignore();
 
-                pod_updates.push(PodMetricUpdate {
-                    name,
-                    phase,
-                    snapshot,
-                });
+                pod_messages.push(PodMetricUpdate { name, snapshot });
             }
 
-            // Publish pod metric update message to deployment page
-            if !pod_updates.is_empty() {
+            // Publish pod metrics update message to deployment page
+            if !pod_messages.is_empty() {
                 let channel = ChannelNames::deployment_metrics(&id);
                 let message = ComputeEvent::PodMetricsUpdate {
-                    updates: pod_updates,
+                    updates: pod_messages,
                 };
                 if let Ok(message) = serde_json::to_string(&message) {
                     p.publish(channel, message).ignore();
                 }
             }
+
+            // We can use id cleanly after all referances
+            deployment_messages.push(DeploymentMetricUpdate { id, snapshot });
         }
 
-        // Publish deployment metric update message to project page
-        if !deployment_updates.is_empty() {
+        // Publish deployment metrics update message to project page
+        if !deployment_messages.is_empty() {
             let channel = ChannelNames::project_metrics(&id);
             let message = ComputeEvent::DeploymentMetricsUpdate {
-                updates: deployment_updates,
+                updates: deployment_messages,
             };
             if let Ok(message) = serde_json::to_string(&message) {
                 p.publish(channel, message).ignore();

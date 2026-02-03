@@ -14,7 +14,7 @@ pub enum ComputeEvent<'a> {
     DeploymentMetricsUpdate {
         updates: Vec<DeploymentMetricUpdate>,
     },
-    // Corresponds to: { "type": "PodMetricsUpdate", "updates": { pod_name: ..., phase: ..., snapshot: { ts: ..., cpu: ..., memory: ... } }, ... }
+    // Corresponds to: { "type": "PodMetricsUpdate", "updates": { pod_name: ..., snapshot: { ts: ..., cpu: ..., memory: ... } }, ... }
     PodMetricsUpdate {
         updates: Vec<PodMetricUpdate>,
     },

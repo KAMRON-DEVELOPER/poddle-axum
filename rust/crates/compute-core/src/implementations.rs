@@ -1,46 +1,16 @@
-use std::{collections::HashMap, fmt};
+use std::fmt;
 
 use uuid::Uuid;
 
 use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
-        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, MetricHistory,
-        UpdateDeploymentMessage, UpdateDeploymentRequest,
+        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
+        MetricHistory, Pod, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
-impl DeploymentResponse {
-    pub fn from_parts(d: Deployment, dm: MetricHistory) -> Self {
-        Self {
-            id: d.id,
-            user_id: d.user_id,
-            project_id: d.project_id,
-            name: d.name,
-            image: d.image,
-            port: d.port,
-            desired_replicas: d.desired_replicas,
-            ready_replicas: d.ready_replicas,
-            available_replicas: d.available_replicas,
-            preset_id: d.preset_id,
-            addon_cpu_millicores: d.addon_cpu_millicores,
-            addon_memory_mb: d.addon_memory_mb,
-            vault_secret_path: d.vault_secret_path,
-            secret_keys: d.secret_keys,
-            environment_variables: d.environment_variables.and_then(|j| j.0).or_else(|| None),
-            labels: d.labels.and_then(|j| j.0).or_else(|| None),
-            status: d.status,
-            domain: d.domain,
-            subdomain: d.subdomain,
-            created_at: d.created_at,
-            updated_at: d.updated_at,
-            history: dm.history,
-            pods: HashMap::new(),
-        }
-    }
-}
-
-impl From<(Deployment, MetricHistory)> for DeploymentResponse {
+impl From<(Deployment, MetricHistory)> for DeploymentsResponse {
     fn from((d, dm): (Deployment, MetricHistory)) -> Self {
         Self {
             id: d.id,
@@ -64,8 +34,36 @@ impl From<(Deployment, MetricHistory)> for DeploymentResponse {
             subdomain: d.subdomain,
             created_at: d.created_at,
             updated_at: d.updated_at,
-            history: dm.history,
-            pods: HashMap::new(),
+            metrics: dm.snapshots,
+        }
+    }
+}
+
+impl From<(Deployment, Vec<Pod>)> for DeploymentResponse {
+    fn from((d, pods): (Deployment, Vec<Pod>)) -> Self {
+        Self {
+            id: d.id,
+            user_id: d.user_id,
+            project_id: d.project_id,
+            name: d.name,
+            image: d.image,
+            port: d.port,
+            desired_replicas: d.desired_replicas,
+            ready_replicas: d.ready_replicas,
+            available_replicas: d.available_replicas,
+            preset_id: d.preset_id,
+            addon_cpu_millicores: d.addon_cpu_millicores,
+            addon_memory_mb: d.addon_memory_mb,
+            vault_secret_path: d.vault_secret_path,
+            secret_keys: d.secret_keys,
+            environment_variables: d.environment_variables.and_then(|j| j.0).or_else(|| None),
+            labels: d.labels.and_then(|j| j.0).or_else(|| None),
+            status: d.status,
+            domain: d.domain,
+            subdomain: d.subdomain,
+            created_at: d.created_at,
+            updated_at: d.updated_at,
+            pods,
         }
     }
 }

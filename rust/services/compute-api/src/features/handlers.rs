@@ -2,11 +2,10 @@ use crate::{
     config::Config,
     error::AppError,
     features::{
-        repository::{
-            CacheRepository, DeploymentPresetRepository, DeploymentRepository, ProjectRepository,
-        },
+        repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
         schemas::{LogQuery, ProjectPageWithPaginationQuery},
     },
+    services::cache_service::CacheService,
 };
 use axum::{
     Json,
@@ -16,8 +15,8 @@ use axum::{
 };
 use compute_core::schemas::{
     CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-    DeleteDeploymentMessage, DeploymentResponse, UpdateDeploymentMessage, UpdateDeploymentRequest,
-    UpdateProjectRequest,
+    DeleteDeploymentMessage, DeploymentResponse, DeploymentsResponse, UpdateDeploymentMessage,
+    UpdateDeploymentRequest, UpdateProjectRequest,
 };
 use factory::factories::{
     amqp::{Amqp, AmqpPropagator},
@@ -51,12 +50,12 @@ use validator::Validate;
 )]
 pub async fn get_projects(
     claims: Claims,
-    Query(pagination): Query<Pagination>,
+    Query(p): Query<Pagination>,
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
-    let (data, total) = ProjectRepository::get_many(&user_id, &pagination, &database.pool).await?;
+    let (data, total) = ProjectRepository::get_many(&user_id, &p, &database.pool).await?;
 
     Ok(Json(ListResponse { data, total }))
 }
@@ -175,11 +174,11 @@ pub async fn delete_project_handler(
 )]
 pub async fn get_deployment_handler(
     claims: Claims,
-    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     Query(ProjectPageWithPaginationQuery {
-        pagination: _,
+        pagination: p,
         project_page_query,
     }): Query<ProjectPageWithPaginationQuery>,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
@@ -190,14 +189,15 @@ pub async fn get_deployment_handler(
     let deployment =
         DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
 
-    let metrics = CacheRepository::get_deployment_metrics(
-        points_count,
+    let pods = CacheService::get_deployment_pods(
         &deployment.id.to_string(),
+        points_count,
+        &p,
         &mut redis.connection,
     )
     .await?;
 
-    let response: DeploymentResponse = (deployment, metrics).into();
+    let response: DeploymentResponse = (deployment, pods).into();
     Ok(Json(response))
 }
 
@@ -242,9 +242,9 @@ pub async fn get_deployments_handler(
     let ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
     let ids: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
     let metrics =
-        CacheRepository::get_deployments_metrics(points_count, ids, &mut redis.connection).await?;
+        CacheService::get_deployments_metrics(points_count, ids, &mut redis.connection).await?;
 
-    let data: Vec<DeploymentResponse> = deployments
+    let data: Vec<DeploymentsResponse> = deployments
         .into_iter()
         .zip(metrics.into_iter())
         .map(|pair| pair.into())
