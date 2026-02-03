@@ -25,7 +25,7 @@ use crate::{
     config::Config,
     features::{
         repository::{DeploymentRepository, ProjectRepository},
-        schemas::{LogQuery, LogResponse, LokiTailResponse},
+        schemas::{LogQuery, LogResponse, LogStreamEvent, LokiTailResponse},
     },
 };
 
@@ -138,14 +138,14 @@ pub async fn stream_logs_see_handler(
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
-                    if let Ok(loki_push) = serde_json::from_str::<LokiTailResponse>(&text) {
-                        let log_batch = LogResponse::from(loki_push);
+                    if let Ok(streams) = serde_json::from_str::<LokiTailResponse>(&text) {
+                        let LogResponse { entries } = LogResponse::from(streams);
 
-                        // Yield each entry individually to the frontend
-                        for entry in log_batch.entries {
-                            if let Ok(json) = serde_json::to_string(&entry) {
-                                yield Ok(Event::default().event("log").data(json));
-                            }
+                        let event = LogStreamEvent::LogBatch {entries};
+
+                        if let Ok(json) = serde_json::to_string(&event) {
+                            // Use event("log") matching frontend listener
+                            yield Ok(Event::default().event("log").data(json));
                         }
                     }
                 }

@@ -147,8 +147,8 @@ impl KubernetesService {
 
         if query_result.rows_affected() == 0 {
             let channel = ChannelNames::project_metrics(&project_id.to_string());
-            let message = ComputeEvent::SystemMessage {
-                deployment_id: &deployment_id,
+            let message = ComputeEvent::DeploymentSystemMessage {
+                id: &deployment_id,
                 level: EventLevel::Error,
                 message: "Internal server error".to_string(),
             };
@@ -164,7 +164,7 @@ impl KubernetesService {
         }
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let message = ComputeEvent::StatusUpdate {
+        let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Provisioning,
         };
@@ -180,8 +180,8 @@ impl KubernetesService {
 
         if query_result.rows_affected() == 0 {
             let channel = ChannelNames::project_metrics(&project_id.to_string());
-            let message = ComputeEvent::SystemMessage {
-                deployment_id: &deployment_id,
+            let message = ComputeEvent::DeploymentSystemMessage {
+                id: &deployment_id,
                 level: EventLevel::Error,
                 message: "Internal server error".to_string(),
             };
@@ -197,7 +197,7 @@ impl KubernetesService {
         }
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let message = ComputeEvent::StatusUpdate {
+        let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Running,
         };
@@ -834,7 +834,7 @@ impl KubernetesService {
 
         // Notify user
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let message = ComputeEvent::StatusUpdate {
+        let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Updating,
         };
@@ -879,8 +879,8 @@ impl KubernetesService {
 
         if query_result.rows_affected() == 0 {
             let channel = ChannelNames::project_metrics(&project_id.to_string());
-            let message = ComputeEvent::SystemMessage {
-                deployment_id: &deployment_id,
+            let message = ComputeEvent::DeploymentSystemMessage {
+                id: &deployment_id,
                 level: EventLevel::Error,
                 message: "Internal server error".to_string(),
             };
@@ -890,7 +890,7 @@ impl KubernetesService {
         }
 
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let message = ComputeEvent::StatusUpdate {
+        let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Running,
         };

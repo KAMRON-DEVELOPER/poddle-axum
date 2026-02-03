@@ -8,19 +8,28 @@ use crate::{models::DeploymentStatus, schemas::MetricUpdate};
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
     // Corresponds to: { "type": "MetricsUpdate", "snapshot": { ts: ..., cpu: ..., memory: ... }, ... }
-    MetricsUpdate {
+    DeploymentMetricsUpdate {
         updates: Vec<MetricUpdate>,
     },
     // Corresponds to: { "type": "StatusUpdate", "deployment_id": "...", "status": "...", ... }
-    StatusUpdate {
+    DeploymentStatusUpdate {
         id: &'a Uuid,
         status: DeploymentStatus,
     },
     // Corresponds to: { "type": "SystemMessage", "deployment_id": "...", "message": "...", "level": "...", ... }
-    SystemMessage {
-        deployment_id: &'a Uuid,
+    DeploymentSystemMessage {
+        id: &'a Uuid,
         message: String,
         level: EventLevel,
+    },
+
+    LogAppend {
+        deployment_id: &'a Uuid,
+        cursor: String,
+        timestamp_ns: i64,
+        message: String,
+        level: Option<String>,
+        stream: Option<String>,
     },
 }
 

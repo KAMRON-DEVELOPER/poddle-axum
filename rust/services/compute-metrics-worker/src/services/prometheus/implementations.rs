@@ -157,7 +157,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         if !updates.is_empty() {
             let channel = ChannelNames::project_metrics(&project_id);
 
-            let message = ComputeEvent::MetricsUpdate { updates };
+            let message = ComputeEvent::DeploymentMetricsUpdate { updates };
             if let Ok(message) = serde_json::to_string(&message) {
                 p.publish(channel, message).ignore();
             }

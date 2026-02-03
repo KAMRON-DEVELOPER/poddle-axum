@@ -114,7 +114,7 @@ async fn handle_deployment_event(
                 when_affacted_rows_zero(&project_id, &deployment_id, con).await?
             }
 
-            let message = ComputeEvent::StatusUpdate {
+            let message = ComputeEvent::DeploymentStatusUpdate {
                 id: &deployment_id,
                 status: new_status,
             };
@@ -143,7 +143,7 @@ async fn handle_deployment_event(
                 "🗑️ Deployment was deleted from cluster",
             );
 
-            let message = ComputeEvent::StatusUpdate {
+            let message = ComputeEvent::DeploymentStatusUpdate {
                 id: &deployment_id,
                 status: DeploymentStatus::Deleted,
             };
@@ -242,8 +242,8 @@ async fn handle_pod_event(
                 .await?;
 
                 if restart_count > 0 && restart_count % 3 == 0 {
-                    let message = ComputeEvent::SystemMessage {
-                        deployment_id: &deployment_id,
+                    let message = ComputeEvent::DeploymentSystemMessage {
+                        id: &deployment_id,
                         message: format!("Deployment is crashing: {}", reason),
                         level: EventLevel::Error,
                     };
@@ -265,8 +265,8 @@ async fn when_affacted_rows_zero(
 ) -> Result<(), AppError> {
     {
         let channel = ChannelNames::project_metrics(&project_id.to_string());
-        let message = ComputeEvent::SystemMessage {
-            deployment_id: deployment_id,
+        let message = ComputeEvent::DeploymentSystemMessage {
+            id: deployment_id,
             level: EventLevel::Error,
             message: "Internal server error".to_string(),
         };

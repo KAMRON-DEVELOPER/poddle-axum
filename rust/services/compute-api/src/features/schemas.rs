@@ -55,20 +55,9 @@ pub struct LokiData {
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct LokiStreamResult {
-    // pub stream: LokiStream,
     pub stream: HashMap<String, String>,
     pub values: Vec<[String; 2]>,
 }
-
-// #[derive(Deserialize, Serialize, Debug)]
-// pub struct LokiStream {
-//     pub stream: String,
-//     pub detected_level: String,
-//     pub namespace: String,
-//     pub preset_id: Uuid,
-//     pub project_id: Uuid,
-//     pub deployment_id: Uuid,
-// }
 
 #[derive(Serialize, Debug)]
 pub struct LogEntry {
@@ -82,3 +71,25 @@ pub struct LogEntry {
 pub struct LogResponse {
     pub entries: Vec<LogEntry>,
 }
+
+#[derive(Serialize, Debug)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum LogStreamEvent {
+    LogBatch { entries: Vec<LogEntry> },
+}
+
+// #[derive(Deserialize, Serialize, Debug)]
+// pub struct LokiStreamResult {
+//     pub stream: LokiStream,
+//     pub values: Vec<[String; 2]>,
+// }
+
+// #[derive(Deserialize, Serialize, Debug)]
+// pub struct LokiStream {
+//     pub stream: String,
+//     pub detected_level: String,
+//     pub namespace: String,
+//     pub preset_id: Uuid,
+//     pub project_id: Uuid,
+//     pub deployment_id: Uuid,
+// }
