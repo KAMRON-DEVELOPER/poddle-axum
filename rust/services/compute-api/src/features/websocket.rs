@@ -13,7 +13,7 @@ use axum::{
     },
     response::IntoResponse,
 };
-use compute_core::schemas::PodMetrics;
+use compute_core::schemas::PodMetricHistory;
 use factory::factories::{database::Database, redis::Redis};
 use http::{HeaderName, HeaderValue, StatusCode};
 use redis::{JsonAsyncCommands, aio::MultiplexedConnection};
@@ -73,10 +73,10 @@ async fn handle_stream_metrics(deployment_id: Uuid, redis: Redis, mut socket: We
 async fn get_deployment_metrics(
     connection: &mut MultiplexedConnection,
     deployment_id: &str,
-) -> Result<Vec<PodMetrics>, AppError> {
+) -> Result<Vec<PodMetricHistory>, AppError> {
     let key = format!("deployment:{}:metrics", deployment_id);
     let metrics = connection
-        .json_get::<_, _, Vec<PodMetrics>>(&key, "$")
+        .json_get::<_, _, Vec<PodMetricHistory>>(&key, "$")
         .await?;
     Ok(metrics)
 }

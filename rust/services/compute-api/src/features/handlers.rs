@@ -164,6 +164,44 @@ pub async fn delete_project_handler(
 // ============================================
 
 #[tracing::instrument(
+    name = "get_deployment_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+        deployment_id = %deployment_id
+    ),
+    err
+)]
+pub async fn get_deployment_handler(
+    claims: Claims,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Query(ProjectPageWithPaginationQuery {
+        pagination: _,
+        project_page_query,
+    }): Query<ProjectPageWithPaginationQuery>,
+    State(cfg): State<Config>,
+    State(database): State<Database>,
+    State(mut redis): State<Redis>,
+) -> Result<impl IntoResponse, AppError> {
+    let user_id: Uuid = claims.sub;
+    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval_seconds;
+
+    let deployment =
+        DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
+
+    let metrics = CacheRepository::get_deployment_metrics(
+        points_count,
+        &deployment.id.to_string(),
+        &mut redis.connection,
+    )
+    .await?;
+
+    let response: DeploymentResponse = (deployment, metrics).into();
+    Ok(Json(response))
+}
+
+#[tracing::instrument(
     name = "get_deployments_handler",
     skip_all,
     fields(
@@ -179,12 +217,12 @@ pub async fn get_deployments_handler(
         pagination,
         project_page_query,
     }): Query<ProjectPageWithPaginationQuery>,
-    State(config): State<Config>,
+    State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let points_count = project_page_query.minutes * 60 / config.prometheus.scrape_interval_seconds;
+    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval_seconds;
 
     let (deployments, total) = DeploymentRepository::get_all_by_project(
         &user_id,
@@ -204,7 +242,7 @@ pub async fn get_deployments_handler(
     let ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
     let ids: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
     let metrics =
-        CacheRepository::get_deployment_metrics(points_count, ids, &mut redis.connection).await?;
+        CacheRepository::get_deployments_metrics(points_count, ids, &mut redis.connection).await?;
 
     let data: Vec<DeploymentResponse> = deployments
         .into_iter()
@@ -213,29 +251,6 @@ pub async fn get_deployments_handler(
         .collect();
 
     Ok(Json(ListResponse { data, total }))
-}
-
-#[tracing::instrument(
-    name = "get_deployment_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id,
-        deployment_id = %deployment_id
-    ),
-    err
-)]
-pub async fn get_deployment_handler(
-    claims: Claims,
-    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
-    State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
-    let user_id: Uuid = claims.sub;
-
-    let deployment =
-        DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
-
-    Ok(Json(deployment))
 }
 
 #[tracing::instrument(

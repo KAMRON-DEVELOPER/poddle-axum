@@ -52,8 +52,12 @@ pub fn get_routes() -> Router<AppState> {
             get(websocket::stream_metrics_ws_handler),
         )
         .route(
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/see",
+            get(see::stream_deployment_metrics_see_handler),
+        )
+        .route(
             "/api/v1/projects/{project_id}/metrics/see",
-            get(see::stream_metrics_see_handler),
+            get(see::stream_deployments_metrics_see_handler),
         )
         .route("/api/v1/github/webhook", get(webhook::github_webhook))
 }

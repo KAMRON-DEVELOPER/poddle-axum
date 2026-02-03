@@ -135,8 +135,8 @@ pub struct DeploymentResponse {
     pub subdomain: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-
     pub history: Vec<MetricSnapshot>,
+    pub pods: HashMap<String, PodMetricHistory>,
 }
 
 #[derive(Serialize, Debug)]
@@ -220,12 +220,20 @@ pub enum PodPhase {
     Unknown,
 }
 
-/// Redis Storage model
-/// CacheKeys::deployment_metrics(deployment_id)
-/// deployment:{}:metrics
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct MetricHistory {
+    #[serde(default)]
+    pub history: Vec<MetricSnapshot>,
+    #[serde(default)]
+    pub pods: HashMap<String, PodMetricHistory>,
+}
+
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PodMetricHistory {
+    pub name: String,
+    pub phase: PodPhase,
     #[serde(default)]
     pub history: Vec<MetricSnapshot>,
 }
@@ -237,19 +245,17 @@ pub struct MetricSnapshot {
     pub memory: f64,
 }
 
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct PodMetrics {
-    pub name: String,
-    pub phase: PodPhase,
-    pub restarts: u32,
-    pub history: Vec<MetricSnapshot>,
-    pub started_at: Option<i64>,
+pub struct DeploymentMetricUpdate {
+    pub id: String,
+    pub snapshot: MetricSnapshot,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct MetricUpdate {
-    pub id: String,
+pub struct PodMetricUpdate {
+    pub name: String,
+    pub phase: PodPhase,
     pub snapshot: MetricSnapshot,
 }

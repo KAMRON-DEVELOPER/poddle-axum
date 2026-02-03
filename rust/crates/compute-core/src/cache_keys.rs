@@ -1,8 +1,8 @@
 pub struct CacheKeys;
 
 impl CacheKeys {
-    pub fn deployment_metrics(deployment_id: &str) -> String {
-        format!("deployment:{}:metrics", deployment_id)
+    pub fn deployment_metrics(id: &str) -> String {
+        format!("deployment:{}:metrics", id)
     }
 
     pub fn deployments_metrics(ids: &Vec<&str>) -> Vec<String> {
@@ -11,8 +11,8 @@ impl CacheKeys {
             .collect()
     }
 
-    pub fn pod_metrics(pod_id: &str) -> String {
-        format!("pod:{}:metrics", pod_id)
+    pub fn pod_metrics(deployment_id: &str) -> String {
+        format!("deployment:{deployment_id}:pods")
     }
 
     pub fn pods_metrics(pod_ids: &Vec<&str>) -> Vec<String> {

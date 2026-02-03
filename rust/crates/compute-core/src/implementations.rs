@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{collections::HashMap, fmt};
 
 use uuid::Uuid;
 
@@ -35,6 +35,7 @@ impl DeploymentResponse {
             created_at: d.created_at,
             updated_at: d.updated_at,
             history: dm.history,
+            pods: HashMap::new(),
         }
     }
 }
@@ -64,6 +65,7 @@ impl From<(Deployment, MetricHistory)> for DeploymentResponse {
             created_at: d.created_at,
             updated_at: d.updated_at,
             history: dm.history,
+            pods: HashMap::new(),
         }
     }
 }

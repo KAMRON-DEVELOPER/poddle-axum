@@ -3,7 +3,7 @@ use compute_core::{
     models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, MetricHistory, MetricSnapshot,
-        UpdateDeploymentRequest,
+        PodMetricHistory, UpdateDeploymentRequest,
     },
 };
 use http_contracts::pagination::schema::Pagination;
@@ -603,8 +603,67 @@ impl DeploymentEventRepository {
 pub struct CacheRepository;
 
 impl CacheRepository {
+    /// Produce deployment inside pod level metrics
     #[tracing::instrument(name = "cache_repository.get_deployment_metrics", skip_all, err)]
     pub async fn get_deployment_metrics(
+        points_count: u64,
+        id: &str,
+        con: &mut MultiplexedConnection,
+    ) -> Result<MetricHistory, AppError> {
+        let key = CacheKeys::deployment_metrics(&id);
+        let history_path = format!("$.history[-{}:]", points_count);
+        let pods_path = "$.pods";
+
+        let redis_query_start = std::time::Instant::now();
+        let result: Option<String> = redis::cmd("JSON.GET")
+            .arg(&key)
+            .arg(&history_path)
+            .arg(&pods_path)
+            .query_async(con)
+            .await
+            .map_err(|e| AppError::InternalServerError(format!("❌ Redis query error: {}", e)))?;
+
+        info!(
+            redis_query_start = redis_query_start.elapsed().as_millis(),
+            "🏁 Redis query completed"
+        );
+
+        match result {
+            Some(json_str) => {
+                // When JSON.GET has multiple paths, it returns a JSON object:
+                // { "$.history[-N:]": [...], "$.pods": { ... } }
+                // We need to parse this dynamic key structure.
+                let root: serde_json::Value =
+                    serde_json::from_str(&json_str).unwrap_or(serde_json::Value::Null);
+
+                // Extract history
+                let history = root
+                    .get(&history_path)
+                    .and_then(|v| serde_json::from_value::<Vec<MetricSnapshot>>(v.clone()).ok())
+                    .unwrap_or_default();
+
+                // Extract pods
+                // Note: We might want to slice the pod history here in Rust if 'points_count'
+                // is much smaller than stored history to save bandwidth/processing on frontend.
+                let pods = root
+                    .get(pods_path)
+                    .and_then(|v| {
+                        serde_json::from_value::<HashMap<String, PodMetricHistory>>(v.clone()).ok()
+                    })
+                    .unwrap_or_default();
+
+                Ok(MetricHistory { history, pods })
+            }
+            None => Ok(MetricHistory {
+                history: vec![],
+                pods: HashMap::new(),
+            }),
+        }
+    }
+
+    /// Produce project inside agregated/total deployment metrics (sum of pods)
+    #[tracing::instrument(name = "cache_repository.get_deployments_metrics", skip_all, err)]
+    pub async fn get_deployments_metrics(
         points_count: u64,
         ids: Vec<&str>,
         con: &mut MultiplexedConnection,
@@ -656,7 +715,10 @@ impl CacheRepository {
                     // If index missing OR parsing failed, return empty history
                     .unwrap_or_default();
 
-                MetricHistory { history }
+                MetricHistory {
+                    history,
+                    pods: HashMap::new(),
+                }
             })
             .collect();
 

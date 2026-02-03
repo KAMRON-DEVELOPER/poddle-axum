@@ -29,8 +29,38 @@ use crate::{
     },
 };
 
+#[tracing::instrument(name = "stream_deployment_metrics_see_handler", skip_all, fields(deployment_id = %deployment_id), err)]
+pub async fn stream_deployment_metrics_see_handler(
+    Path(deployment_id): Path<Uuid>,
+    State(redis): State<Redis>,
+) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
+    let metrics_channel_name = ChannelNames::deployment_metrics(&deployment_id.to_string());
+    let status_channel_name = ChannelNames::deployment_status(&deployment_id.to_string());
+    let channel_name = [metrics_channel_name, status_channel_name];
+
+    let mut pubsub = redis.pubsub().await.map_err(|err| {
+        error!("Failed to connect to Redis PubSub: {}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    pubsub.subscribe(&channel_name).await.map_err(|err| {
+        error!("Failed to subscribe to channel pattern: {}", err);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+
+    let stream = pubsub.into_on_message().map(move |msg| {
+        let channel = msg.get_channel_name();
+        let payload: String = msg.get_payload().unwrap_or_default();
+        info!(channel = %channel, payload = %payload, "pubsub payload received");
+
+        Ok(Event::default().event("compute").data(payload))
+    });
+
+    Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
+}
+
 #[tracing::instrument(name = "stream_metrics_see_handler", skip_all, fields(project_id = %project_id), err)]
-pub async fn stream_metrics_see_handler(
+pub async fn stream_deployments_metrics_see_handler(
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
