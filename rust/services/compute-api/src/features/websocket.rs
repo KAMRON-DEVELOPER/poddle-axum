@@ -4,20 +4,16 @@ use crate::{
         repository::DeploymentRepository,
         schemas::{LogResponse, LokiTailResponse},
     },
-    services::cache_service::CacheService,
 };
 use axum::{
     extract::{
-        Path, Query, State,
+        Path, State,
         ws::{Message as WSMessage, WebSocket, WebSocketUpgrade},
     },
     response::IntoResponse,
 };
-use factory::factories::{database::Database, redis::Redis};
+use factory::factories::database::Database;
 use http::{HeaderName, HeaderValue, StatusCode};
-use http_contracts::pagination::schema::Pagination;
-use serde_json::json;
-use tokio::time::{self, Duration};
 use tracing::instrument;
 use url::Url;
 use users_core::jwt::Claims;
@@ -28,53 +24,6 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{Message, client::IntoClientRequest as _, handshake::client::Request},
 };
-
-pub async fn stream_metrics_ws_handler(
-    ws: WebSocketUpgrade,
-    Query(p): Query<Pagination>,
-    Path(deployment_id): Path<Uuid>,
-    State(redis): State<Redis>,
-) -> impl IntoResponse {
-    ws.on_upgrade(move |socket| handle_stream_metrics(deployment_id, 32, p, redis, socket))
-}
-
-async fn handle_stream_metrics(
-    deployment_id: Uuid,
-    points_count: u64,
-    p: Pagination,
-    redis: Redis,
-    mut socket: WebSocket,
-) {
-    let mut conn = redis.con.clone();
-    let deployment_id = deployment_id.to_string();
-
-    let mut interval = time::interval(Duration::from_secs(25));
-
-    loop {
-        tokio::select! {
-            _ = interval.tick() => {
-                match CacheService::get_deployment_pods(&deployment_id, points_count, &p, &mut conn).await {
-                    Ok(metrics) => {
-                        let payload = serde_json::to_string(&metrics).unwrap();
-                        if socket.send(WSMessage::Text(payload.into())).await.is_err() {
-                            // Client disconnected
-                            break;
-                        }
-                    }
-                    Err(err) => {
-                        let payload = json!({
-                            "error": err.to_string()
-                        }).to_string();
-
-                        let _ = socket.send(WSMessage::Text(payload.into())).await;
-                    }
-                }
-            }
-
-
-        }
-    }
-}
 
 #[instrument(
     name = "stream_logs_ws_handler",

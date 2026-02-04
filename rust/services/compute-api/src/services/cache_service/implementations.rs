@@ -56,7 +56,7 @@ impl CacheService {
         info!(
             elapsed = start.elapsed().as_millis(),
             pods_count = uids.len(),
-            "⌛ Pod metrics fetched"
+            "🏁 Pod metrics fetched"
         );
 
         let pods: Vec<Pod> = results

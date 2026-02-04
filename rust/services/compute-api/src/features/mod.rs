@@ -48,10 +48,6 @@ pub fn get_routes() -> Router<AppState> {
             get(see::stream_logs_see_handler),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/ws",
-            get(websocket::stream_metrics_ws_handler),
-        )
-        .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}/see",
             get(see::stream_deployment_metrics_see_handler),
         )
