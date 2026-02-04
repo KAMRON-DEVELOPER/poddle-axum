@@ -21,15 +21,15 @@ pub struct LokiResponse {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
-pub struct LokiTailResponse {
-    pub streams: Vec<LokiStreamResult>,
-}
-
-#[derive(Deserialize, Serialize, Debug)]
 pub struct LokiData {
     #[serde(rename = "resultType")]
     pub result_type: String,
     pub result: Vec<LokiStreamResult>,
+}
+
+#[derive(Deserialize, Serialize, Debug)]
+pub struct LokiTailResponse {
+    pub streams: Vec<LokiStreamResult>,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
@@ -49,12 +49,6 @@ pub struct LogEntry {
 #[derive(Serialize, Debug)]
 pub struct LogResponse {
     pub entries: Vec<LogEntry>,
-}
-
-#[derive(Serialize, Debug)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum LogStreamEvent {
-    LogBatch { entries: Vec<LogEntry> },
 }
 
 // #[derive(Deserialize, Serialize, Debug)]
