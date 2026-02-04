@@ -7,6 +7,14 @@ use crate::{
     schemas::{DeploymentMetricUpdate, Pod, PodMetricUpdate},
 };
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum EventLevel {
+    Info,
+    Error,
+    Warning,
+    Success,
+}
+
 #[derive(ToRedisArgs, Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
@@ -56,12 +64,4 @@ pub enum ComputeEvent<'a> {
         level: Option<String>,
         stream: Option<String>,
     },
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum EventLevel {
-    Info,
-    Error,
-    Warning,
-    Success,
 }
