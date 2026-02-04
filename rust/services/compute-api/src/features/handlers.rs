@@ -184,7 +184,7 @@ pub async fn get_deployment_handler(
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval_seconds;
+    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval;
 
     let deployment =
         DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
@@ -222,7 +222,7 @@ pub async fn get_deployments_handler(
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval_seconds;
+    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval;
 
     let (deployments, total) = DeploymentRepository::get_all_by_project(
         &user_id,

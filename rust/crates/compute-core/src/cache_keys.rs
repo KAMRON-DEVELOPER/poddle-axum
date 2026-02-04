@@ -13,21 +13,32 @@ impl CacheKeys {
             .collect()
     }
 
-    /// `deployment:{id}:pod:names`
-    pub fn deployment_pod_names(id: &str) -> String {
-        format!("deployment:{id}:pod:names")
+    /// `deployment:{id}:pods`
+    pub fn deployment_pods(id: &str) -> String {
+        format!("deployment:{id}:pods")
     }
 
-    /// `deployment:{id}:pod:{name}:metrics`
-    pub fn deployment_pod_metrics(id: &str, name: &str) -> String {
-        format!("deployment:{id}:pod:{name}:metrics")
+    /// `deployment:{id}:pod:{uid}:meta`
+    pub fn deployment_pod_meta(id: &str, uid: &str) -> String {
+        format!("deployment:{id}:pod:{uid}:meta")
     }
 
-    /// `deployment:{id}:pod:{name}:metrics`
-    pub fn deployment_pods_metrics(id: &str, names: &Vec<String>) -> Vec<String> {
-        names
-            .iter()
-            .map(|name| format!("deployment:{id}:pod:{name}:metrics"))
+    /// `deployment:{id}:pod:{uid}:meta`
+    pub fn deployment_pods_meta(id: &str, uids: &Vec<String>) -> String {
+        uids.iter()
+            .map(|uid| format!("deployment:{id}:pod:{uid}:meta"))
             .collect()
     }
+
+    /// `deployment:{id}:pod:{uid}:metrics`
+    pub fn deployment_pod_metrics(id: &str, uid: &str) -> String {
+        format!("deployment:{id}:pod:{uid}:metrics")
+    }
+
+    // `deployment:{id}:pod:{uid}:metrics`
+    // pub fn deployment_pods_metrics(id: &str, uids: &Vec<String>) -> Vec<String> {
+    //     uids.iter()
+    //         .map(|uid| format!("deployment:{id}:pod:{uid}:metrics"))
+    //         .collect()
+    // }
 }
