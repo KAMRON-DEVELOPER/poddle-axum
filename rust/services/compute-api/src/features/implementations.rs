@@ -13,10 +13,10 @@ impl From<LokiResponse> for LogResponse {
 }
 
 impl From<LokiTailResponse> for LogResponse {
-    fn from(loki: LokiTailResponse) -> Self {
+    fn from(tail: LokiTailResponse) -> Self {
         let mut entries = Vec::new();
         // The tail API uses 'streams', not 'data.result'
-        for stream_result in loki.streams {
+        for stream_result in tail.streams {
             process_stream_result(stream_result, &mut entries);
         }
         LogResponse { entries }

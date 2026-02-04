@@ -55,13 +55,4 @@ pub enum ComputeEvent<'a> {
         message: String,
         level: EventLevel,
     },
-
-    LogAppend {
-        deployment_id: &'a Uuid,
-        cursor: String,
-        timestamp_ns: i64,
-        message: String,
-        level: Option<String>,
-        stream: Option<String>,
-    },
 }
