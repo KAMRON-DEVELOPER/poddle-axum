@@ -65,8 +65,8 @@ pub async fn stream_deployments_metrics_see_handler(
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    let metrics_channel = ChannelNames::project_metrics(&project_id.to_string());
-    let status_channel = ChannelNames::project_metrics(&project_id.to_string());
+    let metrics_channel = ChannelNames::deployments_metrics(&project_id.to_string());
+    let status_channel = ChannelNames::deployments_metrics(&project_id.to_string());
     let channel_name = [metrics_channel, status_channel];
 
     let mut pubsub = redis.pubsub().await.map_err(|err| {

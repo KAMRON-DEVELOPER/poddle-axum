@@ -4,9 +4,27 @@ use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
-        MetricHistory, Pod, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        MetricHistory, Pod, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
+
+impl From<&str> for PodPhase {
+    fn from(value: &str) -> Self {
+        match value {
+            "Pending" => PodPhase::Pending,
+            "Running" => PodPhase::Running,
+            "Succeeded" => PodPhase::Succeeded,
+            "Failed" => PodPhase::Failed,
+            _ => PodPhase::Unknown,
+        }
+    }
+}
+
+impl Default for PodPhase {
+    fn default() -> Self {
+        Self::Unknown
+    }
+}
 
 impl From<(Deployment, MetricHistory)> for DeploymentsResponse {
     fn from((d, dm): (Deployment, MetricHistory)) -> Self {

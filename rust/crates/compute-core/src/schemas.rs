@@ -222,8 +222,7 @@ pub struct DeleteDeploymentMessage {
 // -----------------------------------------------
 // POD & DEPLOYMENT METRICS
 // -----------------------------------------------
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, PartialEq, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub enum PodPhase {
     Pending,
@@ -240,7 +239,7 @@ pub struct MetricSnapshot {
     pub memory: f64,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Pod {
     pub meta: PodHistory,
@@ -254,13 +253,13 @@ pub struct MetricHistory {
     pub snapshots: Vec<MetricSnapshot>,
 }
 
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PodHistory {
     pub uid: String,
     pub name: String,
-    pub phase: String,
-    pub restarts: u64,
+    pub phase: PodPhase,
+    pub restart_count: i32,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]

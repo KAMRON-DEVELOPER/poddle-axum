@@ -61,6 +61,7 @@ async fn main() -> anyhow::Result<()> {
     // Spawn tasks into the set
     set.spawn(event_watcher(
         database.pool.clone(),
+        cfg.clone(),
         redis.con.clone(),
         kubernetes.client.clone(),
     ));

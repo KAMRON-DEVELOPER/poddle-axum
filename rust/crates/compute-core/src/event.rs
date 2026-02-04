@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     models::DeploymentStatus,
-    schemas::{DeploymentMetricUpdate, PodMetricUpdate},
+    schemas::{DeploymentMetricUpdate, Pod, PodMetricUpdate},
 };
 
 #[derive(ToRedisArgs, Serialize, Clone, Debug)]
@@ -27,6 +27,14 @@ pub enum ComputeEvent<'a> {
 
     PodMetricsUpdate {
         updates: Vec<PodMetricUpdate>,
+    },
+
+    PodApply {
+        pod: Pod,
+    },
+
+    PodDelete {
+        uid: String,
     },
 
     PodStatusUpdate {

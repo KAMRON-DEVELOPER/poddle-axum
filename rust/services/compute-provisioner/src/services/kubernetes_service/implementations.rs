@@ -146,7 +146,7 @@ impl KubernetesService {
         .await?;
 
         if query_result.rows_affected() == 0 {
-            let channel = ChannelNames::project_metrics(&project_id.to_string());
+            let channel = ChannelNames::deployments_metrics(&project_id.to_string());
             let message = ComputeEvent::DeploymentSystemMessage {
                 id: &deployment_id,
                 level: EventLevel::Error,
@@ -163,7 +163,7 @@ impl KubernetesService {
             );
         }
 
-        let channel = ChannelNames::project_metrics(&project_id.to_string());
+        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
         let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Provisioning,
@@ -179,7 +179,7 @@ impl KubernetesService {
                 .await?;
 
         if query_result.rows_affected() == 0 {
-            let channel = ChannelNames::project_metrics(&project_id.to_string());
+            let channel = ChannelNames::deployments_metrics(&project_id.to_string());
             let message = ComputeEvent::DeploymentSystemMessage {
                 id: &deployment_id,
                 level: EventLevel::Error,
@@ -196,7 +196,7 @@ impl KubernetesService {
             );
         }
 
-        let channel = ChannelNames::project_metrics(&project_id.to_string());
+        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
         let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Running,
@@ -833,7 +833,7 @@ impl KubernetesService {
         );
 
         // Notify user
-        let channel = ChannelNames::project_metrics(&project_id.to_string());
+        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
         let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Updating,
@@ -878,7 +878,7 @@ impl KubernetesService {
                 .await?;
 
         if query_result.rows_affected() == 0 {
-            let channel = ChannelNames::project_metrics(&project_id.to_string());
+            let channel = ChannelNames::deployments_metrics(&project_id.to_string());
             let message = ComputeEvent::DeploymentSystemMessage {
                 id: &deployment_id,
                 level: EventLevel::Error,
@@ -889,7 +889,7 @@ impl KubernetesService {
                 .await?;
         }
 
-        let channel = ChannelNames::project_metrics(&project_id.to_string());
+        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
         let message = ComputeEvent::DeploymentStatusUpdate {
             id: &deployment_id,
             status: DeploymentStatus::Running,

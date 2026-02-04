@@ -4,7 +4,7 @@ use compute_core::{
     channel_names::ChannelNames,
     configs::PrometheusConfig,
     event::ComputeEvent,
-    schemas::{DeploymentMetricUpdate, MetricSnapshot, PodHistory, PodMetricUpdate},
+    schemas::{DeploymentMetricUpdate, MetricSnapshot, PodHistory, PodMetricUpdate, PodPhase},
 };
 use factory::factories::redis::Redis;
 use prometheus_http_query::{Client, response::Data};
@@ -45,8 +45,8 @@ struct DeploymentBuffer {
 #[derive(Default, Debug)]
 struct PodBuffer {
     uid: String,
-    phase: String,
-    restarts: u64,
+    phase: PodPhase,
+    restart_count: i32,
     snapshot: MetricSnapshot,
 }
 
@@ -172,7 +172,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 let pod_entry = deployment_entry.pod_map.entry(name.clone()).or_default();
 
                 pod_entry.uid = uid.to_string();
-                pod_entry.phase = phase.to_string();
+                pod_entry.phase = phase.into();
                 pod_entry.snapshot.ts = ts as i64;
                 pod_entry.snapshot.cpu += val * 1000.0;
 
@@ -224,7 +224,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                     .or_default();
                 let pod_entry = deployment_entry.pod_map.entry(name.clone()).or_default();
 
-                pod_entry.restarts = val as u64;
+                pod_entry.restart_count = val as i32;
             }
         }
     }
@@ -262,7 +262,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 PodBuffer {
                     uid,
                     phase,
-                    restarts,
+                    restart_count,
                     snapshot,
                 },
             ) in pod_map
@@ -282,7 +282,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                     uid,
                     name,
                     phase,
-                    restarts,
+                    restart_count,
                 };
                 p.cmd("HSET").arg(&meta_key).arg(&meta).ignore();
                 p.expire(&meta_key, ttl).ignore();
@@ -323,7 +323,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
         // Publish deployment metrics update message to project page
         if !deployment_messages.is_empty() {
-            let channel = ChannelNames::project_metrics(&id);
+            let channel = ChannelNames::deployments_metrics(&id);
             let message = ComputeEvent::DeploymentMetricsUpdate {
                 updates: deployment_messages,
             };

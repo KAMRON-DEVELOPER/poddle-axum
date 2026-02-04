@@ -1,29 +1,33 @@
+use compute_core::cache_keys::CacheKeys;
 use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
+use compute_core::schemas::{Pod, PodHistory};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
-use k8s_openapi::api::core::v1::Pod;
-use kube::runtime::watcher::{Config, Event};
+use k8s_openapi::api::core::v1::Pod as K8sPod;
+use kube::runtime::watcher::{Config as WatcherConfig, Event};
 use kube::{Api, Client};
-use redis::AsyncTypedCommands;
 use redis::aio::MultiplexedConnection;
+use redis::{AsyncTypedCommands, pipe};
 use sqlx::PgPool;
 use tracing::{Instrument, error, info, info_span, warn};
 use uuid::Uuid;
 
+use crate::config::Config;
 use crate::error::AppError;
 
 pub async fn event_watcher(
     pool: PgPool,
+    cfg: Config,
     mut redis: MultiplexedConnection,
     client: Client,
 ) -> Result<(), AppError> {
-    let watcher_config = Config::default().labels("managed-by=poddle");
+    let watcher_config = WatcherConfig::default().labels("managed-by=poddle");
 
     let deployment: Api<K8sDeployment> = Api::all(client.clone());
-    let pod: Api<Pod> = Api::all(client.clone());
+    let pod: Api<K8sPod> = Api::all(client.clone());
 
     let mut deployment_stream = kube::runtime::watcher(deployment, watcher_config.clone()).boxed();
     let mut pod_stream = kube::runtime::watcher(pod, watcher_config).boxed();
@@ -37,7 +41,7 @@ pub async fn event_watcher(
                 }
             }
             Some(event) = pod_stream.next() => {
-                if let Err(e) = handle_pod_event(event, &pool, &mut redis).await {
+                if let Err(e) = handle_pod_event(event,&cfg, &pool, &mut redis).await {
                     error!(error = %e, "❌ Failed to handle pod event");
                 }
             }
@@ -118,7 +122,7 @@ async fn handle_deployment_event(
                 id: &deployment_id,
                 status: new_status,
             };
-            send_message(&project_id, message, con).await?
+            send_deployments_message(&project_id, message, con).await?
         }
         Ok(Event::Delete(deployment)) => {
             let labels = deployment.metadata.labels.as_ref();
@@ -147,7 +151,7 @@ async fn handle_deployment_event(
                 id: &deployment_id,
                 status: DeploymentStatus::Deleted,
             };
-            send_message(&project_id, message, con).await?
+            send_deployments_message(&project_id, message, con).await?
         }
         Ok(Event::Init) => info!("✅ Watcher started init phase"),
         Ok(Event::InitApply(_)) => {}
@@ -160,7 +164,8 @@ async fn handle_deployment_event(
 
 #[tracing::instrument("handle_deployment_event", skip_all, err)]
 async fn handle_pod_event(
-    event: Result<Event<Pod>, kube::runtime::watcher::Error>,
+    event: Result<Event<K8sPod>, kube::runtime::watcher::Error>,
+    cfg: &Config,
     pool: &PgPool,
     con: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
@@ -182,24 +187,18 @@ async fn handle_pod_event(
 
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
-            let pod_name = pod.metadata.name.as_ref().unwrap();
 
-            // Extract pod phase
-            // let phase_str = pod
-            //     .status
-            //     .as_ref()
-            //     .and_then(|s| s.phase.as_deref())
-            //     .unwrap_or("Unknown");
-            // let phase = match phase_str {
-            //     "Pending" => PodPhase::Pending,
-            //     "Running" => PodPhase::Running,
-            //     "Succeeded" => PodPhase::Succeeded,
-            //     "Failed" => PodPhase::Failed,
-            //     _ => PodPhase::Unknown,
-            // };
+            let uid = pod.metadata.uid.as_ref().unwrap().to_string();
+            let name = pod.metadata.name.as_ref().unwrap().to_string();
+            let phase = pod
+                .status
+                .as_ref()
+                .and_then(|s| s.phase.as_deref())
+                .unwrap_or("Unknown")
+                .into();
+            let mut restart_count = 0;
 
             // Health Analysis
-            let mut restart_count = 0;
             let mut crash_reason: Option<String> = None;
 
             if let Some(statuses) = pod
@@ -226,7 +225,7 @@ async fn handle_pod_event(
                 warn!(
                     deployment_id = %deployment_id,
                     "⚠️ Pod {} in namespace {:?} is unhealthy: {} (restarts: {})",
-                    pod_name, ns, reason, restart_count
+                    name, ns, reason, restart_count
                 );
 
                 // Update DB Status (Only if strictly needed)
@@ -247,11 +246,56 @@ async fn handle_pod_event(
                         message: format!("Deployment is crashing: {}", reason),
                         level: EventLevel::Error,
                     };
-                    send_message(&project_id, message, con).await?
+                    send_deployments_message(&project_id, message, con).await?
                 }
             }
+
+            let mut p = pipe();
+            let ttl = cfg.prometheus.scrape_interval * cfg.prometheus.snapshots_to_keep;
+            let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
+            let meta = PodHistory {
+                uid,
+                name,
+                phase,
+                restart_count,
+            };
+            p.set(&meta_key, &meta).ignore();
+            p.expire(&meta_key, ttl).ignore();
+
+            let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
+            let message = ComputeEvent::PodApply {
+                pod: Pod {
+                    meta,
+                    ..Default::default()
+                },
+            };
+            p.publish(channel, message);
+            p.query_async::<()>(con).await?;
         }
-        Ok(Event::Delete(_)) | Ok(Event::Init) | Ok(Event::InitApply(_)) | Ok(Event::InitDone) => {}
+        Ok(Event::Delete(pod)) => {
+            let labels = pod.metadata.labels.as_ref();
+            let project_id = labels
+                .and_then(|l| l.get("poddle.io/project-id"))
+                .and_then(|id| Uuid::parse_str(id).ok());
+            let deployment_id = labels
+                .and_then(|l| l.get("poddle.io/deployment-id"))
+                .and_then(|id| Uuid::parse_str(id).ok());
+
+            if project_id.is_none() || deployment_id.is_none() {
+                // Not our deployment, skip
+                return Ok(());
+            }
+
+            let deployment_id = deployment_id.unwrap();
+            let uid = pod.metadata.uid.as_ref().unwrap().to_string();
+
+            let mut p = pipe();
+            let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
+            let message = ComputeEvent::PodDelete { uid };
+            p.publish(channel, message);
+            p.query_async::<()>(con).await?;
+        }
+        Ok(Event::Init) | Ok(Event::InitApply(_)) | Ok(Event::InitDone) => {}
         Err(e) => error!("Pod watcher error: {}", e),
     }
 
@@ -264,7 +308,7 @@ async fn when_affacted_rows_zero(
     con: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
     {
-        let channel = ChannelNames::project_metrics(&project_id.to_string());
+        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
         let message = ComputeEvent::DeploymentSystemMessage {
             id: deployment_id,
             level: EventLevel::Error,
@@ -283,12 +327,12 @@ async fn when_affacted_rows_zero(
     }
 }
 
-async fn send_message(
-    project_id: &Uuid,
+async fn send_deployments_message(
+    id: &Uuid,
     msg: ComputeEvent<'_>,
     con: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
-    let channel = ChannelNames::project_metrics(&project_id.to_string());
+    let channel = ChannelNames::deployments_metrics(&id.to_string());
     con.publish(channel, msg)
         .instrument(info_span!("pubsub.status_update"))
         .await?;
