@@ -4,6 +4,7 @@ use crate::{
     features::{
         queries::{DeploymentMetricsQuery, DeploymentsMetricsQuery, LogQuery},
         repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
+        schemas::LokiResponse,
     },
     services::cache_service::CacheService,
 };
@@ -29,7 +30,6 @@ use http_contracts::{
 use lapin::{BasicProperties, options::BasicPublishOptions, types::FieldTable};
 
 use reqwest::Client;
-use serde_json::Value;
 use tracing::{Instrument, debug, error, info, info_span};
 use url::Url;
 use users_core::jwt::Claims;
@@ -520,7 +520,7 @@ pub async fn get_logs_handler(
         return Err(StatusCode::BAD_GATEWAY.into());
     }
 
-    let json_body = response.json::<Value>().await?;
+    let response = response.json::<LokiResponse>().await?;
 
-    Ok(axum::Json(json_body))
+    Ok(Json(response))
 }
