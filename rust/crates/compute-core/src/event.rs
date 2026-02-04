@@ -37,14 +37,6 @@ pub enum ComputeEvent<'a> {
         updates: Vec<PodMetricUpdate>,
     },
 
-    PodApply {
-        pod: Pod,
-    },
-
-    PodDelete {
-        uid: String,
-    },
-
     PodStatusUpdate {
         uid: &'a String,
         status: DeploymentStatus,
@@ -54,5 +46,13 @@ pub enum ComputeEvent<'a> {
         uid: &'a String,
         message: String,
         level: EventLevel,
+    },
+
+    PodApply {
+        pod: Pod,
+    },
+
+    PodDelete {
+        uid: String,
     },
 }
