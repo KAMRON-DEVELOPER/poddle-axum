@@ -24,8 +24,9 @@ use uuid::Uuid;
 use crate::{
     config::Config,
     features::{
+        queries::TailQuery,
         repository::{DeploymentRepository, ProjectRepository},
-        schemas::{LogQuery, LogResponse, LogStreamEvent, LokiTailResponse},
+        schemas::{LogResponse, LogStreamEvent, LokiTailResponse},
     },
 };
 
@@ -96,13 +97,14 @@ pub async fn stream_deployments_metrics_see_handler(
         user_id = %claims.sub,
         project_id = %project_id,
         deployment_id = %deployment_id,
+        pod_uid = %pod_uid,
     ),
     err
 )]
 pub async fn stream_logs_see_handler(
     claims: Claims,
-    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
-    Query(q): Query<LogQuery>,
+    Path((project_id, deployment_id, pod_uid)): Path<(Uuid, Uuid, String)>,
+    Query(q): Query<TailQuery>,
     State(cfg): State<Config>,
     State(db): State<Database>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
@@ -132,15 +134,16 @@ pub async fn stream_logs_see_handler(
     url.set_path("/loki/api/v1/tail");
 
     let query = format!(
-        r#"{{project_id="{}", deployment_id="{}"}}"#,
-        project_id, deployment_id
+        r#"{{project_id="{}", deployment_id="{}"}} | pod_uid = "{}""#,
+        project_id, deployment_id, pod_uid
     );
-    let start = q.start.timestamp_nanos_opt().unwrap().to_string();
+
+    let start_nanos = q.resolve_nanos().map_err(|_| StatusCode::BAD_REQUEST)?;
 
     // Set Query Params directly on the URL object
     // This handles encoding automatically
     url.query_pairs_mut().append_pair("query", &query);
-    url.query_pairs_mut().append_pair("start", &start);
+    url.query_pairs_mut().append_pair("start", &start_nanos);
 
     // Build Request
     let mut request = url

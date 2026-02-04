@@ -515,7 +515,7 @@ impl KubernetesService {
     #[tracing::instrument(
         name = "kubernetes_service.create_deployment",
         skip_all,
-        fields(ns = %ns, image = %image, port = %port, desired_replicas = %desired_replicas, resource_spec = %resource_spec),
+        fields(ns = %ns, image = %image, port = %port, desired_replicas = %desired_replicas),
         err
     )]
     async fn create_deployment(

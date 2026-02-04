@@ -46,6 +46,11 @@ discovery.relabel "logs" {
 	}
 
 	rule {
+		source_labels = ["__meta_kubernetes_pod_uid"]
+		target_label  = "pod_uid"
+	}
+
+	rule {
 		source_labels = ["__meta_kubernetes_pod_container_name"]
 		target_label  = "container"
 	}
@@ -187,6 +192,7 @@ loki.process "default" {
 		values = {
 			trace_id = "trace_id",
 			span_id  = "span_id",
+			pod_uid  = "pod_uid",
 		}
 	}
 

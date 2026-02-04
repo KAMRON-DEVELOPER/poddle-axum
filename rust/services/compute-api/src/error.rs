@@ -4,6 +4,8 @@ use axum_core::response::{IntoResponse, Response};
 use serde_json::json;
 use thiserror::Error;
 
+use crate::features::queries::error::TimeRangeError;
+
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Database query error: {0}")]
@@ -97,6 +99,9 @@ pub enum AppError {
     InvalidImageFormatError(String),
     #[error("HTTP request error: {0}")]
     Request(#[from] reqwest::Error),
+
+    #[error("Time range error: {0}")]
+    TimeRangeError(#[from] TimeRangeError),
 }
 
 impl IntoResponse for AppError {
@@ -223,6 +228,7 @@ impl IntoResponse for AppError {
             Self::InvalidImageFormatError(e) => (StatusCode::UNPROCESSABLE_ENTITY, e),
 
             Self::Request(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Self::TimeRangeError(e) => (StatusCode::BAD_REQUEST, e.to_string()),
         };
 
         let body = Json(json!({"error": error_message}));

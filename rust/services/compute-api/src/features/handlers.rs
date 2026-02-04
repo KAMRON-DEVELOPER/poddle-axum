@@ -2,8 +2,8 @@ use crate::{
     config::Config,
     error::AppError,
     features::{
+        queries::{DeploymentMetricsQuery, DeploymentsMetricsQuery, LogQuery},
         repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
-        schemas::LogQuery,
     },
     services::cache_service::CacheService,
 };
@@ -15,8 +15,8 @@ use axum::{
 };
 use compute_core::schemas::{
     CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-    DeleteDeploymentMessage, DeploymentResponse, DeploymentsResponse, ProjectPageQuery,
-    UpdateDeploymentMessage, UpdateDeploymentRequest, UpdateProjectRequest,
+    DeleteDeploymentMessage, DeploymentResponse, DeploymentsResponse, UpdateDeploymentMessage,
+    UpdateDeploymentRequest, UpdateProjectRequest,
 };
 use factory::factories::{
     amqp::{Amqp, AmqpPropagator},
@@ -176,13 +176,13 @@ pub async fn get_deployment_handler(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     Query(p): Query<Pagination>,
-    Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
+    Query(q): Query<DeploymentMetricsQuery>,
     State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let count = (minutes * 60 / cfg.prometheus.scrape_interval) as isize;
+    let count = q.snapshot_count(cfg.prometheus.scrape_interval);
 
     let deployment =
         DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
@@ -200,14 +200,13 @@ pub async fn get_deployments_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     Query(p): Query<Pagination>,
-    Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
+    Query(q): Query<DeploymentsMetricsQuery>,
     State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    // scrape_interval in seconds, so we convert minutes query to seconds
-    let count = (minutes * 60 / cfg.prometheus.scrape_interval) as isize;
+    let count = q.snapshot_count(cfg.prometheus.scrape_interval);
 
     let (deployments, total) =
         DeploymentRepository::get_all_by_project(&user_id, &project_id, &p, &database.pool).await?;
@@ -464,12 +463,13 @@ pub async fn delete_deployment_handler(
         user_id = %claims.sub,
         project_id = %project_id,
         deployment_id = %deployment_id,
+        pod_uid = %pod_uid,
     ),
     err
 )]
 pub async fn get_logs_handler(
     claims: Claims,
-    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Path((project_id, deployment_id, pod_uid)): Path<(Uuid, Uuid, String)>,
     Query(q): Query<LogQuery>,
     State(http): State<Client>,
     State(cfg): State<Config>,
@@ -486,17 +486,19 @@ pub async fn get_logs_handler(
     url.set_path("/loki/api/v1/query_range");
 
     let query = format!(
-        r#"{{project_id="{}", deployment_id="{}"}}"#,
-        project_id, deployment_id
+        r#"{{project_id="{}", deployment_id="{}"}} | pod_uid = "{}""#,
+        project_id, deployment_id, pod_uid
     );
-    let start = q.start.timestamp_nanos_opt().unwrap().to_string();
-    let end = q.end.timestamp_nanos_opt().unwrap().to_string();
-    let direction = "backward".to_owned();
+
+    // Convert to nanoseconds - validation happens inside
+    let (start_nanos, end_nanos) = q.resolve_nanos()?;
+
     let query = [
         ("query", &query),
-        ("start", &start),
-        ("end", &end),
-        ("direction", &direction),
+        ("start", &start_nanos),
+        ("end", &end_nanos),
+        ("direction", &"backward".to_string()),
+        ("limit", &"5000".to_string()),
     ];
 
     info!(

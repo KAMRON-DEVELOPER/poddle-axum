@@ -1,6 +1,7 @@
 pub mod handlers;
 pub mod implementations;
 pub mod models;
+pub mod queries;
 pub mod repository;
 pub mod schemas;
 pub mod see;

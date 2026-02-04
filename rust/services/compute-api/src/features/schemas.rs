@@ -1,29 +1,18 @@
 use std::collections::HashMap;
 
-use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
-#[derive(Deserialize, Debug)]
-pub struct LogQuery {
-    #[serde(default = "default_start")]
-    pub start: DateTime<Utc>,
-    #[serde(default = "default_end")]
-    pub end: DateTime<Utc>,
-}
+// ----------------------------------------------------------------
+//  PROJECT
+// ----------------------------------------------------------------
 
-#[derive(Deserialize)]
-pub struct TailQuery {
-    #[serde(default = "default_start")]
-    pub start: DateTime<Utc>,
-}
+// ----------------------------------------------------------------
+//  DEPLOYMENT
+// ----------------------------------------------------------------
 
-fn default_start() -> DateTime<Utc> {
-    Utc::now() - Duration::minutes(15)
-}
-
-fn default_end() -> DateTime<Utc> {
-    Utc::now()
-}
+// ----------------------------------------------------------------
+//  LOG
+// ----------------------------------------------------------------
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct LokiResponse {

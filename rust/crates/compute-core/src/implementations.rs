@@ -1,5 +1,3 @@
-use std::fmt;
-
 use uuid::Uuid;
 
 use crate::{
@@ -144,75 +142,5 @@ impl From<(Uuid, Uuid, Uuid, Option<Preset>, UpdateDeploymentRequest)> for Updat
             subdomain: req.subdomain,
             timestamp: chrono::Utc::now().timestamp(),
         }
-    }
-}
-
-impl fmt::Display for ResourceSpec {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "ResourceSpec {{ CPU: {}-{} millicores, Memory: {}-{} MB }}",
-            self.cpu_request_millicores,
-            self.cpu_limit_millicores,
-            self.memory_request_mb,
-            self.memory_limit_mb
-        )
-    }
-}
-
-impl fmt::Display for CreateDeploymentRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "CreateDeploymentRequest {{")?;
-        writeln!(f, "  name: \"{}\"", self.name)?;
-        writeln!(f, "  image: \"{}\"", self.image)?;
-        writeln!(f, "  port: {}", self.port)?;
-        writeln!(f, "  desired_replicas: {}", self.desired_replicas)?;
-        writeln!(f, "  preset_id: {}", self.preset_id)?;
-        writeln!(f, "  addon_cpu_millicores: {:?}", self.addon_cpu_millicores)?;
-        writeln!(f, "  addon_memory_mb: {:?}", self.addon_memory_mb)?;
-
-        if let Some(secrets) = &self.secrets {
-            writeln!(f, "  secrets: {{")?;
-            for (key, _) in secrets {
-                writeln!(f, "    {}: [REDACTED]", key)?;
-            }
-            writeln!(f, "  }}")?;
-        } else {
-            writeln!(f, "  secrets: None")?;
-        }
-
-        if let Some(env_vars) = &self.environment_variables {
-            writeln!(f, "  environment_variables: {{")?;
-            for (key, value) in env_vars {
-                writeln!(f, "    {}: \"{}\"", key, value)?;
-            }
-            writeln!(f, "  }}")?;
-        } else {
-            writeln!(f, "  environment_variables: None")?;
-        }
-
-        if let Some(labels) = &self.labels {
-            writeln!(f, "  labels: {{")?;
-            for (key, value) in labels {
-                writeln!(f, "    {}: \"{}\"", key, value)?;
-            }
-            writeln!(f, "  }}")?;
-        } else {
-            writeln!(f, "  labels: None")?;
-        }
-
-        if let Some(domain) = &self.domain {
-            writeln!(f, "  domain: \"{}\"", domain)?;
-        } else {
-            writeln!(f, "  domain: None")?;
-        }
-
-        if let Some(subdomain) = &self.subdomain {
-            writeln!(f, "  subdomain: \"{}\"", subdomain)?;
-        } else {
-            writeln!(f, "  subdomain: None")?;
-        }
-
-        write!(f, "}}")
     }
 }

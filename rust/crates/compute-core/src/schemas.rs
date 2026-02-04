@@ -3,7 +3,6 @@ use once_cell::sync::Lazy;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use serde_with::{DisplayFromStr, serde_as};
 use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
@@ -13,18 +12,6 @@ use crate::models::{DeploymentStatus, ResourceSpec};
 // -----------------------------------------------
 // PROJECT SCHEMAS
 // -----------------------------------------------
-
-#[serde_as]
-#[derive(Deserialize, Serialize, Debug)]
-pub struct ProjectPageQuery {
-    #[serde(default = "project_page_minutes")]
-    #[serde_as(as = "DisplayFromStr")]
-    pub minutes: i64,
-}
-
-fn project_page_minutes() -> i64 {
-    5
-}
 
 #[derive(Deserialize, Validate, Debug)]
 #[serde(rename_all = "camelCase")]
