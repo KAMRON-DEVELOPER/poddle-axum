@@ -4,19 +4,19 @@ pub mod implementation;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
-/// Query for fetching metrics for multiple deployments (Project Page)
+/// Query for fetching metrics for a single deployment with pods (Deployment Page)
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentsMetricsQuery {
+pub struct DeploymentMetricsQuery {
     /// Relative window in minutes (default: 30)
     #[serde(default = "default_minutes")]
     pub minutes: i64,
 }
 
-/// Query for fetching metrics for a single deployment with pods (Deployment Page)
+/// Query for fetching metrics for multiple deployments (Project Page)
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentMetricsQuery {
+pub struct DeploymentsMetricsQuery {
     /// Relative window in minutes (default: 30)
     #[serde(default = "default_minutes")]
     pub minutes: i64,
