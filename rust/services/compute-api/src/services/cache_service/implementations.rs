@@ -1,113 +1,105 @@
 use compute_core::{
     cache_keys::CacheKeys,
-    schemas::{MetricHistory, MetricSnapshot, Pod},
+    schemas::{MetricHistory, MetricSnapshot, Pod, PodHistory},
 };
 use http_contracts::pagination::schema::Pagination;
-use redis::{AsyncTypedCommands as _, JsonAsyncCommands, aio::MultiplexedConnection, pipe};
+use redis::{AsyncTypedCommands, aio::MultiplexedConnection};
 use tracing::{error, info};
 
 use crate::{error::AppError, services::cache_service::CacheService};
 
 impl CacheService {
-    /// Produce deployment inside pod level metrics
+    /// Get pods with metrics for a deployment (Deployment Page)
     #[tracing::instrument(name = "cache_service.get_deployment_pods", skip_all, err)]
     pub async fn get_deployment_pods(
         id: &str,
-        points_count: u64,
+        count: isize,
         p: &Pagination,
         con: &mut MultiplexedConnection,
     ) -> Result<Vec<Pod>, AppError> {
-        let key = CacheKeys::deployment_pod_names(&id);
-        let start = p.limit as isize;
-        let stop = p.offset as isize;
+        let index_key = CacheKeys::deployment_pods(&id);
 
-        let names = con.zrevrange(key, start, stop).await?;
+        let start = p.offset as isize;
+        let stop = (p.offset + p.limit) as isize - 1;
 
-        if names.is_empty() {
+        // Get pod UIDs
+        let uids = con.zrevrange(index_key, start, stop).await.map_err(|e| {
+            error!(error = %e, "❌ Failed to get pod UIDs");
+            AppError::InternalServerError(format!("❌ Failed to get pod UIDs: {}", e))
+        })?;
+
+        if uids.is_empty() {
             return Ok(Vec::new());
         }
 
-        let keys = CacheKeys::deployment_pods_metrics(id, &names);
-        let path = format!("$.snapshots[-{}:]", points_count);
+        let mut p = redis::pipe();
 
-        let query_start = std::time::Instant::now();
-        let results: Vec<Option<Vec<String>>> = con.json_get(&keys, &path).await.map_err(|e| {
-            error!(error = %e, "❌ Redis query failed");
-            AppError::InternalServerError(format!("❌ Redis query failed: {}", e))
-        })?;
+        for uid in &uids {
+            let meta_key = CacheKeys::deployment_pod_meta(id, uid);
+            let metrics_key = CacheKeys::deployment_pod_metrics(id, uid);
+
+            p.hgetall(meta_key); // Metadata (Hash -> Struct)
+            p.lrange(metrics_key, 0, count - 1); // Metrics (List -> Vec<Struct>)
+        }
+
+        let start = std::time::Instant::now();
+
+        // Execute Pipeline
+        // The power of redis-rs: It deserializes the flat stream into tuples!
+        // Expect: Vec<(PodHistory, Vec<MetricSnapshot>)>
+        let results: Vec<(PodHistory, Vec<MetricSnapshot>)> =
+            p.query_async(con).await.map_err(|e| {
+                error!(error = %e, "❌ Redis pipeline failed");
+                AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
+            })?;
+
         info!(
-            query_elapsed = query_start.elapsed().as_millis(),
-            "🏁 Pipeline query completed"
+            elapsed = start.elapsed().as_millis(),
+            pods_count = uids.len(),
+            "⌛ Pod metrics fetched"
         );
 
-        let mget_results = results.into_iter().next().flatten().unwrap_or_default();
-
-        let pods = names
+        let pods: Vec<Pod> = results
             .into_iter()
-            .enumerate()
-            .map(|(i, name)| {
-                let snapshots = mget_results
-                    .get(i)
-                    .and_then(|s| serde_json::from_str::<Vec<MetricSnapshot>>(s).ok())
-                    .unwrap_or_default();
-
-                Pod {
-                    name,
-                    metrics: snapshots,
-                }
-            })
-            .collect::<Vec<Pod>>();
+            .map(|(meta, metrics)| Pod { meta, metrics })
+            .collect();
 
         Ok(pods)
     }
 
+    /// Get aggregated metrics for multiple deployments (Project Page)
     #[tracing::instrument(name = "cache_service.get_deployments_metrics", skip_all, err)]
     pub async fn get_deployments_metrics(
-        points_count: u64,
         ids: Vec<&str>,
+        count: isize,
         con: &mut MultiplexedConnection,
     ) -> Result<Vec<MetricHistory>, AppError> {
-        // Safety check for Redis syntax
         if ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        let keys = CacheKeys::deployments_metrics(&ids);
-        let path = format!("$.snapshots[-{}:]", points_count);
+        let mut p = redis::pipe();
 
-        let pipeline_start = std::time::Instant::now();
-        let mut p: redis::Pipeline = pipe();
-        p.json_get(&keys, &path)?;
+        for id in &ids {
+            let key = CacheKeys::deployment_metrics(&id);
+            p.lrange(key, 0, -count - 1);
+        }
 
-        let results: Vec<Option<Vec<String>>> = p.query_async(con).await.map_err(|e| {
+        let start = std::time::Instant::now();
+
+        let results: Vec<Vec<MetricSnapshot>> = p.query_async(con).await.map_err(|e| {
             error!(error = %e, "❌ Redis pipeline failed");
             AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
         })?;
+
         info!(
-            pipeline_elapsed = pipeline_start.elapsed().as_millis(),
-            "🏁 Pipeline query completed"
+            elapsed = start.elapsed().as_millis(),
+            "🏁 Deployment metrics fetched"
         );
 
-        // Extract MGET Results safely
-        // Take the first result, flatten the Option, and default to empty Vec on failure
-        let mget_results = results.into_iter().next().flatten().unwrap_or_default();
-
-        // Map to Domain Objects with Length Guarantee
-        // We iterate over the INPUT length (ids), not the Redis result length.
-        // This ensures that if Redis returns fewer items or fails, we pad with empty metrics
-        // rather than dropping the deployment from the UI.
-        let metrics = (0..ids.len())
-            .map(|i| {
-                // Try to get the JSON string at index `i`
-                let snapshots = mget_results
-                    .get(i)
-                    // If found, try to parse it
-                    .and_then(|s| serde_json::from_str::<Vec<MetricSnapshot>>(s).ok())
-                    // If index missing OR parsing failed, return empty snapshots
-                    .unwrap_or_default();
-
-                MetricHistory { snapshots }
-            })
+        let metrics = results
+            .into_iter()
+            .map(|snapshots| MetricHistory { snapshots })
             .collect();
 
         Ok(metrics)

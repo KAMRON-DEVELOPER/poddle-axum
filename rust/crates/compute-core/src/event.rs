@@ -10,22 +10,32 @@ use crate::{
 #[derive(ToRedisArgs, Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
-    // Corresponds to: { "type": "DeploymentMetricsUpdate", "updates": { id: ..., snapshot: { ts: ..., cpu: ..., memory: ... } }, ... }
     DeploymentMetricsUpdate {
         updates: Vec<DeploymentMetricUpdate>,
     },
-    // Corresponds to: { "type": "PodMetricsUpdate", "updates": { pod_name: ..., snapshot: { ts: ..., cpu: ..., memory: ... } }, ... }
-    PodMetricsUpdate {
-        updates: Vec<PodMetricUpdate>,
-    },
-    // Corresponds to: { "type": "DeploymentStatusUpdate", "deployment_id": "...", "status": "...", ... }
+
     DeploymentStatusUpdate {
         id: &'a Uuid,
         status: DeploymentStatus,
     },
-    // Corresponds to: { "type": "DeploymentSystemMessage", "deployment_id": "...", "message": "...", "level": "...", ... }
+
     DeploymentSystemMessage {
         id: &'a Uuid,
+        message: String,
+        level: EventLevel,
+    },
+
+    PodMetricsUpdate {
+        updates: Vec<PodMetricUpdate>,
+    },
+
+    PodStatusUpdate {
+        uid: &'a String,
+        status: DeploymentStatus,
+    },
+
+    PodSystemMessage {
+        uid: &'a String,
         message: String,
         level: EventLevel,
     },

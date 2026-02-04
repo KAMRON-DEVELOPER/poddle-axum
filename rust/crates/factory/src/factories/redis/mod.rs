@@ -30,5 +30,5 @@ pub struct RedisConfig {
 #[derive(Clone)]
 pub struct Redis {
     pub client: Client,
-    pub connection: MultiplexedConnection,
+    pub con: MultiplexedConnection,
 }

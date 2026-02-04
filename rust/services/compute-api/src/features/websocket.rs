@@ -45,7 +45,7 @@ async fn handle_stream_metrics(
     redis: Redis,
     mut socket: WebSocket,
 ) {
-    let mut conn = redis.connection.clone();
+    let mut conn = redis.con.clone();
     let deployment_id = deployment_id.to_string();
 
     let mut interval = time::interval(Duration::from_secs(25));

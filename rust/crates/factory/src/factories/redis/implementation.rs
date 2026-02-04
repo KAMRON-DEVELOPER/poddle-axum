@@ -18,7 +18,7 @@ impl Redis {
                 .get_multiplexed_tokio_connection()
                 .await
                 .unwrap_or_else(|e| panic!("Couldn't establish connection to redis: {}", e));
-            return Self { client, connection };
+            return Self { client, con: connection };
         }
 
         let client = Client::open(conn_info)
@@ -30,7 +30,7 @@ impl Redis {
 
         info!("✅ Redis client & connection created");
 
-        Self { client, connection }
+        Self { client, con: connection }
     }
 
     pub async fn pubsub(&self) -> Result<PubSub, RedisError> {

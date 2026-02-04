@@ -212,7 +212,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         for vec in vecs {
             let labels = vec.metric();
             if let (Some(name), Some(pid), Some(did)) = (
-                labels.get("name"),
+                labels.get("pod"),
                 labels.get("label_poddle_io_project_id"),
                 labels.get("label_poddle_io_deployment_id"),
             ) {
@@ -238,17 +238,17 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
     let mut p = redis::pipe();
 
-    for (pid, deployment_map) in project_map {
+    for (id, deployment_map) in project_map {
         projects_count += 1;
         let mut deployment_messages = Vec::new();
 
         // We send deployment messages after deployment_map loop
-        for (did, DeploymentBuffer { snapshot, pod_map }) in deployment_map {
+        for (id, DeploymentBuffer { snapshot, pod_map }) in deployment_map {
             deployments_count += 1;
             let mut pod_messages = Vec::new();
 
             // Deployment Metrics Key
-            let key = CacheKeys::deployment_metrics(&did);
+            let key = CacheKeys::deployment_metrics(&id);
             let ttl = cfg.scrape_interval * cfg.snapshots_to_keep;
 
             // Append Snapshot
@@ -268,9 +268,9 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             ) in pod_map
             {
                 pods_count += 1;
-                let index_key = CacheKeys::deployment_pods(&did);
-                let meta_key = CacheKeys::deployment_pod_meta(&did, &uid);
-                let metrics_key = CacheKeys::deployment_pod_metrics(&did, &uid);
+                let index_key = CacheKeys::deployment_pods(&id);
+                let meta_key = CacheKeys::deployment_pod_meta(&id, &uid);
+                let metrics_key = CacheKeys::deployment_pod_metrics(&id, &uid);
 
                 // Index
                 let score = Utc::now().timestamp();
@@ -284,10 +284,18 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                     phase,
                     restarts,
                 };
-                // p.hset_multiple(&meta_key, &[(field, value)]).ignore();
-                // p.hset(&meta_key, field, value).ignore();
                 p.cmd("HSET").arg(&meta_key).arg(&meta).ignore();
                 p.expire(&meta_key, ttl).ignore();
+                // p.hset_multiple(
+                //     &meta_key,
+                //     &[
+                //         ("uid", &uid),
+                //         ("name", &name),
+                //         ("phase", &phase),
+                //         ("restarts", &restarts.to_string()),
+                //     ],
+                // )
+                // .ignore();
 
                 // Append snapshots
                 p.lpush(&metrics_key, &snapshot).ignore();
@@ -300,7 +308,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
             // Publish pod metrics update message to deployment page
             if !pod_messages.is_empty() {
-                let channel = ChannelNames::deployment_metrics(&did);
+                let channel = ChannelNames::deployment_metrics(&id);
                 let message = ComputeEvent::PodMetricsUpdate {
                     updates: pod_messages,
                 };
@@ -310,12 +318,12 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             }
 
             // We can use id cleanly after all referances
-            deployment_messages.push(DeploymentMetricUpdate { id: did, snapshot });
+            deployment_messages.push(DeploymentMetricUpdate { id, snapshot });
         }
 
         // Publish deployment metrics update message to project page
         if !deployment_messages.is_empty() {
-            let channel = ChannelNames::project_metrics(&pid);
+            let channel = ChannelNames::project_metrics(&id);
             let message = ComputeEvent::DeploymentMetricsUpdate {
                 updates: deployment_messages,
             };
@@ -328,11 +336,9 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     // Execute Pipeline
     if deployments_count > 0 {
         // We use `turbofish` syntax instead `let _: ()`
-        p.query_async::<()>(&mut redis.connection)
-            .await
-            .map_err(|e| {
-                AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
-            })?;
+        p.query_async::<()>(&mut redis.con).await.map_err(|e| {
+            AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
+        })?;
 
         info!(
             projects_count = projects_count,

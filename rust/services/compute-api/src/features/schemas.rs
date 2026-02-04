@@ -1,17 +1,7 @@
 use std::collections::HashMap;
 
 use chrono::{DateTime, Duration, Utc};
-use compute_core::schemas::ProjectPageQuery;
-use http_contracts::pagination::schema::Pagination;
 use serde::{Deserialize, Serialize};
-
-#[derive(Deserialize, Debug)]
-pub struct ProjectPageWithPaginationQuery {
-    #[serde(flatten)]
-    pub pagination: Pagination,
-    #[serde(flatten)]
-    pub project_page_query: ProjectPageQuery,
-}
 
 #[derive(Deserialize, Debug)]
 pub struct LogQuery {

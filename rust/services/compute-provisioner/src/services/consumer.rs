@@ -65,13 +65,13 @@ pub async fn start_consumer(ctx: ConsumerContext) -> Result<(), AppError> {
 
     set.spawn(handle_create_messages(
         ctx.database.pool.clone(),
-        ctx.redis.connection.clone(),
+        ctx.redis.con.clone(),
         ctx.k8s.clone(),
         create_consumer,
     ));
     set.spawn(handle_update_messages(
         ctx.database.pool.clone(),
-        ctx.redis.connection.clone(),
+        ctx.redis.con.clone(),
         ctx.k8s.clone(),
         update_consumer,
     ));

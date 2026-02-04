@@ -19,10 +19,10 @@ use crate::models::{DeploymentStatus, ResourceSpec};
 pub struct ProjectPageQuery {
     #[serde(default = "project_page_minutes")]
     #[serde_as(as = "DisplayFromStr")]
-    pub minutes: u64,
+    pub minutes: i64,
 }
 
-fn project_page_minutes() -> u64 {
+fn project_page_minutes() -> i64 {
     5
 }
 
@@ -256,7 +256,7 @@ pub struct MetricSnapshot {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Pod {
-    pub name: String,
+    pub meta: PodHistory,
     pub metrics: Vec<MetricSnapshot>,
 }
 

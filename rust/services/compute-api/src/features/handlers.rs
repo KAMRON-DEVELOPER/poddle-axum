@@ -3,7 +3,7 @@ use crate::{
     error::AppError,
     features::{
         repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
-        schemas::{LogQuery, ProjectPageWithPaginationQuery},
+        schemas::LogQuery,
     },
     services::cache_service::CacheService,
 };
@@ -15,8 +15,8 @@ use axum::{
 };
 use compute_core::schemas::{
     CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-    DeleteDeploymentMessage, DeploymentResponse, DeploymentsResponse, UpdateDeploymentMessage,
-    UpdateDeploymentRequest, UpdateProjectRequest,
+    DeleteDeploymentMessage, DeploymentResponse, DeploymentsResponse, ProjectPageQuery,
+    UpdateDeploymentMessage, UpdateDeploymentRequest, UpdateProjectRequest,
 };
 use factory::factories::{
     amqp::{Amqp, AmqpPropagator},
@@ -174,63 +174,43 @@ pub async fn delete_project_handler(
 )]
 pub async fn get_deployment_handler(
     claims: Claims,
-    Query(ProjectPageWithPaginationQuery {
-        pagination: p,
-        project_page_query,
-    }): Query<ProjectPageWithPaginationQuery>,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Query(p): Query<Pagination>,
+    Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
     State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval;
+    let count = minutes * 60 / cfg.prometheus.scrape_interval;
 
     let deployment =
         DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
 
-    let pods = CacheService::get_deployment_pods(
-        &deployment.id.to_string(),
-        points_count,
-        &p,
-        &mut redis.connection,
-    )
-    .await?;
+    let pods =
+        CacheService::get_deployment_pods(&deployment.id.to_string(), count, &p, &mut redis.con)
+            .await?;
 
     let response: DeploymentResponse = (deployment, pods).into();
     Ok(Json(response))
 }
 
-#[tracing::instrument(
-    name = "get_deployments_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id
-    ),
-    err
-)]
+#[tracing::instrument(name = "get_deployments_handler", skip_all, fields(user_id = %claims.sub, project_id = %project_id), err)]
 pub async fn get_deployments_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
-    Query(ProjectPageWithPaginationQuery {
-        pagination,
-        project_page_query,
-    }): Query<ProjectPageWithPaginationQuery>,
+    Query(p): Query<Pagination>,
+    Query(ProjectPageQuery { minutes }): Query<ProjectPageQuery>,
     State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let points_count = project_page_query.minutes * 60 / cfg.prometheus.scrape_interval;
+    // scrape_interval in seconds, so we convert minutes query to seconds
+    let count = minutes * 60 / cfg.prometheus.scrape_interval;
 
-    let (deployments, total) = DeploymentRepository::get_all_by_project(
-        &user_id,
-        &project_id,
-        &pagination,
-        &database.pool,
-    )
-    .await?;
+    let (deployments, total) =
+        DeploymentRepository::get_all_by_project(&user_id, &project_id, &p, &database.pool).await?;
 
     if total == 0 {
         return Ok(Json(ListResponse {
@@ -241,8 +221,7 @@ pub async fn get_deployments_handler(
 
     let ids: Vec<String> = deployments.iter().map(|d| d.id.to_string()).collect();
     let ids: Vec<&str> = ids.iter().map(|s| s.as_str()).collect();
-    let metrics =
-        CacheService::get_deployments_metrics(points_count, ids, &mut redis.connection).await?;
+    let metrics = CacheService::get_deployments_metrics(ids, count, &mut redis.con).await?;
 
     let data: Vec<DeploymentsResponse> = deployments
         .into_iter()
