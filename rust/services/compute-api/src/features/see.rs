@@ -32,7 +32,7 @@ use crate::{
 
 #[tracing::instrument(name = "stream_deployment_metrics_see_handler", skip_all, fields(deployment_id = %deployment_id), err)]
 pub async fn stream_deployment_metrics_see_handler(
-    Path(deployment_id): Path<Uuid>,
+    Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
     let metrics_channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
