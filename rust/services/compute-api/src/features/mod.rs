@@ -37,19 +37,19 @@ pub fn get_routes() -> Router<AppState> {
                 .delete(handlers::delete_deployment_handler),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/logs",
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs",
             get(handlers::get_logs_handler),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/logs/ws",
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs/ws",
             get(websocket::stream_logs_ws_handler),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/logs/see",
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs/see",
             get(see::stream_logs_see_handler),
         )
         .route(
-            "/api/v1/projects/{project_id}/deployments/{deployment_id}/see",
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/metrics/see",
             get(see::stream_deployment_metrics_see_handler),
         )
         .route(
