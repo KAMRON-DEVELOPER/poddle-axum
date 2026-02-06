@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
-use redis_macros::{FromRedisValue, ToRedisArgs};
+use redis_derive::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

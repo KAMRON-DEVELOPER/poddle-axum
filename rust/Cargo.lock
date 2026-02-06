@@ -839,7 +839,7 @@ dependencies = [
  "chrono",
  "once_cell",
  "redis",
- "redis-macros",
+ "redis-derive",
  "regex",
  "serde",
  "serde_json",
@@ -3819,23 +3819,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "redis-macros"
-version = "0.5.6"
+name = "redis-derive"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5ac3609707f8c68aac6f3871c9a9596a7a9e30e3cc42ebba741d13b39e27c6d8"
+checksum = "455350784214b0fc158a834a6ec119310eff4d4bda16f7a2264365a4420222ec"
 dependencies = [
- "redis",
- "redis-macros-derive",
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "redis-macros-derive"
-version = "0.5.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "923db076e23f014fd5c5504fba397d3dd06b29724a3dd8e21aa7a3423c00b129"
-dependencies = [
+ "heck",
  "proc-macro2",
  "quote",
  "redis",

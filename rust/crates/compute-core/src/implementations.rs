@@ -1,14 +1,27 @@
 use std::fmt::Display;
 
+use redis::{RedisWrite, ToRedisArgs};
 use uuid::Uuid;
 
 use crate::{
+    event::ComputeEvent,
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
         MetricHistory, PodHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
+
+impl<'a> ToRedisArgs for ComputeEvent<'a> {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + RedisWrite,
+    {
+        // to_vec is slightly more efficient than to_string
+        let bytes = serde_json::to_vec(self).expect("ComputeEvent must serialize");
+        out.write_arg(&bytes);
+    }
+}
 
 impl From<&str> for PodPhase {
     fn from(value: &str) -> Self {

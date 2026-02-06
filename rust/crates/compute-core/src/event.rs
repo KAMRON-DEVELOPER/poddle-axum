@@ -1,4 +1,3 @@
-use redis_macros::ToRedisArgs;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -15,7 +14,7 @@ pub enum EventLevel {
     Success,
 }
 
-#[derive(ToRedisArgs, Serialize, Clone, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
     DeploymentMetricsUpdate {
