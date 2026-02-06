@@ -147,7 +147,7 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
 
     info!(
         elapsed = start.elapsed().as_millis(),
-        "☑️ Reconcilation done",
+        "✅ Reconcilation done",
     );
 
     Ok(())
