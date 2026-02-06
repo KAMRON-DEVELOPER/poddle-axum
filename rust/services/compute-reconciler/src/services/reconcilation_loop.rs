@@ -47,7 +47,7 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
     .await?;
 
     info!(
-        "🔍 Reconcilation started. {} deployments",
+        "🔍 Reconcilation started with {} deployments",
         db_deployments.len()
     );
 
