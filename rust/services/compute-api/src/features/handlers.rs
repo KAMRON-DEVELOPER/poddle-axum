@@ -208,10 +208,6 @@ pub async fn get_pods_handler(
     let count = q.snapshot_count(cfg.prometheus.scrape_interval_secs);
 
     // TODO We may add project, deployment owner checking logic later
-    println!("project_id: {:?}", project_id);
-    println!("deployment_id: {:?}", deployment_id);
-    println!("p: {:?}", p);
-    println!("q: {:?}", q);
 
     let (data, total) =
         CacheService::get_pods(&deployment_id.to_string(), count, &p, &mut redis.con).await?;

@@ -22,9 +22,6 @@ impl CacheService {
         let start = p.offset as isize;
         let stop = (p.offset + p.limit) as isize - 1;
 
-        println!("start: {}", start);
-        println!("stop: {}", stop);
-
         // Get pod UIDs
         let uids = con.zrevrange(&index_key, start, stop).await.map_err(|e| {
             error!(error = %e, "❌ Failed to get pod UIDs");
@@ -38,9 +35,6 @@ impl CacheService {
         if uids.is_empty() {
             return Ok((Vec::new(), 0));
         }
-
-        println!("uids: {:?}", uids);
-        println!("total: {}", total);
 
         let mut p = redis::pipe();
 
