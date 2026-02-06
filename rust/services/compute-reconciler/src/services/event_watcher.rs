@@ -24,7 +24,7 @@ pub async fn event_watcher(
     mut redis: MultiplexedConnection,
     client: Client,
 ) -> Result<(), AppError> {
-    let watcher_config = WatcherConfig::default().labels("managed-by=poddle");
+    let watcher_config = WatcherConfig::default().labels("poddle.io/managed-by=poddle");
 
     let deployment: Api<K8sDeployment> = Api::all(client.clone());
     let pod: Api<K8sPod> = Api::all(client.clone());
