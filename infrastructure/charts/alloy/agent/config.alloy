@@ -286,18 +286,6 @@ prometheus.scrape "kubelet" {
 	}
 	bearer_token_file = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 
-	// forward_to = [prometheus.remote_write.default.receiver]
-	forward_to = [prometheus.relabel.default.receiver]
-}
-
-prometheus.relabel "default" {
-	// cAdvisor exports pod labels prefixed with 'container_label_'
-	rule {
-		source_labels = ["container_label_poddle_io_managed_by"]
-		regex         = "poddle"
-		action        = "keep"
-	}
-
 	forward_to = [prometheus.remote_write.default.receiver]
 }
 
