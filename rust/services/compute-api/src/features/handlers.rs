@@ -4,7 +4,7 @@ use crate::{
     features::{
         queries::{DeploymentMetricsQuery, DeploymentsMetricsQuery, LogQuery},
         repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
-        schemas::LokiResponse,
+        schemas::{LogResponse, LokiResponse},
     },
     services::cache_service::CacheService,
 };
@@ -540,7 +540,8 @@ pub async fn get_logs_handler(
         return Err(StatusCode::BAD_GATEWAY.into());
     }
 
-    let response = response.json::<LokiResponse>().await?;
+    let loki_response = response.json::<LokiResponse>().await?;
+    let response: LogResponse = loki_response.into();
 
     Ok(Json(response))
 }
