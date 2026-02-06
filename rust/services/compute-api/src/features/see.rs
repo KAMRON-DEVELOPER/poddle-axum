@@ -30,8 +30,17 @@ use crate::{
     },
 };
 
-#[tracing::instrument(name = "stream_deployment_metrics_see_handler", skip_all, fields(deployment_id = %deployment_id), err)]
+#[tracing::instrument(
+    name = "stream_deployment_metrics_see_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        deployment_id = %deployment_id
+    ),
+    err
+)]
 pub async fn stream_deployment_metrics_see_handler(
+    claims: Claims,
     Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
@@ -60,8 +69,17 @@ pub async fn stream_deployment_metrics_see_handler(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-#[tracing::instrument(name = "stream_metrics_see_handler", skip_all, fields(project_id = %project_id), err)]
+#[tracing::instrument(
+    name = "stream_deployments_metrics_see_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id
+    ),
+    err
+)]
 pub async fn stream_deployments_metrics_see_handler(
+    claims: Claims,
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
