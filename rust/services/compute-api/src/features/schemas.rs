@@ -21,8 +21,8 @@ pub struct LokiResponse {
 }
 
 #[derive(Deserialize, Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct LokiData {
-    #[serde(rename = "resultType")]
     pub result_type: String,
     pub result: Vec<LokiStreamResult>,
 }

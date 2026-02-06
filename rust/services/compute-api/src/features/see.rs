@@ -18,7 +18,7 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
 };
-use tracing::error;
+use tracing::{debug, error};
 use uuid::Uuid;
 
 use crate::{
@@ -173,6 +173,8 @@ pub async fn stream_logs_see_handler(
                 Ok(Message::Text(text)) => {
                     if let Ok(streams) = serde_json::from_str::<LokiTailResponse>(&text) {
                         let event = LogResponse::from(streams);
+
+                        debug!("event in stream_logs_see_handler: {:?}", event);
 
                         if let Ok(json) = serde_json::to_string(&event) {
                             // Use event("log") matching frontend listener
