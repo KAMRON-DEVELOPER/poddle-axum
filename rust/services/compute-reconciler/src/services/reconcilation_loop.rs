@@ -46,7 +46,12 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
     .fetch_all(pool)
     .await?;
 
-    info!("🔍 Reconciling {} deployments", db_deployments.len());
+    info!(
+        "🔍 Reconcilation started. {} deployments",
+        db_deployments.len()
+    );
+
+    let start = std::time::Instant::now();
 
     for db_deployment in db_deployments {
         let namespace = &format_namespace(&db_deployment.user_id);
@@ -139,6 +144,11 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
             }
         }
     }
+
+    info!(
+        elapsed = start.elapsed().as_millis(),
+        "☑️ Reconcilation done",
+    );
 
     Ok(())
 }
