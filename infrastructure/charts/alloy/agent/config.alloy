@@ -243,11 +243,12 @@ discovery.relabel "kubelet" {
 	}
 
 	// Use the node's internal IP
-	rule {
-		source_labels = ["__address__"]
-		replacement   = "$1:10250"
-		target_label  = "__address__"
-	}
+	// NOTE: We don't need to set this, it already exist
+	// rule {
+	// 	source_labels = ["__meta_kubernetes_node_address_InternalIP"]
+	// 	replacement   = "$1:10250"
+	// 	target_label  = "__address__"
+	// }
 
 	// Set the metrics path to kubelet's cAdvisor endpoint
 	rule {
