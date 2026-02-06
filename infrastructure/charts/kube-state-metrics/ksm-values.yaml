@@ -8,4 +8,4 @@ autosharding:
 replicas: 1
 
 metricLabelsAllowlist:
-  - pods=[poddle.io/managed-by,poddle.io/deployment-id,poddle.io/project-id]
+  - pods=[poddle.io/managed-by,poddle.io/deployment-id,poddle.io/project-id,poddle.io/preset-id]
