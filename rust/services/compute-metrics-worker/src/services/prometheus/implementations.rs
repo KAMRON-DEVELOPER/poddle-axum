@@ -111,7 +111,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     "#;
 
     // Execute queries
-    let query_start = std::time::Instant::now();
+    let start = std::time::Instant::now();
 
     let (cpu_res, mem_res, restart_res) = tokio::try_join!(
         client.query(cpu_query).get(),
@@ -123,9 +123,12 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         AppError::InternalServerError(format!("Prometheus query failed: {}", e))
     })?;
 
-    let query_elapsed = query_start.elapsed();
+    println!("cpu_res: {:#?}\n", cpu_res);
+    println!("mem_res: {:#?}\n", mem_res);
+    println!("restart_res: {:#?}\n", restart_res);
+
     info!(
-        query_elapsed = query_elapsed.as_millis(),
+        elapsed = start.elapsed().as_millis(),
         "🏁 Prometheus query completed"
     );
 
