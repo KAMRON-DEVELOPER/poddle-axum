@@ -52,7 +52,7 @@ pub async fn stream_deployment_metrics_see_handler(
     let stream = pubsub.into_on_message().map(move |msg| {
         let channel = msg.get_channel_name();
         let payload: String = msg.get_payload().unwrap_or_default();
-        info!(channel = %channel, payload = %payload, "📡 pubsub payload received");
+        info!(channel = %channel, payload = %payload, "📡 pubsub payload received in stream_deployment_metrics_see_handler");
 
         Ok(Event::default().event("compute").data(payload))
     });
@@ -82,7 +82,7 @@ pub async fn stream_deployments_metrics_see_handler(
     let stream = pubsub.into_on_message().map(move |msg| {
         // let channel = msg.get_channel_name();
         let payload: String = msg.get_payload().unwrap_or_default();
-        // info!(channel = %channel, payload = %payload, "📡 pubsub payload received");
+        info!(channel = %channel, payload = %payload, "📡 pubsub payload received in stream_deployments_metrics_see_handler");
 
         Ok(Event::default().event("compute").data(payload))
     });
