@@ -229,7 +229,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         }
     }
 
-    let pipeline_start = std::time::Instant::now();
+    println!("project_map: {:#?}", project_map);
 
     let mut projects_count = 0;
     let mut deployments_count = 0;
@@ -334,6 +334,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
     // Execute Pipeline
     if deployments_count > 0 {
+        let start = std::time::Instant::now();
         // We use `turbofish` syntax instead `let _: ()`
         p.query_async::<()>(&mut redis.con).await.map_err(|e| {
             AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
@@ -343,14 +344,11 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             projects_count = projects_count,
             deployments_count = deployments_count,
             pods_count = pods_count,
-            pipeline_elapsed = pipeline_start.elapsed().as_millis(),
+            elapsed = start.elapsed().as_millis(),
             "✅ Deployments scraped"
         );
     } else {
-        info!(
-            pipeline_elapsed = pipeline_start.elapsed().as_millis(),
-            "⏸️ No deployment to scrape"
-        );
+        info!("⏸️ No deployment to scrape");
     }
 
     Ok(())
