@@ -123,10 +123,6 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         AppError::InternalServerError(format!("Prometheus query failed: {}", e))
     })?;
 
-    println!("cpu_res: {:#?}\n", cpu_res);
-    println!("mem_res: {:#?}\n", mem_res);
-    println!("restart_res: {:#?}\n", restart_res);
-
     info!(
         elapsed = start.elapsed().as_millis(),
         "🏁 Prometheus query completed"
@@ -231,8 +227,6 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             }
         }
     }
-
-    println!("project_map: {:#?}", project_map);
 
     let mut projects_count = 0;
     let mut deployments_count = 0;
