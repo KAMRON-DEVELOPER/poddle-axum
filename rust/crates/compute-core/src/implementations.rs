@@ -1,11 +1,10 @@
-use http_contracts::list::schema::ListResponse;
 use uuid::Uuid;
 
 use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
-        MetricHistory, Pod, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        MetricHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
@@ -56,8 +55,8 @@ impl From<(Deployment, MetricHistory)> for DeploymentsResponse {
     }
 }
 
-impl From<(Deployment, ListResponse<Pod>)> for DeploymentResponse {
-    fn from((d, pods): (Deployment, ListResponse<Pod>)) -> Self {
+impl From<Deployment> for DeploymentResponse {
+    fn from(d: Deployment) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -80,7 +79,6 @@ impl From<(Deployment, ListResponse<Pod>)> for DeploymentResponse {
             subdomain: d.subdomain,
             created_at: d.created_at,
             updated_at: d.updated_at,
-            pods,
         }
     }
 }

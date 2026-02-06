@@ -837,7 +837,6 @@ version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "chrono",
- "http-contracts",
  "once_cell",
  "redis",
  "redis-macros",

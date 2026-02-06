@@ -175,24 +175,44 @@ pub async fn delete_project_handler(
 pub async fn get_deployment_handler(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
-    Query(p): Query<Pagination>,
-    Query(q): Query<DeploymentMetricsQuery>,
-    State(cfg): State<Config>,
     State(database): State<Database>,
-    State(mut redis): State<Redis>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id: Uuid = claims.sub;
-    let count = q.snapshot_count(cfg.prometheus.scrape_interval_secs);
 
     let deployment =
         DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
 
-    let list_response =
-        CacheService::get_deployment_pods(&deployment.id.to_string(), count, &p, &mut redis.con)
-            .await?;
-
-    let response: DeploymentResponse = (deployment, list_response).into();
+    let response: DeploymentResponse = deployment.into();
     Ok(Json(response))
+}
+
+#[tracing::instrument(
+    name = "get_pods_handler",
+    skip_all,
+    fields(
+        user_id = %claims.sub,
+        project_id = %project_id,
+        deployment_id = %deployment_id
+    ),
+    err
+)]
+pub async fn get_pods_handler(
+    claims: Claims,
+    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
+    Query(p): Query<Pagination>,
+    Query(q): Query<DeploymentMetricsQuery>,
+    State(cfg): State<Config>,
+    // State(database): State<Database>,
+    State(mut redis): State<Redis>,
+) -> Result<impl IntoResponse, AppError> {
+    let count = q.snapshot_count(cfg.prometheus.scrape_interval_secs);
+
+    // TODO We may add project, deployment owner checking logic later
+
+    let (data, total) =
+        CacheService::get_pods(&deployment_id.to_string(), count, &p, &mut redis.con).await?;
+
+    Ok(Json(ListResponse { data, total }))
 }
 
 #[tracing::instrument(name = "get_deployments_handler", skip_all, fields(user_id = %claims.sub, project_id = %project_id), err)]
