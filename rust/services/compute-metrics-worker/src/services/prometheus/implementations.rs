@@ -286,7 +286,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                     phase,
                     restart_count,
                 };
-                p.cmd("HSET").arg(&meta_key).arg(&meta).ignore();
+                p.set(&meta_key, &meta).ignore();
                 p.expire(&meta_key, ttl).ignore();
                 // p.hset_multiple(
                 //     &meta_key,
