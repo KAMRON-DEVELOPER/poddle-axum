@@ -231,7 +231,7 @@ pub enum PodPhase {
     Unknown,
 }
 
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, Debug)]
 pub struct MetricSnapshot {
     pub ts: i64,
     pub cpu: f64,
@@ -243,13 +243,6 @@ pub struct MetricSnapshot {
 pub struct Pod {
     pub meta: PodHistory,
     pub metrics: Vec<MetricSnapshot>,
-}
-
-#[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct MetricHistory {
-    #[serde(default)]
-    pub snapshots: Vec<MetricSnapshot>,
 }
 
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Default, Clone, Debug)]

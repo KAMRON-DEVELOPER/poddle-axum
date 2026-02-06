@@ -1,6 +1,6 @@
 use compute_core::{
     cache_keys::CacheKeys,
-    schemas::{MetricHistory, MetricSnapshot, Pod, PodHistory},
+    schemas::{MetricSnapshot, Pod, PodHistory},
 };
 use http_contracts::pagination::schema::Pagination;
 use redis::{AsyncTypedCommands, aio::MultiplexedConnection};
@@ -83,7 +83,7 @@ impl CacheService {
         ids: Vec<&str>,
         count: isize,
         con: &mut MultiplexedConnection,
-    ) -> Result<Vec<MetricHistory>, AppError> {
+    ) -> Result<Vec<Vec<MetricSnapshot>>, AppError> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -107,11 +107,6 @@ impl CacheService {
             "🏁 Deployment metrics fetched"
         );
 
-        let metrics = results
-            .into_iter()
-            .map(|snapshots| MetricHistory { snapshots })
-            .collect();
-
-        Ok(metrics)
+        Ok(results)
     }
 }

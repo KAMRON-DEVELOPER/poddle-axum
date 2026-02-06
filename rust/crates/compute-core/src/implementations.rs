@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use redis::{RedisWrite, ToRedisArgs};
+use redis::{ErrorKind, FromRedisValue, RedisError, RedisResult, RedisWrite, ToRedisArgs, Value};
 use uuid::Uuid;
 
 use crate::{
@@ -8,7 +8,7 @@ use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
-        MetricHistory, PodHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        MetricSnapshot, PodHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
@@ -65,8 +65,45 @@ impl PodHistory {
     }
 }
 
-impl From<(Deployment, MetricHistory)> for DeploymentsResponse {
-    fn from((d, dm): (Deployment, MetricHistory)) -> Self {
+impl ToRedisArgs for MetricSnapshot {
+    fn write_redis_args<W>(&self, out: &mut W)
+    where
+        W: ?Sized + RedisWrite,
+    {
+        let bytes = serde_json::to_vec(self).expect("Failed to serialize MetricSnapshot");
+        out.write_arg(&bytes);
+    }
+}
+
+impl FromRedisValue for MetricSnapshot {
+    fn from_redis_value(v: &Value) -> RedisResult<Self> {
+        match v {
+            // Redis returns data from Lists/Gets as BulkString (Vec<u8>)
+            Value::BulkString(bytes) => serde_json::from_slice(bytes).map_err(|e| {
+                RedisError::from((
+                    ErrorKind::TypeError,
+                    "Failed to deserialize MetricSnapshot from JSON",
+                    e.to_string(),
+                ))
+            }),
+            // Fallback: sometimes Redis returns simple strings for small ASCII values
+            Value::SimpleString(s) => serde_json::from_str(s).map_err(|e| {
+                RedisError::from((
+                    ErrorKind::TypeError,
+                    "Failed to deserialize MetricSnapshot from JSON",
+                    e.to_string(),
+                ))
+            }),
+            _ => Err(RedisError::from((
+                ErrorKind::TypeError,
+                "Expected BulkString (binary JSON) for MetricSnapshot",
+            ))),
+        }
+    }
+}
+
+impl From<(Deployment, Vec<MetricSnapshot>)> for DeploymentsResponse {
+    fn from((d, metrics): (Deployment, Vec<MetricSnapshot>)) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -89,7 +126,7 @@ impl From<(Deployment, MetricHistory)> for DeploymentsResponse {
             subdomain: d.subdomain,
             created_at: d.created_at,
             updated_at: d.updated_at,
-            metrics: dm.snapshots,
+            metrics,
         }
     }
 }
