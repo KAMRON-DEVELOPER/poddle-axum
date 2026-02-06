@@ -138,7 +138,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                     name: PodBuffer {
                         uid: ...,
                         phase: ...,
-                        restarts: ...,
+                        restart_count: ...,
                         snapshot: MetricSnapshot
                     }
                 }
@@ -229,7 +229,6 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         }
     }
 
-    // --- Redis Pipeline ---
     let pipeline_start = std::time::Instant::now();
 
     let mut projects_count = 0;
