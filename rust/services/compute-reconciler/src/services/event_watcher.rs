@@ -259,7 +259,8 @@ async fn handle_pod_event(
                 phase,
                 restart_count,
             };
-            p.set(&meta_key, &meta).ignore();
+            let items = meta.as_redis_items();
+            p.hset_multiple(&meta_key, &items).ignore();
             p.expire(&meta_key, ttl).ignore();
 
             let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
@@ -296,7 +297,7 @@ async fn handle_pod_event(
             p.query_async::<()>(con).await?;
         }
         Ok(Event::Init) | Ok(Event::InitApply(_)) | Ok(Event::InitDone) => {}
-        Err(e) => error!("Pod watcher error: {}", e),
+        Err(e) => error!("❌ Pod watcher error: {}", e),
     }
 
     Ok(())
@@ -312,7 +313,7 @@ async fn when_affacted_rows_zero(
         let message = ComputeEvent::DeploymentSystemMessage {
             id: deployment_id,
             level: EventLevel::Error,
-            message: "Internal server error".to_string(),
+            message: "❌ Internal server error".to_string(),
         };
         con.publish(channel, message)
             .instrument(info_span!("pubsub.message"))

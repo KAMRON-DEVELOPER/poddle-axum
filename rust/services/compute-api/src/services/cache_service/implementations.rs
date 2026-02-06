@@ -10,7 +10,7 @@ use crate::{error::AppError, services::cache_service::CacheService};
 
 impl CacheService {
     /// Get pods with metrics for a deployment (Deployment Page)
-    #[tracing::instrument(name = "cache_service.get_deployment_pods", skip_all, err)]
+    #[tracing::instrument(name = "cache_service.get_pods", skip_all, err)]
     pub async fn get_pods(
         id: &str,
         count: isize,
@@ -21,6 +21,9 @@ impl CacheService {
 
         let start = p.offset as isize;
         let stop = (p.offset + p.limit) as isize - 1;
+
+        println!("start: {}", start);
+        println!("stop: {}", stop);
 
         // Get pod UIDs
         let uids = con.zrevrange(&index_key, start, stop).await.map_err(|e| {
@@ -35,6 +38,9 @@ impl CacheService {
         if uids.is_empty() {
             return Ok((Vec::new(), 0));
         }
+
+        println!("uids: {:?}", uids);
+        println!("total: {}", total);
 
         let mut p = redis::pipe();
 

@@ -1,10 +1,12 @@
+use std::fmt::Display;
+
 use uuid::Uuid;
 
 use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
-        MetricHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        MetricHistory, PodHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
@@ -23,6 +25,30 @@ impl From<&str> for PodPhase {
 impl Default for PodPhase {
     fn default() -> Self {
         Self::Unknown
+    }
+}
+
+impl Display for PodPhase {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            PodPhase::Pending => "Pending",
+            PodPhase::Running => "Running",
+            PodPhase::Succeeded => "Succeeded",
+            PodPhase::Failed => "Failed",
+            PodPhase::Unknown => "Unknown",
+        };
+        f.write_str(s)
+    }
+}
+
+impl PodHistory {
+    pub fn as_redis_items(&self) -> Vec<(&'static str, String)> {
+        vec![
+            ("uid", self.uid.clone()),
+            ("name", self.name.clone()),
+            ("phase", self.phase.to_string()),
+            ("restart_count", self.restart_count.to_string()),
+        ]
     }
 }
 
