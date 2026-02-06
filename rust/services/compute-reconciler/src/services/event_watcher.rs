@@ -251,7 +251,7 @@ async fn handle_pod_event(
             }
 
             let mut p = pipe();
-            let ttl = cfg.prometheus.scrape_interval * cfg.prometheus.snapshots_to_keep;
+            let ttl = cfg.prometheus.scrape_interval_secs * cfg.prometheus.snapshots_to_keep;
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
             let meta = PodHistory {
                 uid,

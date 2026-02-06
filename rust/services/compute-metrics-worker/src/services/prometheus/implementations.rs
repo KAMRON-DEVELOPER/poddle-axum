@@ -22,10 +22,10 @@ pub async fn start_metrics_scraper(redis: Redis, prometheus: Prometheus) -> Resu
     info!("📈 Starting Prometheus metrics scraper");
     info!(
         "⚙️  Scrape interval: {}s, Snapshot to keep: {}, rate: {}",
-        cfg.scrape_interval, cfg.snapshots_to_keep, cfg.rate
+        cfg.scrape_interval_secs, cfg.snapshots_to_keep, cfg.rate
     );
 
-    let mut interval = tokio::time::interval(Duration::from_secs(cfg.scrape_interval as u64));
+    let mut interval = tokio::time::interval(Duration::from_secs(cfg.scrape_interval_secs as u64));
 
     loop {
         interval.tick().await;
@@ -245,7 +245,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
             // Deployment Metrics Key
             let key = CacheKeys::deployment_metrics(&id);
-            let ttl = cfg.scrape_interval * cfg.snapshots_to_keep;
+            let ttl = cfg.scrape_interval_secs * cfg.snapshots_to_keep;
 
             // Append Snapshot
             p.lpush(&key, &snapshot).ignore();
