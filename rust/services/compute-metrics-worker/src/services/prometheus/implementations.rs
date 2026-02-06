@@ -10,7 +10,7 @@ use factory::factories::redis::Redis;
 use prometheus_http_query::{Client, response::Data};
 use std::collections::HashMap;
 use std::time::Duration;
-use tracing::{error, info};
+use tracing::{debug, error, info};
 use uuid::Uuid;
 
 use crate::{error::AppError, services::prometheus::Prometheus};
@@ -123,7 +123,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         AppError::InternalServerError(format!("Prometheus query failed: {}", e))
     })?;
 
-    info!(
+    debug!(
         elapsed = start.elapsed().as_millis(),
         "🏁 Prometheus query completed"
     );
@@ -328,7 +328,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
         })?;
 
-        info!(
+        debug!(
             projects_count = projects_count,
             deployments_count = deployments_count,
             pods_count = pods_count,
@@ -336,7 +336,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             "✅ Deployments scraped"
         );
     } else {
-        info!("⏸️ No deployment to scrape");
+        debug!("⏸️ No deployment to scrape");
     }
 
     Ok(())
