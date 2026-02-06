@@ -37,6 +37,10 @@ pub fn get_routes() -> Router<AppState> {
                 .delete(handlers::delete_deployment_handler),
         )
         .route(
+            "/api/v1/projects/{project_id}/deployments/{deployment_id}/pods",
+            get(handlers::get_pods_handler),
+        )
+        .route(
             "/api/v1/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs",
             get(handlers::get_logs_handler),
         )
