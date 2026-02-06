@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use http_contracts::list::schema::ListResponse;
 use once_cell::sync::Lazy;
 use redis_macros::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
@@ -122,7 +123,7 @@ pub struct DeploymentResponse {
     pub subdomain: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-    pub pods: Vec<Pod>,
+    pub pods: ListResponse<Pod>,
 }
 
 #[derive(Serialize, Debug)]

@@ -187,11 +187,11 @@ pub async fn get_deployment_handler(
     let deployment =
         DeploymentRepository::get_by_id(&user_id, &deployment_id, &database.pool).await?;
 
-    let pods =
+    let list_response =
         CacheService::get_deployment_pods(&deployment.id.to_string(), count, &p, &mut redis.con)
             .await?;
 
-    let response: DeploymentResponse = (deployment, pods).into();
+    let response: DeploymentResponse = (deployment, list_response).into();
     Ok(Json(response))
 }
 

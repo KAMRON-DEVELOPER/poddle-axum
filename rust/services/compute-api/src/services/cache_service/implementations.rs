@@ -2,7 +2,7 @@ use compute_core::{
     cache_keys::CacheKeys,
     schemas::{MetricHistory, MetricSnapshot, Pod, PodHistory},
 };
-use http_contracts::pagination::schema::Pagination;
+use http_contracts::{list::schema::ListResponse, pagination::schema::Pagination};
 use redis::{AsyncTypedCommands, aio::MultiplexedConnection};
 use tracing::{error, info};
 
@@ -16,20 +16,27 @@ impl CacheService {
         count: isize,
         p: &Pagination,
         con: &mut MultiplexedConnection,
-    ) -> Result<Vec<Pod>, AppError> {
+    ) -> Result<ListResponse<Pod>, AppError> {
         let index_key = CacheKeys::deployment_pods(&id);
 
         let start = p.offset as isize;
         let stop = (p.offset + p.limit) as isize - 1;
 
         // Get pod UIDs
-        let uids = con.zrevrange(index_key, start, stop).await.map_err(|e| {
+        let uids = con.zrevrange(&index_key, start, stop).await.map_err(|e| {
             error!(error = %e, "❌ Failed to get pod UIDs");
             AppError::InternalServerError(format!("❌ Failed to get pod UIDs: {}", e))
         })?;
+        let total = con.zcard(index_key).await.map_err(|e| {
+            error!(error = %e, "❌ Failed to get number of pod UIDs");
+            AppError::InternalServerError(format!("❌ Failed to get number of pod UIDs: {}", e))
+        })? as i64;
 
         if uids.is_empty() {
-            return Ok(Vec::new());
+            return Ok(ListResponse {
+                data: vec![],
+                total: 0,
+            });
         }
 
         let mut p = redis::pipe();
@@ -59,12 +66,12 @@ impl CacheService {
             "🏁 Pod metrics fetched"
         );
 
-        let pods: Vec<Pod> = results
+        let data: Vec<Pod> = results
             .into_iter()
             .map(|(meta, metrics)| Pod { meta, metrics })
             .collect();
 
-        Ok(pods)
+        Ok(ListResponse { data, total })
     }
 
     /// Get aggregated metrics for multiple deployments (Project Page)

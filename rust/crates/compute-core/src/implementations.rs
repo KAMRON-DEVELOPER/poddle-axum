@@ -1,3 +1,4 @@
+use http_contracts::list::schema::ListResponse;
 use uuid::Uuid;
 
 use crate::{
@@ -55,8 +56,8 @@ impl From<(Deployment, MetricHistory)> for DeploymentsResponse {
     }
 }
 
-impl From<(Deployment, Vec<Pod>)> for DeploymentResponse {
-    fn from((d, pods): (Deployment, Vec<Pod>)) -> Self {
+impl From<(Deployment, ListResponse<Pod>)> for DeploymentResponse {
+    fn from((d, pods): (Deployment, ListResponse<Pod>)) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
