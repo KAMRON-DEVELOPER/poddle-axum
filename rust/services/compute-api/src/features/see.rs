@@ -18,7 +18,7 @@ use tokio_tungstenite::{
     connect_async,
     tungstenite::{client::IntoClientRequest, protocol::Message},
 };
-use tracing::{error, info};
+use tracing::error;
 use uuid::Uuid;
 
 use crate::{

@@ -147,6 +147,27 @@ async fn handle_deployment_event(
                 "🗑️ Deployment was deleted from cluster",
             );
 
+            let dep_id = deployment_id.to_string();
+            let index_keys = CacheKeys::deployment_pods(&dep_id);
+
+            // fetch pod uids
+            let uids: Vec<String> = con.zrange(&index_keys, 0, -1).await?;
+
+            // delete all pod data
+            let mut p = pipe();
+            for uid in uids {
+                p.del(CacheKeys::deployment_pod_meta(&dep_id, &uid))
+                    .ignore();
+                p.del(CacheKeys::deployment_pod_metrics(&dep_id, &uid))
+                    .ignore();
+            }
+
+            // delete deployment keys
+            p.del(CacheKeys::deployment_metrics(&dep_id)).ignore();
+            p.del(index_keys).ignore();
+
+            p.query_async::<()>(con).await?;
+
             let message = ComputeEvent::DeploymentStatusUpdate {
                 id: &deployment_id,
                 status: DeploymentStatus::Deleted,
@@ -291,6 +312,14 @@ async fn handle_pod_event(
             let uid = pod.metadata.uid.as_ref().unwrap().to_string();
 
             let mut p = pipe();
+
+            let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
+            let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
+            let metrics_key = CacheKeys::deployment_pod_metrics(&deployment_id.to_string(), &uid);
+            p.zrem(index_key, &uid).ignore();
+            p.del(&meta_key).ignore();
+            p.del(&metrics_key).ignore();
+
             let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
             let message = ComputeEvent::PodDelete { uid };
             p.publish(channel, message);

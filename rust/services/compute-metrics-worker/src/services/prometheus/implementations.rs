@@ -283,16 +283,6 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 let items = meta.as_redis_items();
                 p.hset_multiple(&meta_key, &items).ignore();
                 p.expire(&meta_key, ttl).ignore();
-                // p.hset_multiple(
-                //     &meta_key,
-                //     &[
-                //         ("uid", &uid),
-                //         ("name", &name),
-                //         ("phase", &phase),
-                //         ("restarts", &restarts.to_string()),
-                //     ],
-                // )
-                // .ignore();
 
                 // Append snapshots
                 p.lpush(&metrics_key, &snapshot).ignore();
