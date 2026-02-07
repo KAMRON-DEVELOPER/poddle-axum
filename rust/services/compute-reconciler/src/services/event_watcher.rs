@@ -192,7 +192,7 @@ async fn handle_deployment_event(
 #[tracing::instrument("handle_deployment_event", skip_all, err)]
 async fn handle_pod_event(
     event: Result<Event<K8sPod>, kube::runtime::watcher::Error>,
-    cfg: &Config,
+    _cfg: &Config,
     pool: &PgPool,
     con: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
@@ -288,7 +288,7 @@ async fn handle_pod_event(
             );
 
             let mut p = pipe();
-            let ttl = cfg.prometheus.scrape_interval_secs * cfg.prometheus.snapshots_to_keep;
+            // let ttl = cfg.prometheus.scrape_interval_secs * cfg.prometheus.snapshots_to_keep;
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
             let meta = PodMeta {
                 uid,
@@ -298,7 +298,7 @@ async fn handle_pod_event(
             };
             let items = meta.as_redis_items();
             p.hset_multiple(&meta_key, &items).ignore();
-            p.expire(&meta_key, ttl).ignore();
+            // p.expire(&meta_key, ttl).ignore();
 
             let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
             let message = ComputeEvent::PodApply {
