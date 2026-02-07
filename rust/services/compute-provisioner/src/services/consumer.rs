@@ -158,23 +158,23 @@ async fn handle_create_messages(
                 }
 
                 match serde_json::from_slice::<CreateDeploymentMessage>(&delivery.data) {
-                    Ok(message) => {
-                        debug!(deployment_id = %message.deployment_id, "🎯 Create deployment request received");
+                    Ok(msg) => {
+                        debug!(deployment_id = %msg.deployment_id, "🎯 Create deployment request received");
 
-                        match k8s.create(pool, con, message.clone() ).await {
+                        match k8s.create(pool, con, msg.clone() ).await {
                             Ok(_) => {
-                                info!(deployment_id = %message.deployment_id, "✅ Deployment created");
+                                info!(deployment_id = %msg.deployment_id, "✅ Deployment created");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!(deployment_id = %message.deployment_id, "❌ Failed to ack for create message: {}", e);
+                                    error!(deployment_id = %msg.deployment_id, "❌ Failed to ack for create message: {}", e);
                                 }
                             }
                             Err(e) => {
-                                error!(deployment_id = %message.deployment_id,
+                                error!(deployment_id = %msg.deployment_id,
                                     "❌ Failed to create deployment: {}", e
                                 );
 
                                 if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
-                                    error!(deployment_id = %message.deployment_id, "❌ Failed to nack for create deployment: {}", e);
+                                    error!(deployment_id = %msg.deployment_id, "❌ Failed to nack for create deployment: {}", e);
                                 }
                             }
                         }
@@ -240,21 +240,21 @@ async fn handle_update_messages(
                 }
 
                 match serde_json::from_slice::<UpdateDeploymentMessage>(&delivery.data) {
-                    Ok(message) => {
-                        debug!(deployment_id = %message.deployment_id, "📏 Update deployment request received");
+                    Ok(msg) => {
+                        debug!(deployment_id = %msg.deployment_id, "📏 Update deployment request received");
 
-                        match k8s.update(pool, con, message.clone()).await {
+                        match k8s.update(pool, con, msg.clone()).await {
                             Ok(_) => {
-                                info!(deployment_id = %message.deployment_id, "📏 Deployment updated");
+                                info!(deployment_id = %msg.deployment_id, "📏 Deployment updated");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!(deployment_id = %message.deployment_id, "❌ Failed to ack for update deployment: {}", e);
+                                    error!(deployment_id = %msg.deployment_id, "❌ Failed to ack for update deployment: {}", e);
                                 }
                             }
                             Err(e) => {
-                                error!(deployment_id = %message.deployment_id, "❌ Failed to update deployment: {}", e);
+                                error!(deployment_id = %msg.deployment_id, "❌ Failed to update deployment: {}", e);
 
                                 if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
-                                    error!(deployment_id = %message.deployment_id, "❌ Failed to nack for update deployment: {}", e);
+                                    error!(deployment_id = %msg.deployment_id, "❌ Failed to nack for update deployment: {}", e);
                                 }
                             }
                         }
@@ -313,21 +313,21 @@ async fn handle_delete_messages(k8s: KubernetesService, mut consumer: Consumer) 
                 }
 
                 match serde_json::from_slice::<DeleteDeploymentMessage>(&delivery.data) {
-                    Ok(message) => {
-                        debug!(deployment_id = %message.deployment_id, "🗑️ Delete deployment request received");
+                    Ok(msg) => {
+                        debug!(deployment_id = %msg.deployment_id, "🗑️ Delete deployment request received");
 
-                        match k8s.delete(  message.clone()).await {
+                        match k8s.delete(  msg.clone()).await {
                             Ok(_) => {
-                                info!(deployment_id = %message.deployment_id, "🗑️ Deployment created");
+                                info!(deployment_id = %msg.deployment_id, "🗑️ Deployment created");
                                 if let Err(e) = delivery.ack(BasicAckOptions::default()).await {
-                                    error!(deployment_id = %message.deployment_id, "❌ Failed to ack for delete deployment: {}", e);
+                                    error!(deployment_id = %msg.deployment_id, "❌ Failed to ack for delete deployment: {}", e);
                                 }
                             }
                             Err(e) => {
-                                error!(deployment_id = %message.deployment_id, "❌ Failed to delete deployment: {}", e);
+                                error!(deployment_id = %msg.deployment_id, "❌ Failed to delete deployment: {}", e);
 
                                 if let Err(e) = delivery.nack(BasicNackOptions {requeue: false, multiple: false}).await {
-                                    error!(deployment_id = %message.deployment_id, "❌ Failed to nack for delete deployment: {}", e);
+                                    error!(deployment_id = %msg.deployment_id, "❌ Failed to nack for delete deployment: {}", e);
                                 }
                             }
                         }

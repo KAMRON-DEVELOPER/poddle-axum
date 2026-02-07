@@ -465,7 +465,7 @@ impl KubernetesService {
         name: &str,
         creds: &ImagePullSecret,
     ) -> Result<String, AppError> {
-        let name = format!("{}-registry", name);
+        let secret_name = format!("{}-registry", name);
 
         let auth = base64::engine::general_purpose::STANDARD
             .encode(format!("{}:{}", creds.username, creds.secret));
@@ -491,7 +491,7 @@ impl KubernetesService {
 
         let secret = K8sSecret {
             metadata: ObjectMeta {
-                name: Some(name.clone()),
+                name: Some(secret_name.clone()),
                 namespace: Some(ns.to_string()),
                 ..Default::default()
             },
@@ -501,14 +501,20 @@ impl KubernetesService {
         };
 
         let api: Api<K8sSecret> = Api::namespaced(self.client.clone(), ns);
-        api.create(&PostParams::default(), &secret)
-            .await
-            .map_err(|e| {
-                error!(ns = %ns, "Failed to create Image Pull Secret");
-                AppError::InternalServerError(format!("Failed to create Image Pull Secret: {}", e))
-            })?;
 
-        Ok(name)
+        // Use Patch::Apply instead of create
+        api.patch(
+            &secret_name,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(&secret),
+        )
+        .await
+        .map_err(|e| {
+            error!(ns = %ns, "Failed to apply Image Pull Secret");
+            AppError::InternalServerError(format!("Failed to apply Image Pull Secret: {}", e))
+        })?;
+
+        Ok(secret_name)
     }
 
     /// Create Kubernetes Deployment
@@ -849,6 +855,7 @@ impl KubernetesService {
             || msg.resource_spec.is_some()
             || msg.image_pull_secret.is_some()
         {
+            info!("📄 Updating deployment resources");
             self.update_deployment(
                 &ns,
                 &name,
@@ -863,11 +870,13 @@ impl KubernetesService {
 
         // Update Service (port)
         if let Some(port) = msg.port {
+            info!("📄 Updating service resources");
             self.update_service(&ns, &name, port).await?;
         }
 
         // Update IngressRoute (domain, subdomain)
         if msg.domain.is_some() || msg.subdomain.is_some() {
+            info!("📄 Updating ingressroute resources");
             self.update_ingressroute(&ns, &name, msg.domain, msg.subdomain)
                 .await?;
         }
@@ -916,84 +925,81 @@ impl KubernetesService {
     ) -> Result<(), AppError> {
         let api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), ns);
 
-        let mut patch = serde_json::json!({});
-
-        // Update replicas
-        if let Some(replicas) = desired_replicas {
-            patch["spec"]["replicas"] = json!(replicas);
-        }
-
-        // Update image
-        if let Some(image) = image {
-            patch["spec"]["template"]["spec"]["containers"] = json!([{
-                "name": name,
-                "image": image
-            }]);
-        }
-
-        // Update port
-        if let Some(port) = port {
-            if patch["spec"]["template"]["spec"]["containers"].is_null() {
-                patch["spec"]["template"]["spec"]["containers"] = json!([{
-                    "name": name,
-                    "ports": [{
-                        "containerPort": port,
-                        "protocol": "TCP"
-                    }]
-                }]);
-            } else {
-                patch["spec"]["template"]["spec"]["containers"][0]["ports"] = json!([{
-                    "containerPort": port,
-                    "protocol": "TCP"
-                }]);
-            }
-        }
-
-        // Update resource spec
-        if let Some(resource_spec) = resource_spec {
-            let requests = json!({
-                "cpu": format!("{}m", resource_spec.cpu_request_millicores),
-                "memory": format!("{}Mi", resource_spec.memory_request_mb)
-            });
-
-            let limits = json!({
-                "cpu": format!("{}m", resource_spec.cpu_limit_millicores),
-                "memory": format!("{}Mi", resource_spec.memory_limit_mb)
-            });
-
-            if patch["spec"]["template"]["spec"]["containers"].is_null() {
-                patch["spec"]["template"]["spec"]["containers"] = json!([{
-                    "name": name,
-                    "resources": {
-                        "requests": requests,
-                        "limits": limits
-                    }
-                }]);
-            } else {
-                patch["spec"]["template"]["spec"]["containers"][0]["resources"] = json!({
-                    "requests": requests,
-                    "limits": limits
-                });
-            }
-        }
-
-        // Update image pull secret
+        // Handle Secret Idempotently first
+        let mut secret_ref_name = None;
         if let Some(creds) = image_pull_secret {
-            let secret_name = format!("{}-registry", name);
+            // This now uses patch/apply, so it won't crash if it exists
+            secret_ref_name = Some(self.create_image_pull_secret(ns, name, creds).await?);
+        }
 
-            // First, update or create the secret
-            self.create_image_pull_secret(ns, name, creds).await?;
+        let mut container_spec = serde_json::Map::new();
+        container_spec.insert("name".to_string(), json!(name));
 
-            // Then patch the deployment to use it
-            patch["spec"]["template"]["spec"]["imagePullSecrets"] = json!([{
-                "name": secret_name
+        if let Some(img) = image {
+            container_spec.insert("image".to_string(), json!(img));
+        }
+
+        if let Some(p) = port {
+            container_spec.insert(
+                "ports".to_string(),
+                json!([{
+                    "containerPort": p,
+                    "protocol": "TCP"
+                }]),
+            );
+        }
+
+        if let Some(rs) = resource_spec {
+            container_spec.insert(
+                "resources".to_string(),
+                json!({
+                    "requests": {
+                        "cpu": format!("{}m", rs.cpu_request_millicores),
+                        "memory": format!("{}Mi", rs.memory_request_mb)
+                    },
+                    "limits": {
+                        "cpu": format!("{}m", rs.cpu_limit_millicores),
+                        "memory": format!("{}Mi", rs.memory_limit_mb)
+                    }
+                }),
+            );
+        }
+
+        // Build the Deployment Patch
+        // Note: We MUST include `replicas` and `template` structure.
+        let mut patch_json = json!({
+            "apiVersion": "apps/v1",
+            "kind": "Deployment",
+            "metadata": {
+                "name": name,
+                "namespace": ns
+            },
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [container_spec]
+                    }
+                }
+            }
+        });
+
+        // Add replicas if present
+        if let Some(replicas) = desired_replicas {
+            patch_json["spec"]["replicas"] = json!(replicas);
+        }
+
+        // Add imagePullSecrets if present
+        if let Some(sr_name) = secret_ref_name {
+            patch_json["spec"]["template"]["spec"]["imagePullSecrets"] = json!([{
+                "name": sr_name
             }]);
         }
 
+        // Apply via SSA
         api.patch(
             name,
-            &PatchParams::apply("poddle").force(),
-            &Patch::Strategic(patch),
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(patch_json),
         )
         .await
         .map_err(|e| {
@@ -1001,7 +1007,7 @@ impl KubernetesService {
             AppError::InternalServerError(format!("Failed to update deployment: {}", e))
         })?;
 
-        info!("Deployment {} updated in namespace {}", name, ns);
+        info!("Deployment {} updated via SSA in namespace {}", name, ns);
         Ok(())
     }
 
@@ -1136,9 +1142,6 @@ impl KubernetesService {
         let secret_name = format!("{}-registry", name);
         let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
         let _ = secret_api.delete(&secret_name, &dp).await;
-
-        let ns_api: Api<Namespace> = Api::all(self.client.clone());
-        let _ = ns_api.delete(&ns, &dp).await;
 
         info!("✅ K8s resources deleted for deployment {}", deployment_id);
         Ok(())
