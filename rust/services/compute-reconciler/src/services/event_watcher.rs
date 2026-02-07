@@ -82,6 +82,12 @@ async fn handle_deployment_event(
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
 
+            info!(
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                "📥 Deployment Event::Apply received",
+            );
+
             // Extract status information
             let spec = deployment.spec.as_ref().unwrap();
             let status = deployment.status.as_ref();
@@ -144,7 +150,7 @@ async fn handle_deployment_event(
             info!(
                 project_id = %project_id,
                 deployment_id = %deployment_id,
-                "🗑️ Deployment was deleted from cluster",
+                "📥 Deployment Event::Delete received",
             );
 
             let dep_id = deployment_id.to_string();
@@ -208,8 +214,15 @@ async fn handle_pod_event(
 
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
-
             let uid = pod.metadata.uid.as_ref().unwrap().to_string();
+
+            info!(
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                uid = %uid,
+                "📥 Pod Event::Apply received",
+            );
+
             let name = pod.metadata.name.as_ref().unwrap().to_string();
             let phase = pod
                 .status
@@ -308,8 +321,16 @@ async fn handle_pod_event(
                 return Ok(());
             }
 
+            let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
             let uid = pod.metadata.uid.as_ref().unwrap().to_string();
+
+            info!(
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                uid = %uid,
+                "📥 Pod Event::Delete received",
+            );
 
             let mut p = pipe();
 
