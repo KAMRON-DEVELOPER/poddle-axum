@@ -52,7 +52,8 @@ impl VaultService {
         })
     }
 
-    /// Store deployment secrets in Vault
+    /// Store (or Update) deployment secrets in Vault.
+    /// In KV2, 'put' replaces the secret version, which is what we want.
     pub async fn store_secrets(
         &self,
         ns: &str,
@@ -68,6 +69,7 @@ impl VaultService {
                 AppError::InternalServerError(format!("🚨 Failed to store secrets in Vault: {}", e))
             })?;
 
+        info!(ns = %ns, deployment_id = %deployment_id, "🔐 Secrets stored in Vault at {}", path);
         Ok(path)
     }
 
