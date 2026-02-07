@@ -291,12 +291,12 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
             // Deployment Metrics Key
             let key = CacheKeys::deployment_metrics(&id);
-            let ttl = cfg.scrape_interval_secs * cfg.snapshots_to_keep;
+            // let ttl = cfg.scrape_interval_secs * cfg.snapshots_to_keep;
 
             // Append Snapshot
             p.lpush(&key, &snapshot).ignore();
             p.ltrim(&key, -cfg.snapshots_to_keep as isize, -1).ignore();
-            p.expire(&key, ttl).ignore();
+            // p.expire(&key, ttl).ignore();
 
             // We send pod messages after pod_map loop
             for (
@@ -329,13 +329,13 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 };
                 let items = meta.as_redis_items();
                 p.hset_multiple(&meta_key, &items).ignore();
-                p.expire(&meta_key, ttl).ignore();
+                // p.expire(&meta_key, ttl).ignore();
 
                 // Append snapshots
                 p.lpush(&metrics_key, &snapshot).ignore();
                 p.ltrim(&metrics_key, -cfg.snapshots_to_keep as isize, -1)
                     .ignore();
-                p.expire(&metrics_key, ttl).ignore();
+                // p.expire(&metrics_key, ttl).ignore();
 
                 pod_messages.push(PodMetricUpdate { meta, snapshot });
             }
