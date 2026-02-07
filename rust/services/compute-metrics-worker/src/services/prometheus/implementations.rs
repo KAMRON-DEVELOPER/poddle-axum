@@ -1,3 +1,4 @@
+use crate::{error::AppError, services::prometheus::Prometheus};
 use compute_core::{
     cache_keys::CacheKeys,
     channel_names::ChannelNames,
@@ -7,12 +8,11 @@ use compute_core::{
 };
 use factory::factories::redis::Redis;
 use prometheus_http_query::{Client, response::Data};
-use std::collections::HashMap;
+use redis::AsyncTypedCommands;
+use std::collections::{HashMap, HashSet};
 use std::time::Duration;
 use tracing::{debug, error, info};
 use uuid::Uuid;
-
-use crate::{error::AppError, services::prometheus::Prometheus};
 
 pub async fn start_metrics_scraper(redis: Redis, prometheus: Prometheus) -> Result<(), AppError> {
     let client = prometheus.client;
@@ -43,7 +43,6 @@ struct DeploymentBuffer {
 
 #[derive(Default, Debug)]
 struct PodBuffer {
-    uid: String,
     name: String,
     phase: PodPhase,
     restart_count: i32,
@@ -185,7 +184,6 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 .pod_map
                 .entry(uid.clone())
                 .or_insert_with(|| PodBuffer {
-                    uid: uid.to_string(),
                     name: name.to_string(),
                     phase: phase.into(),
                     restart_count: 0,
@@ -278,6 +276,19 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             deployments_count += 1;
             let mut pod_messages = Vec::new();
 
+            // Fetch valid UIDs for this deployment from the Redis Index (Managed by Watcher)
+            let index_key = CacheKeys::deployment_pods(&id);
+
+            // If this fails, we default to an empty list (skipping all updates is safer than corrupting state)
+            let valid_uids: Vec<String> = redis
+                .con
+                .zrange(&index_key, 0, -1)
+                .await
+                .unwrap_or_default();
+
+            // Create a HashSet for fast O(1) lookups
+            let valid_uid_set: HashSet<String> = valid_uids.into_iter().collect();
+
             // Deployment Metrics Key
             let key = CacheKeys::deployment_metrics(&id);
             let ttl = cfg.scrape_interval_secs * cfg.snapshots_to_keep;
@@ -289,9 +300,8 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
             // We send pod messages after pod_map loop
             for (
-                _,
+                uid,
                 PodBuffer {
-                    uid,
                     name,
                     phase,
                     restart_count,
@@ -299,7 +309,13 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 },
             ) in pod_map
             {
-                // event watcher should be already created the pod, we respect that
+                // Safety Check, event watcher should be already created the pod, we respect that
+                if !valid_uid_set.contains(&uid) {
+                    // This pod is in Prometheus but NOT in our Watcher index
+                    // It is likely a terminating ghost. SKIP IT.
+                    continue;
+                }
+
                 pods_count += 1;
                 let meta_key = CacheKeys::deployment_pod_meta(&id, &uid);
                 let metrics_key = CacheKeys::deployment_pod_metrics(&id, &uid);
