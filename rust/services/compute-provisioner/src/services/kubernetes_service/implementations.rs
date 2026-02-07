@@ -153,15 +153,22 @@ impl KubernetesService {
         labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
         labels.insert("poddle.io/preset-id".into(), msg.preset_id.into());
 
+        let mut selector = BTreeMap::new();
+        selector.insert(
+            "poddle.io/deployment-id".to_string(),
+            deployment_id.to_string(),
+        );
+
         self.create_vso_resources(&ns).await?;
 
         let secret_ref = self
             .create_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
             .await?;
 
-        let image_pull_secret = match msg.image_pull_secret.as_ref() {
-            Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
-            None => None,
+        let image_pull_secret = if let Some(secret) = msg.image_pull_secret.as_ref() {
+            Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
+        } else {
+            None
         };
 
         let otel_service_name = msg.name;
@@ -183,17 +190,17 @@ impl KubernetesService {
             secret_ref,
             msg.environment_variables,
             Some(&labels),
+            &selector,
         )
         .await?;
 
-        // TODO we need to pass selector
-        self.apply_service(&ns, &name, msg.port).await?;
+        // deployment_id will be selector
+        self.apply_service(&ns, &name, msg.port, Some(&labels), &selector)
+            .await?;
 
-        // Pass None for domain/subdomain if they don't exist, logic handles it inside
         self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, msg.port)
             .await?;
 
-        // 3. Finalize
         self.finalize_status(
             &msg.project_id,
             &msg.deployment_id,
@@ -202,7 +209,7 @@ impl KubernetesService {
             &mut con,
         )
         .await?;
-        info!("✅ Created deployment {}", msg.deployment_id);
+
         Ok(())
     }
 
@@ -223,8 +230,25 @@ impl KubernetesService {
         )
         .await?;
 
+        let user_id = msg.user_id.clone();
+        let project_id = msg.project_id.clone();
+        let deployment_id = msg.deployment_id.clone();
+
+        info!(
+            user_id = %user_id,
+            project_id = %project_id,
+            deployment_id = %deployment_id,
+            "🚀 Updating deployment"
+        );
+
         let ns = self.ensure_namespace(&msg.user_id).await?;
         let name = format_resource_name(&msg.deployment_id);
+
+        let mut selector = BTreeMap::new();
+        selector.insert(
+            "poddle.io/deployment-id".to_string(),
+            deployment_id.to_string(),
+        );
 
         let image_pull_secret = match msg.image_pull_secret.as_ref() {
             Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
@@ -237,13 +261,12 @@ impl KubernetesService {
 
         let otel_service_name = msg.name;
 
-        // 1. Apply Deployment (Partial Update)
-        // If msg.image is None, SSA will ignore it and keep the existing image.
+        // Apply Deployment
         if msg.image.is_some()
-            || msg.desired_replicas.is_some()
+            || msg.image_pull_secret.is_some()
             || msg.port.is_some()
             || msg.resource_spec.is_some()
-            || msg.image_pull_secret.is_some()
+            || msg.desired_replicas.is_some()
         {
             self.apply_deployment(
                 otel_service_name.as_deref(),
@@ -258,23 +281,19 @@ impl KubernetesService {
                 secret_ref,
                 msg.environment_variables,
                 None,
+                &selector,
             )
             .await?;
         }
 
-        // 2. Apply Service
+        // TODO What if user change ony domain|subdomain or port?
         if let Some(port) = msg.port {
-            // TODO we need to pass selector
-            self.apply_service(&ns, &name, port).await?;
+            self.apply_service(&ns, &name, port, None, &selector)
+                .await?;
         }
 
-        // 3. Apply Ingress
         if msg.domain.is_some() || msg.subdomain.is_some() {
-            // Note: If port didn't change, we need to fetch the existing one or pass the updated one.
-            // For safety in this simplified view, we assume Ingress update usually comes with domain changes.
-            // In a perfect system, you might want to read the current port if it's None in the message,
-            // OR just rely on the user sending the port if they want Ingress updated.
-            let port = msg.port.unwrap_or(8080); // Fallback or strict requirement
+            let port = msg.port.unwrap_or(8080);
             self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, port)
                 .await?;
         }
@@ -287,7 +306,7 @@ impl KubernetesService {
             &mut con,
         )
         .await?;
-        info!("✅ Updated deployment {}", msg.deployment_id);
+
         Ok(())
     }
 
@@ -310,191 +329,73 @@ impl KubernetesService {
         secret_ref: Option<String>,
         environment_variables: Option<HashMap<String, String>>,
         labels: Option<&BTreeMap<String, String>>,
+        selector: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), ns);
 
-        let mut env = vec![EnvVar {
-            name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_owned(),
-            value: self.cfg.otel_exporter_otlp_endpoint.clone(),
-            ..Default::default()
-        }];
+        // We use default() to initialize, then only set fields that are Some.
+        // k8s-openapi structs are #[serde(skip_serializing_if = "Option::is_none")]
+        // so this creates the perfect "Partial JSON" automatically.
 
-        if let Some(otel_service_name) = otel_service_name {
-            env.push(EnvVar {
-                name: "OTEL_SERVICE_NAME".to_owned(),
-                value: Some(otel_service_name.to_string()),
-                ..Default::default()
-            });
-        }
+        let container = self.create_container(
+            otel_service_name,
+            otel_resource_attributes,
+            name,
+            image,
+            port,
+            resource_spec,
+            secret_ref,
+            environment_variables,
+        );
 
-        if let Some(otel_resource_attributes) = otel_resource_attributes {
-            env.push(EnvVar {
-                name: "OTEL_RESOURCE_ATTRIBUTES".to_owned(),
-                value: Some(otel_resource_attributes.to_string()),
-                ..Default::default()
-            });
-        }
-
-        if let Some(e) = environment_variables {
-            for (key, value) in e {
-                env.push(EnvVar {
-                    name: key.clone(),
-                    value: Some(value.clone()),
-                    ..Default::default()
-                });
-            }
-        }
-
-        let env_from = match secret_ref {
-            Some(secret_ref) => {
-                let mut env_from: Vec<EnvFromSource> = vec![];
-                env_from.push(EnvFromSource {
-                    secret_ref: Some(SecretEnvSource {
-                        name: secret_ref,
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                });
-                Some(env_from)
-            }
-            None => None,
-        };
-
-        let resources = match resource_spec {
-            Some(resource_spec) => {
-                let mut resource_requirements = ResourceRequirements::default();
-
-                let mut requests = BTreeMap::new();
-                requests.insert(
-                    "cpu".to_string(),
-                    Quantity(format!("{}m", resource_spec.cpu_request_millicores)),
-                );
-                requests.insert(
-                    "memory".to_string(),
-                    Quantity(format!("{}Mi", resource_spec.memory_request_mb)),
-                );
-
-                let mut limits = BTreeMap::new();
-                limits.insert(
-                    "cpu".to_string(),
-                    Quantity(format!("{}m", resource_spec.cpu_limit_millicores)),
-                );
-                limits.insert(
-                    "memory".to_string(),
-                    Quantity(format!("{}Mi", resource_spec.memory_limit_mb)),
-                );
-
-                resource_requirements.requests = Some(requests);
-                resource_requirements.limits = Some(limits);
-
-                Some(resource_requirements)
-            }
-            None => None,
-        };
-
+        // PodSpec:
+        //      image_pull_secrets: Option<Vec<LocalObjectReference>>
+        //      containers: Vec<Container>
         let image_pull_secrets = image_pull_secret.map(|name| vec![LocalObjectReference { name }]);
-
-        let mut deployment = K8sDeployment::default();
-
-        let metadata = ObjectMeta {
-            name: Some(name.to_string()),
-            namespace: Some(ns.to_string()),
-            labels: labels.clone().cloned(),
+        let pod_spec = PodSpec {
+            image_pull_secrets,
+            containers: vec![container],
             ..Default::default()
         };
 
-        let mut deployment_spec = DeploymentSpec::default();
+        // PodTemplateSpec:
+        //      metadata: Option<ObjectMeta>
+        //      spec: Option<PodSpec>
+        let pod_template_spec = PodTemplateSpec {
+            metadata: Some(ObjectMeta {
+                labels: labels.clone().cloned(),
+                ..Default::default()
+            }),
+            spec: Some(pod_spec),
+        };
 
-        deployment_spec.replicas = desired_replicas;
-
-        deployment.metadata = metadata;
-        deployment_spec.selector = LabelSelector {
-            match_labels: labels.clone().cloned(),
+        // DeploymentSpec:
+        //      replicas: Option<i32>
+        //      selector: LabelSelector
+        //      template: PodTemplateSpec
+        let deployment_spec = DeploymentSpec {
+            replicas: desired_replicas,
+            selector: LabelSelector {
+                match_labels: Some(selector.clone()),
+                ..Default::default()
+            },
+            template: pod_template_spec,
             ..Default::default()
         };
 
-        let mut pod_template_spec = PodTemplateSpec::default();
-
-        pod_template_spec.metadata = Some(ObjectMeta {
-            labels: labels.clone().cloned(),
-            ..Default::default()
-        });
-
-        let mut pod_spec = PodSpec::default();
-
-        pod_spec.image_pull_secrets = image_pull_secrets;
-
-        let mut container = Container::default();
-        container.name = name.to_string();
-
-        if let Some(image) = image {
-            container.image = Some(image.to_string());
-            container.image_pull_policy = Some("IfNotPresent".to_string());
-        }
-
-        pod_spec.containers = vec![container];
-
-        let mut container_port = ContainerPort::default();
-
-        if let Some(port) = port {
-            container_port.container_port = port;
-            container_port.protocol = Some("TCP".to_string());
-        }
-
-        container.env = Some(env);
-        container.env_from = env_from;
-        container.resources = resources;
-
-        /*
+        // K8sDeployment:
+        //      metadata: ObjectMeta
+        //      spec: Option<DeploymentSpec>
         let deployment = K8sDeployment {
             metadata: ObjectMeta {
                 name: Some(name.to_string()),
                 namespace: Some(ns.to_string()),
-                labels: Some(labels.clone()),
+                labels: labels.cloned(),
                 ..Default::default()
             },
-            spec: Some(DeploymentSpec {
-                replicas: Some(desired_replicas),
-                selector: LabelSelector {
-                    match_labels: Some(labels.clone()),
-                    ..Default::default()
-                },
-                template: PodTemplateSpec {
-                    metadata: Some(ObjectMeta {
-                        labels: Some(labels.clone()),
-                        ..Default::default()
-                    }),
-                    spec: Some(PodSpec {
-                        image_pull_secrets,
-                        containers: vec![Container {
-                            name: name.to_string(),
-                            image: Some(image.to_string()),
-                            image_pull_policy: Some("IfNotPresent".to_string()),
-                            ports: Some(vec![ContainerPort {
-                                container_port: port,
-                                // Must be UDP, TCP, or SCTP. Defaults to "TCP".
-                                protocol: Some("TCP".to_string()),
-                                ..Default::default()
-                            }]),
-                            env: Some(env),
-                            env_from: Some(env_from),
-                            resources: Some(ResourceRequirements {
-                                requests: Some(requests),
-                                limits: Some(limits),
-                                ..Default::default()
-                            }),
-                            liveness_probe: None,
-                            readiness_probe: None,
-                            ..Default::default()
-                        }],
-                        ..Default::default()
-                    }),
-                },
-                ..Default::default()
-            }),
+            spec: Some(deployment_spec),
             ..Default::default()
         };
-        */
 
         api.patch(
             name,
@@ -510,13 +411,119 @@ impl KubernetesService {
         Ok(())
     }
 
+    fn create_container(
+        &self,
+        otel_service_name: Option<&str>,
+        otel_resource_attributes: Option<&str>,
+        name: &str,
+        image: Option<&str>,
+        port: Option<i32>,
+        resource_spec: Option<&ResourceSpec>,
+        secret_ref: Option<String>,
+        environment_variables: Option<HashMap<String, String>>,
+    ) -> Container {
+        // Container:
+        //      name: String
+        //      image: Option<String>
+        //      image_pull_policy: Option<String>
+        //      ports: Option<Vec<ContainerPort>>
+        //      env: ss
+        //      env_from: ss
+        //      resources: ss
+        let mut container = Container::default();
+        container.name = name.to_string();
+        container.image = image.map(str::to_string);
+        // Image pull policy. One of Always, Never, IfNotPresent. Defaults to Always if :latest tag is specified, or IfNotPresent otherwise. Cannot be updated.
+        container.image_pull_policy = Some("IfNotPresent".to_string());
+        let ports = port.map(|container_port| {
+            vec![ContainerPort {
+                container_port,
+                protocol: Some("TCP".into()),
+                ..Default::default()
+            }]
+        });
+        container.ports = ports;
+
+        // Environment Variables
+        let mut env = vec![EnvVar {
+            name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_owned(),
+            value: self.cfg.otel_exporter_otlp_endpoint.clone(),
+            ..Default::default()
+        }];
+        if let Some(otel_service_name) = otel_service_name {
+            env.push(EnvVar {
+                name: "OTEL_SERVICE_NAME".to_owned(),
+                value: Some(otel_service_name.to_string()),
+                ..Default::default()
+            });
+        }
+        if let Some(otel_resource_attributes) = otel_resource_attributes {
+            env.push(EnvVar {
+                name: "OTEL_RESOURCE_ATTRIBUTES".to_owned(),
+                value: Some(otel_resource_attributes.to_string()),
+                ..Default::default()
+            });
+        }
+        if let Some(e) = environment_variables {
+            for (key, value) in e {
+                env.push(EnvVar {
+                    name: key.clone(),
+                    value: Some(value.clone()),
+                    ..Default::default()
+                });
+            }
+        }
+        container.env = Some(env);
+
+        if let Some(name) = secret_ref {
+            container.env_from = Some(vec![EnvFromSource {
+                secret_ref: Some(SecretEnvSource {
+                    name: name,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }]);
+        };
+
+        if let Some(resource_spec) = resource_spec {
+            let mut req = BTreeMap::new();
+            req.insert(
+                "cpu".to_string(),
+                Quantity(format!("{}m", resource_spec.cpu_request_millicores)),
+            );
+            req.insert(
+                "memory".to_string(),
+                Quantity(format!("{}Mi", resource_spec.memory_request_mb)),
+            );
+
+            let mut lim = BTreeMap::new();
+            lim.insert(
+                "cpu".to_string(),
+                Quantity(format!("{}m", resource_spec.cpu_limit_millicores)),
+            );
+            lim.insert(
+                "memory".to_string(),
+                Quantity(format!("{}Mi", resource_spec.memory_limit_mb)),
+            );
+
+            container.resources = Some(ResourceRequirements {
+                requests: Some(req),
+                limits: Some(lim),
+                ..Default::default()
+            });
+        };
+
+        container
+    }
+
     #[tracing::instrument(name = "kubernetes_service.apply_service", skip_all, err)]
     async fn apply_service(
         &self,
         ns: &str,
         name: &str,
         port: i32,
-        labels: &BTreeMap<String, String>,
+        labels: Option<&BTreeMap<String, String>>,
+        selector: &BTreeMap<String, String>,
     ) -> Result<(), AppError> {
         let api: Api<Service> = Api::namespaced(self.client.clone(), ns);
 
@@ -524,12 +531,11 @@ impl KubernetesService {
             metadata: ObjectMeta {
                 name: Some(name.to_string()),
                 namespace: Some(ns.to_string()),
-                labels: Some(labels.clone()),
+                labels: labels.cloned(),
                 ..Default::default()
             },
             spec: Some(ServiceSpec {
-                // TODO what putting as selector is best?
-                selector: Some(labels.clone()),
+                selector: Some(selector.clone()),
                 ports: Some(vec![ServicePort {
                     name: Some("http".to_string()),
                     port,
@@ -637,7 +643,7 @@ impl KubernetesService {
             routes.push(IngressRouteRoutes {
                 r#match: format!("Host(`{}`)", full_subdomain),
                 services: Some(vec![IngressRouteRoutesServices {
-                    name: name.clone().to_string(),
+                    name: name.to_string(),
                     port: Some(IntOrString::Int(port)),
                     ..Default::default()
                 }]),
@@ -655,7 +661,7 @@ impl KubernetesService {
             routes.push(IngressRouteRoutes {
                 r#match: format!("Host(`{}`)", user_domain),
                 services: Some(vec![IngressRouteRoutesServices {
-                    name: name.clone().to_string(),
+                    name: name.to_string(),
                     port: Some(IntOrString::Int(port)),
                     ..Default::default()
                 }]),
@@ -673,8 +679,8 @@ impl KubernetesService {
 
         let ingress_route = IngressRoute {
             metadata: ObjectMeta {
-                name: Some(name.clone().to_string()),
-                namespace: Some(ns.clone().to_string()),
+                name: Some(name.to_string()),
+                namespace: Some(ns.to_string()),
                 ..Default::default()
             },
             spec: IngressRouteSpec {
@@ -714,18 +720,18 @@ impl KubernetesService {
         &self,
         ns: &str,
         name: &str,
-        creds: &ImagePullSecret,
+        secret: &ImagePullSecret,
     ) -> Result<String, AppError> {
         let secret_name = format!("{}-registry", name);
 
         let auth = base64::engine::general_purpose::STANDARD
-            .encode(format!("{}:{}", creds.username, creds.secret));
+            .encode(format!("{}:{}", secret.username, secret.secret));
 
         let dockerconfig = serde_json::json!({
             "auths": {
-                creds.server.clone(): {
-                    "username": creds.username,
-                    "password": creds.secret,
+                secret.server.clone(): {
+                    "username": secret.username,
+                    "password": secret.secret,
                     "auth": auth
                 }
             }
