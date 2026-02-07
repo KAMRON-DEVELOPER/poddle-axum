@@ -54,6 +54,7 @@ impl VaultService {
 
     /// Store (or Update) deployment secrets in Vault.
     /// In KV2, 'put' replaces the secret version, which is what we want.
+    /// Return `format!("{}/{}", ns, deployment_id)` path.
     pub async fn store_secrets(
         &self,
         ns: &str,

@@ -147,6 +147,7 @@ impl KubernetesService {
         let ns = self.ensure_namespace(&msg.user_id).await?;
         let name = format_resource_name(&msg.deployment_id);
 
+        // Define Labels & Selector
         let mut labels = BTreeMap::new();
         labels.insert("poddle.io/managed-by".into(), "poddle".into());
         labels.insert("poddle.io/project-id".into(), msg.project_id.into());
@@ -159,10 +160,11 @@ impl KubernetesService {
             deployment_id.to_string(),
         );
 
-        self.create_vso_resources(&ns).await?;
+        self.apply_vso_resources(&ns).await?;
 
+        // This creates the VSO Resource AND writes the initial data to Vault
         let secret_ref = self
-            .create_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
+            .apply_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
             .await?;
 
         let image_pull_secret = if let Some(secret) = msg.image_pull_secret.as_ref() {
@@ -171,14 +173,13 @@ impl KubernetesService {
             None
         };
 
-        let otel_service_name = msg.name;
         let otel_resource_attributes = format!(
             "project_id={},deployment_id={},managed_by=poddle",
             msg.project_id, msg.deployment_id
         );
 
         self.apply_deployment(
-            Some(otel_service_name.as_ref()),
+            Some(&msg.name),
             Some(&otel_resource_attributes),
             &ns,
             &name,
@@ -209,6 +210,8 @@ impl KubernetesService {
             &mut con,
         )
         .await?;
+
+        info!("✅ Created deployment {}", msg.deployment_id);
 
         Ok(())
     }
@@ -244,32 +247,33 @@ impl KubernetesService {
         let ns = self.ensure_namespace(&msg.user_id).await?;
         let name = format_resource_name(&msg.deployment_id);
 
+        // Selector is invariant
         let mut selector = BTreeMap::new();
         selector.insert(
             "poddle.io/deployment-id".to_string(),
             deployment_id.to_string(),
         );
 
+        // Update Secrets (if provided)
+        // We call the same function. It updates Vault data. VSO detects change -> Restarts Pods.
+        let secret_ref = self
+            .apply_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
+            .await?;
+
         let image_pull_secret = match msg.image_pull_secret.as_ref() {
             Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
             None => None,
         };
 
-        let secret_ref = self
-            .create_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
-            .await?;
-
-        let otel_service_name = msg.name;
-
-        // Apply Deployment
+        // image_pull_secret is optional, not need to check
         if msg.image.is_some()
-            || msg.image_pull_secret.is_some()
             || msg.port.is_some()
             || msg.resource_spec.is_some()
             || msg.desired_replicas.is_some()
+            || msg.environment_variables.is_some()
         {
             self.apply_deployment(
-                otel_service_name.as_deref(),
+                msg.name.as_deref(),
                 None,
                 &ns,
                 &name,
@@ -286,14 +290,29 @@ impl KubernetesService {
             .await?;
         }
 
-        // TODO What if user change ony domain|subdomain or port?
+        // Service (Only if port changes)
         if let Some(port) = msg.port {
             self.apply_service(&ns, &name, port, None, &selector)
                 .await?;
         }
 
-        if msg.domain.is_some() || msg.subdomain.is_some() {
-            let port = msg.port.unwrap_or(8080);
+        // Ingress (If Port OR Domain changes)
+        if msg.port.is_some() || msg.domain.is_some() || msg.subdomain.is_some() {
+            // Determine the port to use for Ingress.
+            // If the user sent a new port, use it.
+            // If not, we MUST fetch the existing port from the DB, because Ingress requires it.
+            let port = if let Some(p) = msg.port {
+                p
+            } else {
+                let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &pool)
+                .await
+                .map_err(|e| {
+                    error!(ns=%ns, name=%name, error = %e, "🚨 Failed to get deployment from database");
+                    AppError::InternalServerError(format!("🚨 Failed to get deployment from database: {}", e))
+                })?;
+                deployment.port
+            };
+
             self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, port)
                 .await?;
         }
@@ -306,6 +325,8 @@ impl KubernetesService {
             &mut con,
         )
         .await?;
+
+        info!("✅ Updated deployment {}", msg.deployment_id);
 
         Ok(())
     }
@@ -340,6 +361,8 @@ impl KubernetesService {
         let secret_name = format!("{}-registry", name);
         let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
         let _ = secret_api.delete(&secret_name, &dp).await;
+
+        info!("✅ Deleted deployment {}", msg.deployment_id);
 
         Ok(())
     }
@@ -876,7 +899,7 @@ impl KubernetesService {
 
     /// Creates VaultConnection & VaultAuth
     #[tracing::instrument(name = "kubernetes_service.create_vso_resources", skip_all, err)]
-    async fn create_vso_resources(&self, ns: &str) -> Result<(), AppError> {
+    async fn apply_vso_resources(&self, ns: &str) -> Result<(), AppError> {
         let mut vault_connection = VaultConnection::default();
         vault_connection.metadata.namespace = Some(ns.to_owned());
 
@@ -907,21 +930,32 @@ impl KubernetesService {
         let vault_connection_api: Api<VaultConnection> = Api::namespaced(self.client.clone(), &ns);
         let vault_auth_api: Api<VaultAuth> = Api::namespaced(self.client.clone(), &ns);
 
+        let vc_api_patch_name = &vault_connection.metadata.name.clone().unwrap();
         vault_connection_api
-            .create(&PostParams::default(), &vault_connection)
-            .instrument(info_span!("create_vault_connection"))
+            .patch(
+                vc_api_patch_name,
+                &PatchParams::apply("poddle-provisioner").force(),
+                &Patch::Apply(vault_connection),
+            )
+            .instrument(info_span!("apply_vault_connection"))
             .await
             .map_err(|e| {
-                error!(ns=%ns, error = %e, "🚨 Failed to create VaultConnection");
-                AppError::InternalServerError(format!("🚨 Failed to create VaultConnection: {}", e))
+                error!(ns=%ns, error = %e, "🚨 VaultConnection SSA failed");
+                AppError::InternalServerError(format!("🚨 VaultConnection SSA failed: {}", e))
             })?;
+
+        let va_api_patch_name = &vault_auth.metadata.name.clone().unwrap();
         vault_auth_api
-            .create(&PostParams::default(), &vault_auth)
-            .instrument(info_span!("create_vault_api"))
+            .patch(
+                va_api_patch_name,
+                &PatchParams::apply("poddle-provisioner").force(),
+                &Patch::Apply(vault_auth),
+            )
+            .instrument(info_span!("apply_vault_api"))
             .await
             .map_err(|e| {
-                error!(ns=%ns, error = %e, "🚨 Failed to create VaultAuth");
-                AppError::InternalServerError(format!("🚨 Failed to create VaultAuth: {}", e))
+                error!(ns=%ns, error = %e, "🚨 VaultAuth SSA failed");
+                AppError::InternalServerError(format!("🚨 VaultAuth SSA failed: {}", e))
             })?;
 
         Ok(())
@@ -929,7 +963,7 @@ impl KubernetesService {
 
     /// Create VSO resources
     #[tracing::instrument(name = "kubernetes_service.create_vault_static_secret", skip_all, fields(deployment_id = %deployment_id), err)]
-    async fn create_vault_static_secret(
+    async fn apply_vault_static_secret(
         &self,
         deployment_id: &str,
         ns: &str,
@@ -985,13 +1019,17 @@ impl KubernetesService {
 
         let api: Api<VaultStaticSecret> = Api::namespaced(self.client.clone(), ns);
 
-        api.create(&PostParams::default(), &vault_static_secret)
-            .instrument(info_span!("create_vault_static_secret"))
-            .await
-            .map_err(|e| {
-                error!(deployment_id=%deployment_id, error = %e, "🚨 Failed to create VSO Secret");
-                AppError::InternalServerError(format!("🚨 Failed to create VSO Secret: {}", e))
-            })?;
+        api.patch(
+            name,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(vault_static_secret),
+        )
+        .instrument(info_span!("apply_vault_static_secret"))
+        .await
+        .map_err(|e| {
+            error!(deployment_id=%deployment_id, error = %e, "🚨 VaultStaticSecret SSA failed");
+            AppError::InternalServerError(format!("🚨 VaultStaticSecret SSA failed: {}", e))
+        })?;
 
         Ok(Some(secret_name))
     }

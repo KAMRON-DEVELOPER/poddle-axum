@@ -322,7 +322,10 @@ pub async fn create_deployment_handler(
         .await?
         .await?;
 
-    info!(deployment_id = %deployment.id, "Published deployment creation message");
+    info!(
+        "📤 Published deployment creation message for {}",
+        deployment.id
+    );
 
     // Commit transaction
     tx.commit().await?;
@@ -399,7 +402,10 @@ pub async fn update_deployment_handler(
         .await?
         .await?;
 
-    info!("Published deployment update message for {}", deployment_id);
+    info!(
+        "📤 Published deployment update message for {}",
+        deployment_id
+    );
 
     // Commit transaction
     tx.commit().await?;
@@ -463,7 +469,7 @@ pub async fn delete_deployment_handler(
         .await?;
 
     info!(
-        "Published deployment deletion message for {}",
+        "📤 Published deployment deletion message for {}",
         deployment_id
     );
 
