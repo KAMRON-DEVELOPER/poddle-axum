@@ -183,9 +183,6 @@ pub async fn stream_logs_see_handler(
 
     // Create the SSE Stream
     let stream = async_stream::stream! {
-        // Send an initial "connected" event
-        yield Ok(Event::default().event("log").data("connected"));
-
         while let Some(msg) = stream.next().await {
             match msg {
                 Ok(Message::Text(text)) => {
