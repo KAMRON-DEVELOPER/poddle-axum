@@ -1,3 +1,4 @@
+use chrono::Utc;
 use compute_core::cache_keys::CacheKeys;
 use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
@@ -288,7 +289,10 @@ async fn handle_pod_event(
             );
 
             let mut p = pipe();
-            // let ttl = cfg.prometheus.scrape_interval_secs * cfg.prometheus.snapshots_to_keep;
+            let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
+            let score = Utc::now().timestamp();
+            p.zadd(&index_key, &uid, score).ignore();
+
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
             let meta = PodMeta {
                 uid,
@@ -298,7 +302,6 @@ async fn handle_pod_event(
             };
             let items = meta.as_redis_items();
             p.hset_multiple(&meta_key, &items).ignore();
-            // p.expire(&meta_key, ttl).ignore();
 
             let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
             let message = ComputeEvent::PodApply {
