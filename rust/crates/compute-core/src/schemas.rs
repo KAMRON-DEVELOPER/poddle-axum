@@ -241,13 +241,13 @@ pub struct MetricSnapshot {
 #[derive(Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Pod {
-    pub meta: PodHistory,
+    pub meta: PodMeta,
     pub metrics: Vec<MetricSnapshot>,
 }
 
 #[derive(FromRedisValue, ToRedisArgs, Serialize, Deserialize, Default, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct PodHistory {
+pub struct PodMeta {
     pub uid: String,
     pub name: String,
     pub phase: PodPhase,
@@ -264,6 +264,6 @@ pub struct DeploymentMetricUpdate {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PodMetricUpdate {
-    pub meta: PodHistory,
+    pub meta: PodMeta,
     pub snapshot: MetricSnapshot,
 }

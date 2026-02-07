@@ -4,7 +4,7 @@ use compute_core::{
     channel_names::ChannelNames,
     configs::PrometheusConfig,
     event::ComputeEvent,
-    schemas::{DeploymentMetricUpdate, MetricSnapshot, PodHistory, PodMetricUpdate, PodPhase},
+    schemas::{DeploymentMetricUpdate, MetricSnapshot, PodMeta, PodMetricUpdate, PodPhase},
 };
 use factory::factories::redis::Redis;
 use prometheus_http_query::{Client, response::Data};
@@ -274,7 +274,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 p.expire(&index_key, ttl).ignore();
 
                 // Metadata
-                let meta = PodHistory {
+                let meta = PodMeta {
                     uid,
                     name,
                     phase,

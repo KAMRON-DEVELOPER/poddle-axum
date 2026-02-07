@@ -8,7 +8,7 @@ use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
-        MetricSnapshot, PodHistory, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        MetricSnapshot, PodMeta, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
@@ -54,7 +54,7 @@ impl Display for PodPhase {
     }
 }
 
-impl PodHistory {
+impl PodMeta {
     pub fn as_redis_items(&self) -> Vec<(&'static str, String)> {
         vec![
             ("uid", self.uid.clone()),

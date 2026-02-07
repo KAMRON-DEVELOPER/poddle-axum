@@ -3,7 +3,7 @@ use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
-use compute_core::schemas::{Pod, PodHistory};
+use compute_core::schemas::{Pod, PodMeta};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::core::v1::Pod as K8sPod;
@@ -274,7 +274,7 @@ async fn handle_pod_event(
             let mut p = pipe();
             let ttl = cfg.prometheus.scrape_interval_secs * cfg.prometheus.snapshots_to_keep;
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
-            let meta = PodHistory {
+            let meta = PodMeta {
                 uid,
                 name,
                 phase,

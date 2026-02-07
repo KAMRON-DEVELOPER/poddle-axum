@@ -1,6 +1,6 @@
 use compute_core::{
     cache_keys::CacheKeys,
-    schemas::{MetricSnapshot, Pod, PodHistory},
+    schemas::{MetricSnapshot, Pod, PodMeta},
 };
 use http_contracts::pagination::schema::Pagination;
 use redis::{AsyncTypedCommands, aio::MultiplexedConnection};
@@ -51,7 +51,7 @@ impl CacheService {
         // Execute Pipeline
         // The power of redis-rs: It deserializes the flat stream into tuples!
         // Expect: Vec<(PodHistory, Vec<MetricSnapshot>)>
-        let results: Vec<(PodHistory, Vec<MetricSnapshot>)> =
+        let results: Vec<(PodMeta, Vec<MetricSnapshot>)> =
             p.query_async(con).await.map_err(|e| {
                 error!(error = %e, "❌ Redis pipeline failed");
                 AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
