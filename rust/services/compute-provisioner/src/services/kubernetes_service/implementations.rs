@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
-use compute_core::event::{ComputeEvent, EventLevel};
+use compute_core::event::ComputeEvent;
 use compute_core::formatters::{format_namespace, format_resource_name};
 use compute_core::models::{DeploymentStatus, ResourceSpec};
 use compute_core::schemas::ImagePullSecret;
@@ -44,7 +44,6 @@ use kube::{
 
 use redis::AsyncTypedCommands;
 use redis::aio::MultiplexedConnection;
-use serde_json::json;
 use sqlx::PgPool;
 use tracing::{Instrument, error, info, info_span, warn};
 use uuid::Uuid;
@@ -108,12 +107,12 @@ impl KubernetesService {
         Ok(())
     }
 
-    // --------------------------------------------------------------------------------------------
-    // create
-    // --------------------------------------------------------------------------------------------
+    // ============================================================================================
+    // PUBLIC HANDLERS
+    // ============================================================================================
 
-    /// Starting point, update status to `provisioning` in DB, whetever updated or not in DB it user notified by `SEE` thrugh `pubsub`
-    /// `create_resources` called and again status updated to `starting` and user notified
+    /// Handles "Create" messages.
+    /// We wrap mandatory fields in `Some()` and pass them to the `apply_*` functions.
     #[tracing::instrument(
         name = "kubernetes_service.create",
         skip_all,
@@ -126,6 +125,14 @@ impl KubernetesService {
         mut con: MultiplexedConnection,
         msg: CreateDeploymentMessage,
     ) -> Result<(), AppError> {
+        self.notify_status(
+            &msg.project_id,
+            &msg.deployment_id,
+            DeploymentStatus::Provisioning,
+            &mut con,
+        )
+        .await?;
+
         let user_id = msg.user_id.clone();
         let project_id = msg.project_id.clone();
         let deployment_id = msg.deployment_id.clone();
@@ -134,91 +141,9 @@ impl KubernetesService {
             user_id = %user_id,
             project_id = %project_id,
             deployment_id = %deployment_id,
-            "🚀 Creating K8s resources"
+            "🚀 Creating deployment"
         );
 
-        // Update status to 'provisioning'
-        let query_result = DeploymentRepository::update_status(
-            &deployment_id,
-            DeploymentStatus::Provisioning,
-            &pool,
-        )
-        .await?;
-
-        if query_result.rows_affected() == 0 {
-            let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-            let message = ComputeEvent::DeploymentSystemMessage {
-                id: &deployment_id,
-                level: EventLevel::Error,
-                message: "Internal server error".to_string(),
-            };
-            con.publish(channel, message)
-                .instrument(info_span!("pubsub.message"))
-                .await?;
-            warn!(
-                user_id = %user_id,
-                project_id = %project_id,
-                deployment_id = %deployment_id,
-                "❌ Update deployment status affected zero rows"
-            );
-        }
-
-        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-        let message = ComputeEvent::DeploymentStatusUpdate {
-            id: &deployment_id,
-            status: DeploymentStatus::Provisioning,
-        };
-        con.publish(channel, message)
-            .instrument(info_span!("pubsub.status_update"))
-            .await?;
-
-        self.create_resources(msg).await?;
-
-        let query_result =
-            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Running, &pool)
-                .await?;
-
-        if query_result.rows_affected() == 0 {
-            let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-            let message = ComputeEvent::DeploymentSystemMessage {
-                id: &deployment_id,
-                level: EventLevel::Error,
-                message: "Internal server error".to_string(),
-            };
-            con.publish(channel, message)
-                .instrument(info_span!("pubsub.message"))
-                .await?;
-            warn!(
-                user_id = %user_id,
-                project_id = %project_id,
-                deployment_id = %deployment_id,
-                "❌ Update deployment status affected zero rows"
-            );
-        }
-
-        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-        let message = ComputeEvent::DeploymentStatusUpdate {
-            id: &deployment_id,
-            status: DeploymentStatus::Running,
-        };
-        con.publish(channel, message)
-            .instrument(info_span!("pubsub.status_update"))
-            .await?;
-
-        info!("✅ K8s resources created for deployment {}", deployment_id);
-
-        Ok(())
-    }
-
-    /// Prepares `ns` and `name` for resources, using same `name` for different resources is not problem
-    /// Creates VSO resources(`VaultConnection` & `VaultAuth`), `vault static secret`, `deployment`, `service`, `ingressroute`
-    #[tracing::instrument(
-        name = "kubernetes_service.create_resources",
-        skip_all,
-        fields(user_id = %msg.user_id, project_id = %msg.project_id, deployment_id = %msg.deployment_id),
-        err
-    )]
-    async fn create_resources(&self, msg: CreateDeploymentMessage) -> Result<(), AppError> {
         let ns = self.ensure_namespace(&msg.user_id).await?;
         let name = format_resource_name(&msg.deployment_id);
 
@@ -235,45 +160,623 @@ impl KubernetesService {
             .await?;
 
         let image_pull_secret = match msg.image_pull_secret.as_ref() {
-            Some(secret) => Some(self.create_image_pull_secret(&ns, &name, secret).await?),
+            Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
             None => None,
         };
 
-        let otel_service_name = msg.name.as_ref();
+        let otel_service_name = msg.name;
         let otel_resource_attributes = format!(
             "project_id={},deployment_id={},managed_by=poddle",
             msg.project_id, msg.deployment_id
         );
 
-        self.create_deployment(
-            otel_service_name,
-            &otel_resource_attributes,
+        self.apply_deployment(
+            Some(otel_service_name.as_ref()),
+            Some(&otel_resource_attributes),
             &ns,
             &name,
-            &msg.image,
+            Some(&msg.image),
             image_pull_secret,
-            msg.port,
-            msg.desired_replicas,
-            &msg.resource_spec,
+            Some(msg.port),
+            Some(msg.desired_replicas),
+            Some(&msg.resource_spec),
             secret_ref,
             msg.environment_variables,
-            &labels,
+            Some(&labels),
         )
         .await?;
 
-        self.create_service(&ns, &name, msg.port, &labels).await?;
+        // TODO we need to pass selector
+        self.apply_service(&ns, &name, msg.port).await?;
 
-        self.create_traefik_ingressroute(
-            ns,
+        // Pass None for domain/subdomain if they don't exist, logic handles it inside
+        self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, msg.port)
+            .await?;
+
+        // 3. Finalize
+        self.finalize_status(
+            &msg.project_id,
+            &msg.deployment_id,
+            DeploymentStatus::Running,
+            &pool,
+            &mut con,
+        )
+        .await?;
+        info!("✅ Created deployment {}", msg.deployment_id);
+        Ok(())
+    }
+
+    /// Handles "Update" messages.
+    /// We pass the `Option` fields directly. `None` means "Don't change".
+    #[tracing::instrument(name = "kubernetes_service.update", skip_all, fields(id = %msg.deployment_id), err)]
+    pub async fn update(
+        &self,
+        pool: PgPool,
+        mut con: MultiplexedConnection,
+        msg: UpdateDeploymentMessage,
+    ) -> Result<(), AppError> {
+        self.notify_status(
+            &msg.project_id,
+            &msg.deployment_id,
+            DeploymentStatus::Updating,
+            &mut con,
+        )
+        .await?;
+
+        let ns = self.ensure_namespace(&msg.user_id).await?;
+        let name = format_resource_name(&msg.deployment_id);
+
+        let image_pull_secret = match msg.image_pull_secret.as_ref() {
+            Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
+            None => None,
+        };
+
+        let secret_ref = self
+            .create_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
+            .await?;
+
+        let otel_service_name = msg.name;
+
+        // 1. Apply Deployment (Partial Update)
+        // If msg.image is None, SSA will ignore it and keep the existing image.
+        if msg.image.is_some()
+            || msg.desired_replicas.is_some()
+            || msg.port.is_some()
+            || msg.resource_spec.is_some()
+            || msg.image_pull_secret.is_some()
+        {
+            self.apply_deployment(
+                otel_service_name.as_deref(),
+                None,
+                &ns,
+                &name,
+                msg.image.as_deref(),
+                image_pull_secret,
+                msg.port,
+                msg.desired_replicas,
+                msg.resource_spec.as_ref(),
+                secret_ref,
+                msg.environment_variables,
+                None,
+            )
+            .await?;
+        }
+
+        // 2. Apply Service
+        if let Some(port) = msg.port {
+            // TODO we need to pass selector
+            self.apply_service(&ns, &name, port).await?;
+        }
+
+        // 3. Apply Ingress
+        if msg.domain.is_some() || msg.subdomain.is_some() {
+            // Note: If port didn't change, we need to fetch the existing one or pass the updated one.
+            // For safety in this simplified view, we assume Ingress update usually comes with domain changes.
+            // In a perfect system, you might want to read the current port if it's None in the message,
+            // OR just rely on the user sending the port if they want Ingress updated.
+            let port = msg.port.unwrap_or(8080); // Fallback or strict requirement
+            self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, port)
+                .await?;
+        }
+
+        self.finalize_status(
+            &msg.project_id,
+            &msg.deployment_id,
+            DeploymentStatus::Running,
+            &pool,
+            &mut con,
+        )
+        .await?;
+        info!("✅ Updated deployment {}", msg.deployment_id);
+        Ok(())
+    }
+
+    // ============================================================================================
+    // PRIVATE APPLY FUNCTIONS
+    // ============================================================================================
+
+    #[tracing::instrument(name = "kubernetes_service.apply_deployment", skip_all, err)]
+    async fn apply_deployment(
+        &self,
+        otel_service_name: Option<&str>,
+        otel_resource_attributes: Option<&str>,
+        ns: &str,
+        name: &str,
+        image: Option<&str>,
+        image_pull_secret: Option<String>,
+        port: Option<i32>,
+        desired_replicas: Option<i32>,
+        resource_spec: Option<&ResourceSpec>,
+        secret_ref: Option<String>,
+        environment_variables: Option<HashMap<String, String>>,
+        labels: Option<&BTreeMap<String, String>>,
+    ) -> Result<(), AppError> {
+        let api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), ns);
+
+        let mut env = vec![EnvVar {
+            name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_owned(),
+            value: self.cfg.otel_exporter_otlp_endpoint.clone(),
+            ..Default::default()
+        }];
+
+        if let Some(otel_service_name) = otel_service_name {
+            env.push(EnvVar {
+                name: "OTEL_SERVICE_NAME".to_owned(),
+                value: Some(otel_service_name.to_string()),
+                ..Default::default()
+            });
+        }
+
+        if let Some(otel_resource_attributes) = otel_resource_attributes {
+            env.push(EnvVar {
+                name: "OTEL_RESOURCE_ATTRIBUTES".to_owned(),
+                value: Some(otel_resource_attributes.to_string()),
+                ..Default::default()
+            });
+        }
+
+        if let Some(e) = environment_variables {
+            for (key, value) in e {
+                env.push(EnvVar {
+                    name: key.clone(),
+                    value: Some(value.clone()),
+                    ..Default::default()
+                });
+            }
+        }
+
+        let env_from = match secret_ref {
+            Some(secret_ref) => {
+                let mut env_from: Vec<EnvFromSource> = vec![];
+                env_from.push(EnvFromSource {
+                    secret_ref: Some(SecretEnvSource {
+                        name: secret_ref,
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                });
+                Some(env_from)
+            }
+            None => None,
+        };
+
+        let resources = match resource_spec {
+            Some(resource_spec) => {
+                let mut resource_requirements = ResourceRequirements::default();
+
+                let mut requests = BTreeMap::new();
+                requests.insert(
+                    "cpu".to_string(),
+                    Quantity(format!("{}m", resource_spec.cpu_request_millicores)),
+                );
+                requests.insert(
+                    "memory".to_string(),
+                    Quantity(format!("{}Mi", resource_spec.memory_request_mb)),
+                );
+
+                let mut limits = BTreeMap::new();
+                limits.insert(
+                    "cpu".to_string(),
+                    Quantity(format!("{}m", resource_spec.cpu_limit_millicores)),
+                );
+                limits.insert(
+                    "memory".to_string(),
+                    Quantity(format!("{}Mi", resource_spec.memory_limit_mb)),
+                );
+
+                resource_requirements.requests = Some(requests);
+                resource_requirements.limits = Some(limits);
+
+                Some(resource_requirements)
+            }
+            None => None,
+        };
+
+        let image_pull_secrets = image_pull_secret.map(|name| vec![LocalObjectReference { name }]);
+
+        let mut deployment = K8sDeployment::default();
+
+        let metadata = ObjectMeta {
+            name: Some(name.to_string()),
+            namespace: Some(ns.to_string()),
+            labels: labels.clone().cloned(),
+            ..Default::default()
+        };
+
+        let mut deployment_spec = DeploymentSpec::default();
+
+        deployment_spec.replicas = desired_replicas;
+
+        deployment.metadata = metadata;
+        deployment_spec.selector = LabelSelector {
+            match_labels: labels.clone().cloned(),
+            ..Default::default()
+        };
+
+        let mut pod_template_spec = PodTemplateSpec::default();
+
+        pod_template_spec.metadata = Some(ObjectMeta {
+            labels: labels.clone().cloned(),
+            ..Default::default()
+        });
+
+        let mut pod_spec = PodSpec::default();
+
+        pod_spec.image_pull_secrets = image_pull_secrets;
+
+        let mut container = Container::default();
+        container.name = name.to_string();
+
+        if let Some(image) = image {
+            container.image = Some(image.to_string());
+            container.image_pull_policy = Some("IfNotPresent".to_string());
+        }
+
+        pod_spec.containers = vec![container];
+
+        let mut container_port = ContainerPort::default();
+
+        if let Some(port) = port {
+            container_port.container_port = port;
+            container_port.protocol = Some("TCP".to_string());
+        }
+
+        container.env = Some(env);
+        container.env_from = env_from;
+        container.resources = resources;
+
+        /*
+        let deployment = K8sDeployment {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some(ns.to_string()),
+                labels: Some(labels.clone()),
+                ..Default::default()
+            },
+            spec: Some(DeploymentSpec {
+                replicas: Some(desired_replicas),
+                selector: LabelSelector {
+                    match_labels: Some(labels.clone()),
+                    ..Default::default()
+                },
+                template: PodTemplateSpec {
+                    metadata: Some(ObjectMeta {
+                        labels: Some(labels.clone()),
+                        ..Default::default()
+                    }),
+                    spec: Some(PodSpec {
+                        image_pull_secrets,
+                        containers: vec![Container {
+                            name: name.to_string(),
+                            image: Some(image.to_string()),
+                            image_pull_policy: Some("IfNotPresent".to_string()),
+                            ports: Some(vec![ContainerPort {
+                                container_port: port,
+                                // Must be UDP, TCP, or SCTP. Defaults to "TCP".
+                                protocol: Some("TCP".to_string()),
+                                ..Default::default()
+                            }]),
+                            env: Some(env),
+                            env_from: Some(env_from),
+                            resources: Some(ResourceRequirements {
+                                requests: Some(requests),
+                                limits: Some(limits),
+                                ..Default::default()
+                            }),
+                            liveness_probe: None,
+                            readiness_probe: None,
+                            ..Default::default()
+                        }],
+                        ..Default::default()
+                    }),
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+        */
+
+        api.patch(
             name,
-            msg.domain,
-            msg.subdomain,
-            Some(IntOrString::Int(msg.port)),
-            labels,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(&deployment),
         )
-        .await?;
+        .await
+        .map_err(|e| {
+            error!(ns=%ns, name=%name, "❌ Deployment SSA failed");
+            AppError::InternalServerError(format!("Deployment SSA failed: {}", e))
+        })?;
 
         Ok(())
+    }
+
+    #[tracing::instrument(name = "kubernetes_service.apply_service", skip_all, err)]
+    async fn apply_service(
+        &self,
+        ns: &str,
+        name: &str,
+        port: i32,
+        labels: &BTreeMap<String, String>,
+    ) -> Result<(), AppError> {
+        let api: Api<Service> = Api::namespaced(self.client.clone(), ns);
+
+        let service = Service {
+            metadata: ObjectMeta {
+                name: Some(name.to_string()),
+                namespace: Some(ns.to_string()),
+                labels: Some(labels.clone()),
+                ..Default::default()
+            },
+            spec: Some(ServiceSpec {
+                // TODO what putting as selector is best?
+                selector: Some(labels.clone()),
+                ports: Some(vec![ServicePort {
+                    name: Some("http".to_string()),
+                    port,
+                    target_port: Some(IntOrString::Int(port)),
+                    protocol: Some("TCP".to_string()),
+                    ..Default::default()
+                }]),
+                // Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer
+                type_: Some("ClusterIP".to_string()),
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        // let patch = json!({
+        //     "apiVersion": "v1",
+        //     "kind": "Service",
+        //     "metadata": {
+        //         "name": name,
+        //         "namespace": ns,
+        //         "labels": { "poddle.io/deployment": name }
+        //     },
+        //     "spec": {
+        //         "type": "ClusterIP",
+        //         "selector": { "poddle.io/deployment": name },
+        //         "ports": [{
+        //             "name": "http",
+        //             "port": port,
+        //             "targetPort": port,
+        //             "protocol": "TCP"
+        //         }],
+        //     }
+        // });
+
+        api.patch(
+            name,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(&service),
+        )
+        .await
+        .map_err(|e| {
+            error!(ns=%ns, name=%name, error=%e, "🚨 Service SSA failed");
+            AppError::InternalServerError(format!("🚨 Service SSA failed: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "kubernetes_service.update_ingressroute", skip_all, err)]
+    async fn apply_ingressroute(
+        &self,
+        ns: &str,
+        name: &str,
+        domain: Option<String>,
+        subdomain: Option<String>,
+        port: i32,
+    ) -> Result<(), AppError> {
+        let api: Api<IngressRoute> = Api::namespaced(self.client.clone(), ns);
+
+        let mut routes = vec![];
+        let mut domains = vec![];
+
+        // Helper to add route
+        // let mut add_route = |host: String| {
+        //     routes.push(json!({
+        //         "match": format!("Host(`{}`)", host),
+        //         "services": [{ "name": name, "port": port }]
+        //     }));
+        //     domains.push(json!({ "main": host }));
+        // };
+
+        // if let Some(sub) = subdomain {
+        //     add_route(format!("{}.{}", sub, self.cfg.traefik.base_domain));
+        // }
+        // if let Some(dom) = domain {
+        //     add_route(dom);
+        // }
+
+        // if routes.is_empty() {
+        //     return Ok(());
+        // }
+
+        // let patch = json!({
+        //     "apiVersion": "traefik.io/v1alpha1",
+        //     "kind": "IngressRoute",
+        //     "metadata": {
+        //         "name": name,
+        //         "namespace": ns
+        //     },
+        //     "spec": {
+        //         "entryPoints": self.cfg.traefik.entry_points,
+        //         "routes": routes,
+        //         "tls": {
+        //             "domains": domains,
+        //             "certResolver": self.cfg.cert_manager.cluster_issuer
+        //         }
+        //     }
+        // });
+
+        // Uses Default TLSStore (Wildcard)
+        // We create wildcard secret from using cert-manager
+        // In Local we create wildcard secret using Vault PKI or self signed, in Prod created by Let's Encrypt
+        if let Some(sub) = subdomain {
+            let full_subdomain = format!("{}.{}", sub, self.cfg.traefik.base_domain);
+            routes.push(IngressRouteRoutes {
+                r#match: format!("Host(`{}`)", full_subdomain),
+                services: Some(vec![IngressRouteRoutesServices {
+                    name: name.clone().to_string(),
+                    port: Some(IntOrString::Int(port)),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            });
+
+            domains.push(IngressRouteTlsDomains {
+                main: Some(full_subdomain),
+                sans: None,
+            });
+        }
+
+        // Uses CertResolver (Traefik native, Let's Encrypt)
+        if let Some(user_domain) = domain {
+            routes.push(IngressRouteRoutes {
+                r#match: format!("Host(`{}`)", user_domain),
+                services: Some(vec![IngressRouteRoutesServices {
+                    name: name.clone().to_string(),
+                    port: Some(IntOrString::Int(port)),
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            });
+            domains.push(IngressRouteTlsDomains {
+                main: Some(user_domain),
+                sans: None,
+            });
+        }
+
+        if routes.is_empty() {
+            return Ok(());
+        }
+
+        let ingress_route = IngressRoute {
+            metadata: ObjectMeta {
+                name: Some(name.clone().to_string()),
+                namespace: Some(ns.clone().to_string()),
+                ..Default::default()
+            },
+            spec: IngressRouteSpec {
+                entry_points: self.cfg.traefik.entry_points.clone(),
+                routes, // Pass the dynamically built vectors
+                tls: Some(IngressRouteTls {
+                    // This uses "letsencrypt"
+                    // Traefik will use this resolver for domains that don't match the TLSStore.
+                    cert_resolver: Some(self.cfg.cert_manager.cluster_issuer.clone()),
+                    domains: Some(domains),
+                    // We set secret_name to NONE.
+                    // - Subdomains will match the Wildcard in the Default TLSStore automatically.
+                    // - Custom Domains will trigger the cert_resolver.
+                    ..Default::default()
+                }),
+                ..Default::default()
+            },
+        };
+
+        api.patch(
+            name,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(&ingress_route),
+        )
+        .await
+        .map_err(|e| {
+            error!(ns=%ns, name=%name, error=%e, "🚨 IngressRoute SSA failed");
+            AppError::InternalServerError(format!("🚨 IngressRoute SSA failed: {}", e))
+        })?;
+
+        Ok(())
+    }
+
+    /// Create image pull secret
+    #[tracing::instrument(name = "kubernetes_service.apply_image_pull_secret", skip_all, err)]
+    async fn apply_image_pull_secret(
+        &self,
+        ns: &str,
+        name: &str,
+        creds: &ImagePullSecret,
+    ) -> Result<String, AppError> {
+        let secret_name = format!("{}-registry", name);
+
+        let auth = base64::engine::general_purpose::STANDARD
+            .encode(format!("{}:{}", creds.username, creds.secret));
+
+        let dockerconfig = serde_json::json!({
+            "auths": {
+                creds.server.clone(): {
+                    "username": creds.username,
+                    "password": creds.secret,
+                    "auth": auth
+                }
+            }
+        });
+
+        let data = Some(BTreeMap::from([(
+            ".dockerconfigjson".to_string(),
+            ByteString(
+                base64::engine::general_purpose::STANDARD
+                    .encode(dockerconfig.to_string())
+                    .into_bytes(),
+            ),
+        )]));
+
+        let secret = K8sSecret {
+            metadata: ObjectMeta {
+                name: Some(secret_name.clone()),
+                namespace: Some(ns.to_string()),
+                ..Default::default()
+            },
+            type_: Some("kubernetes.io/dockerconfigjson".to_string()),
+            data,
+            ..Default::default()
+        };
+
+        // let patch = json!({
+        //     "apiVersion": "v1",
+        //     "kind": "Secret",
+        //     "metadata": { "name": secret_name, "namespace": ns },
+        //     "type": "kubernetes.io/dockerconfigjson",
+        //     "data": {
+        //         ".dockerconfigjson": base64::engine::general_purpose::STANDARD.encode(
+        //             json!({ "auths": { creds.server.clone(): { "username": creds.username, "password": creds.secret, "auth": auth } } }).to_string()
+        //         )
+        //     }
+        // });
+
+        let api: Api<K8sSecret> = Api::namespaced(self.client.clone(), ns);
+
+        api.patch(
+            &secret_name,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(&secret),
+        )
+        .await
+        .map_err(|e| {
+            error!(ns = %ns, error = %e, "🚨 Image Pull Secret SSA failed");
+            AppError::InternalServerError(format!("🚨 Image Pull Secret SSA failed: {}", e))
+        })?;
+
+        Ok(secret_name)
     }
 
     #[tracing::instrument(name = "kubernetes_service.ensure_namespace", skip_all, fields(user_id = %user_id), err)]
@@ -286,17 +789,17 @@ impl KubernetesService {
             Ok(_) => return Ok(name),
 
             Err(kube::Error::Api(ae)) if ae.code == 404 => {
-                info!(user_id = %user_id, "Creating namespace {}", name);
+                info!(user_id = %user_id, "🏗️ Creating namespace {}", name);
             }
 
             Err(e) => {
                 error!(
                     user_id = %user_id,
                     error = %e,
-                    "Failed to check namespace existence"
+                    "⚠️ Failed to check namespace existence"
                 );
                 return Err(AppError::InternalServerError(format!(
-                    "Kubernetes API unavailable while checking namespace: {}",
+                    "🚨 Kubernetes API unavailable while checking namespace: {}",
                     e
                 )));
             }
@@ -320,15 +823,13 @@ impl KubernetesService {
                 error!(
                     user_id = %user_id,
                     error = %e,
-                    "Failed to create namespace"
+                    "🚨 Failed to create namespace"
                 );
                 AppError::InternalServerError(format!(
-                    "Failed to create namespace '{}': {}",
+                    "🚨 Failed to create namespace '{}': {}",
                     name, e
                 ))
             })?;
-
-        info!(user_id = %user_id, "Namespace {} created successfully", name);
 
         Ok(name)
     }
@@ -379,11 +880,9 @@ impl KubernetesService {
             .instrument(info_span!("create_vault_api"))
             .await
             .map_err(|e| {
-                error!(ns=%ns, "Failed to create VaultAuth");
-                AppError::InternalServerError(format!("Failed to create VaultAuth: {}", e))
+                error!(ns=%ns, error = %e, "🚨 Failed to create VaultAuth");
+                AppError::InternalServerError(format!("🚨 Failed to create VaultAuth: {}", e))
             })?;
-
-        info!(ns=%ns, "VaultAuth and VaultConnection created in {}", ns);
 
         Ok(())
     }
@@ -450,661 +949,43 @@ impl KubernetesService {
             .instrument(info_span!("create_vault_static_secret"))
             .await
             .map_err(|e| {
-                error!(deployment_id=%deployment_id, "Failed to create VSO Secret");
-                AppError::InternalServerError(format!("Failed to create VSO Secret: {}", e))
+                error!(deployment_id=%deployment_id, error = %e, "🚨 Failed to create VSO Secret");
+                AppError::InternalServerError(format!("🚨 Failed to create VSO Secret: {}", e))
             })?;
 
         Ok(Some(secret_name))
     }
 
-    /// Create image pull secret
-    #[tracing::instrument(name = "kubernetes_service.create_image_pull_secret", skip_all, err)]
-    async fn create_image_pull_secret(
+    // ============================================================================================
+    // HELPERS
+    // ============================================================================================
+
+    async fn notify_status(
         &self,
-        ns: &str,
-        name: &str,
-        creds: &ImagePullSecret,
-    ) -> Result<String, AppError> {
-        let secret_name = format!("{}-registry", name);
-
-        let auth = base64::engine::general_purpose::STANDARD
-            .encode(format!("{}:{}", creds.username, creds.secret));
-
-        let dockerconfig = serde_json::json!({
-            "auths": {
-                creds.server.clone(): {
-                    "username": creds.username,
-                    "password": creds.secret,
-                    "auth": auth
-                }
-            }
-        });
-
-        let data = Some(BTreeMap::from([(
-            ".dockerconfigjson".to_string(),
-            ByteString(
-                base64::engine::general_purpose::STANDARD
-                    .encode(dockerconfig.to_string())
-                    .into_bytes(),
-            ),
-        )]));
-
-        let secret = K8sSecret {
-            metadata: ObjectMeta {
-                name: Some(secret_name.clone()),
-                namespace: Some(ns.to_string()),
-                ..Default::default()
-            },
-            type_: Some("kubernetes.io/dockerconfigjson".to_string()),
-            data,
-            ..Default::default()
-        };
-
-        let api: Api<K8sSecret> = Api::namespaced(self.client.clone(), ns);
-
-        // Use Patch::Apply instead of create
-        api.patch(
-            &secret_name,
-            &PatchParams::apply("poddle-provisioner").force(),
-            &Patch::Apply(&secret),
-        )
-        .await
-        .map_err(|e| {
-            error!(ns = %ns, "Failed to apply Image Pull Secret");
-            AppError::InternalServerError(format!("Failed to apply Image Pull Secret: {}", e))
-        })?;
-
-        Ok(secret_name)
-    }
-
-    /// Create Kubernetes Deployment
-    #[tracing::instrument(
-        name = "kubernetes_service.create_deployment",
-        skip_all,
-        fields(ns = %ns, image = %image, port = %port, desired_replicas = %desired_replicas),
-        err
-    )]
-    async fn create_deployment(
-        &self,
-        otel_service_name: &str,
-        otel_resource_attributes: &str,
-        ns: &str,
-        name: &str,
-        image: &str,
-        image_pull_secret: Option<String>,
-        port: i32,
-        desired_replicas: i32,
-        resource_spec: &ResourceSpec,
-        secret_ref: Option<String>,
-        environment_variables: Option<HashMap<String, String>>,
-        labels: &BTreeMap<String, String>,
+        pid: &Uuid,
+        did: &Uuid,
+        status: DeploymentStatus,
+        con: &mut MultiplexedConnection,
     ) -> Result<(), AppError> {
-        let api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), ns);
-
-        // Build environment variables
-        let mut env = vec![
-            EnvVar {
-                name: "OTEL_SERVICE_NAME".to_owned(),
-                value: Some(otel_service_name.to_string()),
-                ..Default::default()
-            },
-            EnvVar {
-                name: "OTEL_EXPORTER_OTLP_PROTOCOL".to_owned(),
-                value: Some("grpc".to_string()),
-                ..Default::default()
-            },
-            EnvVar {
-                name: "OTEL_RESOURCE_ATTRIBUTES".to_owned(),
-                value: Some(otel_resource_attributes.to_string()),
-                ..Default::default()
-            },
-            EnvVar {
-                name: "OTEL_EXPORTER_OTLP_ENDPOINT".to_owned(),
-                value: self.cfg.otel_exporter_otlp_endpoint.clone(),
-                ..Default::default()
-            },
-        ];
-        if let Some(environment_variables) = environment_variables {
-            for (key, value) in environment_variables {
-                env.push(EnvVar {
-                    name: key.clone(),
-                    value: Some(value.clone()),
-                    ..Default::default()
-                });
-            }
-        }
-
-        let mut env_from: Vec<EnvFromSource> = vec![];
-        if let Some(secret_ref) = secret_ref {
-            env_from.push(EnvFromSource {
-                secret_ref: Some(SecretEnvSource {
-                    name: secret_ref,
-                    ..Default::default()
-                }),
-                ..Default::default()
-            });
-        }
-
-        // Resource requirements
-        let mut requests = BTreeMap::new();
-        requests.insert(
-            "cpu".to_string(),
-            Quantity(format!("{}m", resource_spec.cpu_request_millicores)),
-        );
-        requests.insert(
-            "memory".to_string(),
-            Quantity(format!("{}Mi", resource_spec.memory_request_mb)),
-        );
-
-        let mut limits = BTreeMap::new();
-        limits.insert(
-            "cpu".to_string(),
-            Quantity(format!("{}m", resource_spec.cpu_limit_millicores)),
-        );
-        limits.insert(
-            "memory".to_string(),
-            Quantity(format!("{}Mi", resource_spec.memory_limit_mb)),
-        );
-
-        let image_pull_secrets = image_pull_secret.map(|name| vec![LocalObjectReference { name }]);
-
-        let deployment = K8sDeployment {
-            metadata: ObjectMeta {
-                name: Some(name.to_string()),
-                namespace: Some(ns.to_string()),
-                labels: Some(labels.clone()),
-                ..Default::default()
-            },
-            spec: Some(DeploymentSpec {
-                replicas: Some(desired_replicas),
-                selector: LabelSelector {
-                    match_labels: Some(labels.clone()),
-                    ..Default::default()
-                },
-                template: PodTemplateSpec {
-                    metadata: Some(ObjectMeta {
-                        labels: Some(labels.clone()),
-                        ..Default::default()
-                    }),
-                    spec: Some(PodSpec {
-                        image_pull_secrets,
-                        containers: vec![Container {
-                            name: name.to_string(),
-                            image: Some(image.to_string()),
-                            image_pull_policy: Some("IfNotPresent".to_string()),
-                            ports: Some(vec![ContainerPort {
-                                container_port: port,
-                                // Must be UDP, TCP, or SCTP. Defaults to "TCP".
-                                protocol: Some("TCP".to_string()),
-                                ..Default::default()
-                            }]),
-                            env: Some(env),
-                            env_from: Some(env_from),
-                            resources: Some(ResourceRequirements {
-                                requests: Some(requests),
-                                limits: Some(limits),
-                                ..Default::default()
-                            }),
-                            liveness_probe: None,
-                            readiness_probe: None,
-                            ..Default::default()
-                        }],
-                        ..Default::default()
-                    }),
-                },
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        api.create(&PostParams::default(), &deployment)
-            .await
-            .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to create K8s deployment: {}", e))
-            })?;
-
-        info!("Deployment {} created in namespace {}", name, ns);
+        let channel = ChannelNames::deployments_metrics(&pid.to_string());
+        let message = ComputeEvent::DeploymentStatusUpdate { id: did, status };
+        con.publish(channel, message).await?;
         Ok(())
     }
 
-    /// Create Service
-    #[tracing::instrument(name = "kubernetes_service.create_service", skip_all, err)]
-    async fn create_service(
+    async fn finalize_status(
         &self,
-        ns: &str,
-        name: &str,
-        port: i32,
-        labels: &BTreeMap<String, String>,
+        pid: &Uuid,
+        did: &Uuid,
+        status: DeploymentStatus,
+        pool: &PgPool,
+        con: &mut MultiplexedConnection,
     ) -> Result<(), AppError> {
-        let api: Api<Service> = Api::namespaced(self.client.clone(), ns);
-
-        let service = Service {
-            metadata: ObjectMeta {
-                name: Some(name.to_string()),
-                namespace: Some(ns.to_string()),
-                labels: Some(labels.clone()),
-                ..Default::default()
-            },
-            spec: Some(ServiceSpec {
-                selector: Some(labels.clone()),
-                ports: Some(vec![ServicePort {
-                    name: Some("http".to_string()),
-                    port,
-                    target_port: Some(IntOrString::Int(port)),
-                    protocol: Some("TCP".to_string()),
-                    ..Default::default()
-                }]),
-                // Valid options are ExternalName, ClusterIP, NodePort, and LoadBalancer
-                type_: Some("ClusterIP".to_string()),
-                ..Default::default()
-            }),
-            ..Default::default()
-        };
-
-        api.create(&PostParams::default(), &service)
-            .await
-            .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to create service: {}", e))
-            })?;
-
-        info!("Service {} created in namespace {}", name, ns);
-        Ok(())
-    }
-
-    /// Create Traefik IngressRoute
-    #[tracing::instrument(name = "kubernetes_service.create_traefik_ingressroute", skip_all, err)]
-    async fn create_traefik_ingressroute(
-        &self,
-        ns: String,
-        name: String,
-        domain: Option<String>,
-        subdomain: Option<String>,
-        port: Option<IntOrString>,
-        labels: BTreeMap<String, String>,
-    ) -> Result<(), AppError> {
-        let mut routes = Vec::new();
-        let mut tls_domains = Vec::new();
-
-        // Uses Default TLSStore (Wildcard)
-        // We create wildcard secret from using cert-manager
-        // In Local we create wildcard secret using Vault PKI or self signed, in Prod created by Let's Encrypt
-        if let Some(sub) = subdomain {
-            let full_subdomain = format!("{}.{}", sub, self.cfg.traefik.base_domain);
-            routes.push(IngressRouteRoutes {
-                r#match: format!("Host(`{}`)", full_subdomain),
-                services: Some(vec![IngressRouteRoutesServices {
-                    name: name.clone(),
-                    port: port.clone(),
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            });
-
-            tls_domains.push(IngressRouteTlsDomains {
-                main: Some(full_subdomain),
-                sans: None,
-            });
+        let res = DeploymentRepository::update_status(did, status, pool).await?;
+        if res.rows_affected() == 0 {
+            warn!("⚠️ Update deployment status affected zero rows for {}", did);
         }
-
-        // Uses CertResolver (Traefik native, Let's Encrypt)
-        if let Some(user_domain) = domain {
-            routes.push(IngressRouteRoutes {
-                r#match: format!("Host(`{}`)", user_domain),
-                services: Some(vec![IngressRouteRoutesServices {
-                    name: name.clone(),
-                    port: port.clone(),
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            });
-            tls_domains.push(IngressRouteTlsDomains {
-                main: Some(user_domain),
-                sans: None,
-            });
-        }
-
-        if routes.is_empty() {
-            return Ok(());
-        }
-
-        let ingress_route = IngressRoute {
-            metadata: ObjectMeta {
-                name: Some(name.clone()),
-                namespace: Some(ns.clone()),
-                labels: Some(labels),
-                ..Default::default()
-            },
-            spec: IngressRouteSpec {
-                entry_points: self.cfg.traefik.entry_points.clone(),
-                routes, // Pass the dynamically built vectors
-                tls: Some(IngressRouteTls {
-                    // This uses "letsencrypt"
-                    // Traefik will use this resolver for domains that don't match the TLSStore.
-                    cert_resolver: Some(self.cfg.cert_manager.cluster_issuer.clone()),
-                    domains: Some(tls_domains),
-                    // We set secret_name to NONE.
-                    // - Subdomains will match the Wildcard in the Default TLSStore automatically.
-                    // - Custom Domains will trigger the cert_resolver.
-                    ..Default::default()
-                }),
-                ..Default::default()
-            },
-        };
-
-        let api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &ns);
-        // Patch allow to Create or Update in one go
-        api.patch(
-            &name,
-            &PatchParams::apply("poddle").force(),
-            &Patch::Apply(&ingress_route),
-        )
-        .await
-        .map_err(|e| {
-            error!(ns=%ns, "Failed to create IngressRoute");
-            AppError::InternalServerError(format!("Failed to create IngressRoute: {}", e))
-        })?;
-
-        Ok(())
-    }
-
-    // --------------------------------------------------------------------------------------------
-    // update
-    // --------------------------------------------------------------------------------------------
-
-    /// Starting point
-    #[tracing::instrument(
-        name = "kubernetes_service.update",
-        skip_all,
-        fields(user_id = %msg.user_id, project_id = %msg.project_id, deployment_id = %msg.deployment_id),
-        err
-    )]
-    pub async fn update(
-        &self,
-        pool: PgPool,
-        mut con: MultiplexedConnection,
-        msg: UpdateDeploymentMessage,
-    ) -> Result<(), AppError> {
-        let user_id = msg.user_id;
-        let project_id = msg.project_id;
-        let deployment_id = msg.deployment_id;
-
-        let ns = self.ensure_namespace(&user_id).await?;
-        let name = format_resource_name(&deployment_id);
-
-        info!(
-            user_id = %user_id,
-            project_id = %project_id,
-            deployment_id = %deployment_id,
-            "🔄 Updating K8s resources"
-        );
-
-        // Notify user
-        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-        let message = ComputeEvent::DeploymentStatusUpdate {
-            id: &deployment_id,
-            status: DeploymentStatus::Updating,
-        };
-        con.publish(channel, message)
-            .instrument(info_span!("pubsub.status_update"))
-            .await?;
-
-        // Update Deployment (replicas, image, port, resource_spec, image_pull_secret)
-        if msg.desired_replicas.is_some()
-            || msg.image.is_some()
-            || msg.port.is_some()
-            || msg.resource_spec.is_some()
-            || msg.image_pull_secret.is_some()
-        {
-            info!("📄 Updating deployment resources");
-            self.update_deployment(
-                &ns,
-                &name,
-                msg.image.as_deref(),
-                msg.image_pull_secret.as_ref(),
-                msg.port,
-                msg.desired_replicas,
-                msg.resource_spec.as_ref(),
-            )
-            .await?;
-        }
-
-        // Update Service (port)
-        if let Some(port) = msg.port {
-            info!("📄 Updating service resources");
-            self.update_service(&ns, &name, port).await?;
-        }
-
-        // Update IngressRoute (domain, subdomain)
-        if msg.domain.is_some() || msg.subdomain.is_some() {
-            info!("📄 Updating ingressroute resources");
-            self.update_ingressroute(&ns, &name, msg.domain, msg.subdomain)
-                .await?;
-        }
-
-        // Update status back to 'healthy'
-        let query_result =
-            DeploymentRepository::update_status(&deployment_id, DeploymentStatus::Running, &pool)
-                .await?;
-
-        if query_result.rows_affected() == 0 {
-            let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-            let message = ComputeEvent::DeploymentSystemMessage {
-                id: &deployment_id,
-                level: EventLevel::Error,
-                message: "Internal server error".to_string(),
-            };
-            con.publish(channel, message)
-                .instrument(info_span!("pubsub.message"))
-                .await?;
-        }
-
-        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-        let message = ComputeEvent::DeploymentStatusUpdate {
-            id: &deployment_id,
-            status: DeploymentStatus::Running,
-        };
-        con.publish(channel, message)
-            .instrument(info_span!("pubsub.status_update"))
-            .await?;
-
-        info!("✅ K8s resources updated for deployment {}", deployment_id);
-
-        Ok(())
-    }
-
-    #[tracing::instrument(name = "kubernetes_service.update_deployment", skip_all, err)]
-    async fn update_deployment(
-        &self,
-        ns: &str,
-        name: &str,
-        image: Option<&str>,
-        image_pull_secret: Option<&ImagePullSecret>,
-        port: Option<i32>,
-        desired_replicas: Option<i32>,
-        resource_spec: Option<&ResourceSpec>,
-    ) -> Result<(), AppError> {
-        let api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), ns);
-
-        // Handle Secret Idempotently first
-        let mut secret_ref_name = None;
-        if let Some(creds) = image_pull_secret {
-            // This now uses patch/apply, so it won't crash if it exists
-            secret_ref_name = Some(self.create_image_pull_secret(ns, name, creds).await?);
-        }
-
-        let mut container_spec = serde_json::Map::new();
-        container_spec.insert("name".to_string(), json!(name));
-
-        if let Some(img) = image {
-            container_spec.insert("image".to_string(), json!(img));
-        }
-
-        if let Some(p) = port {
-            container_spec.insert(
-                "ports".to_string(),
-                json!([{
-                    "containerPort": p,
-                    "protocol": "TCP"
-                }]),
-            );
-        }
-
-        if let Some(rs) = resource_spec {
-            container_spec.insert(
-                "resources".to_string(),
-                json!({
-                    "requests": {
-                        "cpu": format!("{}m", rs.cpu_request_millicores),
-                        "memory": format!("{}Mi", rs.memory_request_mb)
-                    },
-                    "limits": {
-                        "cpu": format!("{}m", rs.cpu_limit_millicores),
-                        "memory": format!("{}Mi", rs.memory_limit_mb)
-                    }
-                }),
-            );
-        }
-
-        // Build the Deployment Patch
-        // Note: We MUST include `replicas` and `template` structure.
-        let mut patch_json = json!({
-            "apiVersion": "apps/v1",
-            "kind": "Deployment",
-            "metadata": {
-                "name": name,
-                "namespace": ns
-            },
-            "spec": {
-                "template": {
-                    "spec": {
-                        "containers": [container_spec]
-                    }
-                }
-            }
-        });
-
-        // Add replicas if present
-        if let Some(replicas) = desired_replicas {
-            patch_json["spec"]["replicas"] = json!(replicas);
-        }
-
-        // Add imagePullSecrets if present
-        if let Some(sr_name) = secret_ref_name {
-            patch_json["spec"]["template"]["spec"]["imagePullSecrets"] = json!([{
-                "name": sr_name
-            }]);
-        }
-
-        // Apply via SSA
-        api.patch(
-            name,
-            &PatchParams::apply("poddle-provisioner").force(),
-            &Patch::Apply(patch_json),
-        )
-        .await
-        .map_err(|e| {
-            error!(ns=%ns, name=%name, "Failed to update deployment");
-            AppError::InternalServerError(format!("Failed to update deployment: {}", e))
-        })?;
-
-        info!("Deployment {} updated via SSA in namespace {}", name, ns);
-        Ok(())
-    }
-
-    #[tracing::instrument(name = "kubernetes_service.update_service", skip_all, err)]
-    async fn update_service(&self, ns: &str, name: &str, port: i32) -> Result<(), AppError> {
-        let api: Api<Service> = Api::namespaced(self.client.clone(), ns);
-
-        let patch = json!({
-            "spec": {
-                "ports": [{
-                    "name": "http",
-                    "port": 80,
-                    "targetPort": port,
-                    "protocol": "TCP"
-                }]
-            }
-        });
-
-        api.patch(
-            name,
-            &PatchParams::apply("poddle").force(),
-            &Patch::Strategic(patch),
-        )
-        .await
-        .map_err(|e| {
-            error!(ns=%ns, name=%name, "Failed to update service");
-            AppError::InternalServerError(format!("Failed to update service: {}", e))
-        })?;
-
-        info!("Service {} updated in namespace {}", name, ns);
-        Ok(())
-    }
-
-    #[tracing::instrument(name = "kubernetes_service.update_ingressroute", skip_all, err)]
-    async fn update_ingressroute(
-        &self,
-        ns: &str,
-        name: &str,
-        domain: Option<String>,
-        subdomain: Option<String>,
-    ) -> Result<(), AppError> {
-        let api: Api<IngressRoute> = Api::namespaced(self.client.clone(), ns);
-
-        let mut routes = vec![];
-        let mut domains = vec![];
-
-        if let Some(domain) = &domain {
-            routes.push(IngressRouteRoutes {
-                r#match: domain.clone(),
-                services: Some(vec![IngressRouteRoutesServices {
-                    name: name.to_string(),
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            });
-            domains.push(IngressRouteTlsDomains {
-                main: Some(domain.clone()),
-                sans: None,
-            });
-        }
-
-        if let Some(subdomain) = &subdomain {
-            routes.push(IngressRouteRoutes {
-                r#match: subdomain.clone(),
-                services: Some(vec![IngressRouteRoutesServices {
-                    name: name.to_string(),
-                    ..Default::default()
-                }]),
-                ..Default::default()
-            });
-            domains.push(IngressRouteTlsDomains {
-                main: Some(subdomain.clone()),
-                sans: None,
-            });
-        }
-
-        let patch = json!({
-            "spec": {
-                "routes": routes,
-                "tls": {
-                    "domains": domains
-                }
-            }
-        });
-
-        api.patch(
-            name,
-            &PatchParams::apply("poddle").force(),
-            &Patch::Merge(patch),
-        )
-        .await
-        .map_err(|e| {
-            error!(ns=%ns, name=%name, "Failed to update IngressRoute");
-            AppError::InternalServerError(format!("Failed to update IngressRoute: {}", e))
-        })?;
-
-        info!("IngressRoute {} updated in namespace {}", name, ns);
+        self.notify_status(pid, did, status, con).await?;
         Ok(())
     }
 
