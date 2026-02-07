@@ -83,12 +83,6 @@ async fn handle_deployment_event(
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
 
-            info!(
-                project_id = %project_id,
-                deployment_id = %deployment_id,
-                "📥 Deployment Event::Apply received",
-            );
-
             // Extract status information
             let spec = deployment.spec.as_ref().unwrap();
             let status = deployment.status.as_ref();
@@ -104,8 +98,12 @@ async fn handle_deployment_event(
             info!(
                 project_id = %project_id,
                 deployment_id = %deployment_id,
-                "📊 Deployment {} in namespace: {}, stats: {:?} ({}/{} ready)",
-                name, ns, new_status, ready, desired
+                ns = %ns,
+                name = %name,
+                ready = %ready,
+                desired = %desired,
+                new_status = %new_status,
+                "📥 Deployment Event::Apply received",
             );
 
             // Update database
