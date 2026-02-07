@@ -1,4 +1,3 @@
-use chrono::Utc;
 use compute_core::{
     cache_keys::CacheKeys,
     channel_names::ChannelNames,
@@ -45,6 +44,7 @@ struct DeploymentBuffer {
 #[derive(Default, Debug)]
 struct PodBuffer {
     uid: String,
+    name: String,
     phase: PodPhase,
     restart_count: i32,
     snapshot: MetricSnapshot,
@@ -72,6 +72,9 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     // Exactly one of them has value 1.
     // All others are 0.
 
+    // We add `unless on(pod, namespace) kube_pod_deletion_timestamp` to ALL queries.
+    // This ensures Prometheus doesn't return data for pods that K8s has marked for death.
+
     let cpu_query = format!(
         r#"
         (
@@ -88,26 +91,29 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
         * on(pod, namespace) group_left(uid) kube_pod_info
         * on(pod, namespace) group_left(phase) (kube_pod_status_phase == 1)
         * on(pod, namespace) group_left(label_poddle_io_project_id, label_poddle_io_deployment_id) kube_pod_labels{{label_poddle_io_managed_by="poddle"}}
+        unless on(pod, namespace) kube_pod_deletion_timestamp
         "#,
         cfg.rate
     );
 
     let memory_query = r#"
-        sum(
-            container_memory_working_set_bytes{
-                container!="",
-                container!="POD",
-                namespace=~"user-.*"
-            }
-        ) by (pod, namespace)
-        * on(pod, namespace) group_left(label_poddle_io_project_id, label_poddle_io_deployment_id) kube_pod_labels{label_poddle_io_managed_by="poddle"}
+    sum(
+        container_memory_working_set_bytes{
+            container!="",
+            container!="POD",
+            namespace=~"user-.*"
+        }
+    ) by (pod, namespace)
+    * on(pod, namespace) group_left(label_poddle_io_project_id, label_poddle_io_deployment_id) kube_pod_labels{label_poddle_io_managed_by="poddle"}
+    unless on(pod, namespace) kube_pod_deletion_timestamp
     "#;
 
     let restarts_query = r#"
-        sum(
-            kube_pod_container_status_restarts_total
-        ) by (pod, namespace)
-        * on(pod, namespace) group_left(label_poddle_io_project_id, label_poddle_io_deployment_id) kube_pod_labels{label_poddle_io_managed_by="poddle"}
+    sum(
+        kube_pod_container_status_restarts_total
+    ) by (pod, namespace)
+    * on(pod, namespace) group_left(label_poddle_io_project_id, label_poddle_io_deployment_id) kube_pod_labels{label_poddle_io_managed_by="poddle"}
+    unless on(pod, namespace) kube_pod_deletion_timestamp
     "#;
 
     // Execute queries
@@ -147,37 +153,50 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     */
     let mut project_map: HashMap<String, HashMap<String, DeploymentBuffer>> = HashMap::new();
 
-    // Process CPU (This now includes UID and Phase labels)
+    // Process CPU
     if let Data::Vector(vecs) = cpu_res.data() {
         for vec in vecs {
             let labels = vec.metric();
-            if let (Some(name), Some(uid), Some(pid), Some(did)) = (
-                labels.get("pod"),
+            let (Some(uid), Some(name), Some(pid), Some(did)) = (
                 labels.get("uid"),
+                labels.get("pod"),
                 labels.get("label_poddle_io_project_id"),
                 labels.get("label_poddle_io_deployment_id"),
-            ) {
-                // Phase may not be available
-                let phase = labels.get("phase").map(|s| s.as_str()).unwrap_or("Unknown");
+            ) else {
+                continue;
+            };
 
-                let val = vec.sample().value();
-                let ts = vec.sample().timestamp();
-
-                let deployment_entry = project_map
-                    .entry(pid.clone())
-                    .or_default()
-                    .entry(did.clone())
-                    .or_default();
-                let pod_entry = deployment_entry.pod_map.entry(name.clone()).or_default();
-
-                pod_entry.uid = uid.to_string();
-                pod_entry.phase = phase.into();
-                pod_entry.snapshot.ts = ts as i64;
-                pod_entry.snapshot.cpu += val * 1000.0;
-
-                deployment_entry.snapshot.ts = ts as i64;
-                deployment_entry.snapshot.cpu += val * 1000.0;
+            if uid.is_empty() {
+                continue;
             }
+
+            let phase = labels.get("phase").map(|s| s.as_str()).unwrap_or("Unknown");
+
+            let val = vec.sample().value();
+            let ts = vec.sample().timestamp();
+
+            let deployment_entry = project_map
+                .entry(pid.clone())
+                .or_default()
+                .entry(did.clone())
+                .or_default();
+
+            let pod = deployment_entry
+                .pod_map
+                .entry(uid.clone())
+                .or_insert_with(|| PodBuffer {
+                    uid: uid.to_string(),
+                    name: name.to_string(),
+                    phase: phase.into(),
+                    restart_count: 0,
+                    snapshot: MetricSnapshot::default(),
+                });
+
+            pod.snapshot.ts = ts as i64;
+            pod.snapshot.cpu += val * 1000.0;
+
+            deployment_entry.snapshot.ts = ts as i64;
+            deployment_entry.snapshot.cpu += val * 1000.0;
         }
     }
 
@@ -185,24 +204,32 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     if let Data::Vector(vecs) = mem_res.data() {
         for vec in vecs {
             let labels = vec.metric();
-            if let (Some(name), Some(pid), Some(did)) = (
+
+            let (Some(name), Some(pid), Some(did)) = (
                 labels.get("pod"),
                 labels.get("label_poddle_io_project_id"),
                 labels.get("label_poddle_io_deployment_id"),
-            ) {
-                let val = vec.sample().value();
-                // Ensure entry exists (it should from CPU, but safe to default)
-                let deployment_entry = project_map
-                    .entry(pid.clone())
-                    .or_default()
-                    .entry(did.clone())
-                    .or_default();
-                let pod_entry = deployment_entry.pod_map.entry(name.clone()).or_default();
+            ) else {
+                continue;
+            };
 
-                let mem_mb = val / 1024.0 / 1024.0;
-                pod_entry.snapshot.memory += mem_mb;
-                deployment_entry.snapshot.memory += mem_mb;
-            }
+            let deployment_entry = project_map
+                .entry(pid.clone())
+                .or_default()
+                .entry(did.clone())
+                .or_default();
+
+            // Lookup pod by name to find the entry created by CPU query
+            let Some(pod) = deployment_entry
+                .pod_map
+                .values_mut()
+                .find(|p| p.name == *name)
+            else {
+                continue;
+            };
+
+            pod.snapshot.memory += vec.sample().value() / 1024.0 / 1024.0;
+            deployment_entry.snapshot.memory += pod.snapshot.memory;
         }
     }
 
@@ -210,21 +237,29 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
     if let Data::Vector(vecs) = restart_res.data() {
         for vec in vecs {
             let labels = vec.metric();
-            if let (Some(name), Some(pid), Some(did)) = (
+            let (Some(name), Some(pid), Some(did)) = (
                 labels.get("pod"),
                 labels.get("label_poddle_io_project_id"),
                 labels.get("label_poddle_io_deployment_id"),
-            ) {
-                let val = vec.sample().value();
-                let deployment_entry = project_map
-                    .entry(pid.clone())
-                    .or_default()
-                    .entry(did.clone())
-                    .or_default();
-                let pod_entry = deployment_entry.pod_map.entry(name.clone()).or_default();
+            ) else {
+                continue;
+            };
 
-                pod_entry.restart_count = val as i32;
-            }
+            let deployment_entry = project_map
+                .entry(pid.clone())
+                .or_default()
+                .entry(did.clone())
+                .or_default();
+
+            let Some(pod) = deployment_entry
+                .pod_map
+                .values_mut()
+                .find(|p| p.name == *name)
+            else {
+                continue;
+            };
+
+            pod.restart_count = vec.sample().value() as i32;
         }
     }
 
@@ -254,24 +289,20 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
             // We send pod messages after pod_map loop
             for (
-                name,
+                _,
                 PodBuffer {
                     uid,
+                    name,
                     phase,
                     restart_count,
                     snapshot,
                 },
             ) in pod_map
             {
+                // event watcher should be already created the pod, we respect that
                 pods_count += 1;
-                let index_key = CacheKeys::deployment_pods(&id);
                 let meta_key = CacheKeys::deployment_pod_meta(&id, &uid);
                 let metrics_key = CacheKeys::deployment_pod_metrics(&id, &uid);
-
-                // Index
-                let score = Utc::now().timestamp();
-                p.zadd(&index_key, &uid, score).ignore();
-                p.expire(&index_key, ttl).ignore();
 
                 // Metadata
                 let meta = PodMeta {
