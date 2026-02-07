@@ -192,8 +192,6 @@ pub async fn stream_logs_see_handler(
                     if let Ok(streams) = serde_json::from_str::<LokiTailResponse>(&text) {
                         let event = LogResponse::from(streams);
 
-                        debug!("event in stream_logs_see_handler: {:?}", event);
-
                         if let Ok(json) = serde_json::to_string(&event) {
                             // Use event("log") matching frontend listener
                             yield Ok(Event::default().event("log").data(json));
