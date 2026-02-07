@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use tracing::info;
+use tracing::{error, info};
 use vaultrs::client::{Client, VaultClient, VaultClientSettingsBuilder};
 
 use vaultrs::auth::kubernetes;
@@ -55,16 +55,17 @@ impl VaultService {
     /// Store deployment secrets in Vault
     pub async fn store_secrets(
         &self,
-        namespace: &str,
+        ns: &str,
         deployment_id: &str,
         secrets: HashMap<String, String>,
     ) -> Result<String, AppError> {
-        let path = format!("{}/{}", namespace, deployment_id);
+        let path = format!("{}/{}", ns, deployment_id);
 
         kv2::set(&*self.client, &self.cfg.kv_mount, &path, &secrets)
             .await
             .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to store secrets in Vault: {}", e))
+                error!(ns=%ns, deployment_id=%deployment_id, error = %e, "🚨 Failed to store secrets in Vault");
+                AppError::InternalServerError(format!("🚨 Failed to store secrets in Vault: {}", e))
             })?;
 
         Ok(path)
@@ -73,15 +74,19 @@ impl VaultService {
     /// Read deployment secrets from Vault
     pub async fn read_secrets(
         &self,
-        namespace: &str,
+        ns: &str,
         deployment_id: &str,
     ) -> Result<HashMap<String, String>, AppError> {
-        let path = format!("{}/{}", namespace, deployment_id);
+        let path = format!("{}/{}", ns, deployment_id);
 
         let secret = kv2::read(&*self.client, &self.cfg.kv_mount, &path)
             .await
             .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to read secrets from Vault: {}", e))
+                error!(ns=%ns, deployment_id=%deployment_id, error = %e, "🚨 Failed to read secrets from Vault");
+                AppError::InternalServerError(format!(
+                    "🚨 Failed to read secrets from Vault: {}",
+                    e
+                ))
             })?;
 
         Ok(secret)
@@ -90,33 +95,31 @@ impl VaultService {
     /// Update deployment secrets
     pub async fn update_secrets(
         &self,
-        namespace: &str,
+        ns: &str,
         deployment_id: &str,
         secrets: HashMap<String, String>,
     ) -> Result<(), AppError> {
-        let path = format!("{}/{}", namespace, deployment_id);
+        let path = format!("{}/{}", ns, deployment_id);
 
         kv2::set(&*self.client, &self.cfg.kv_mount, &path, &secrets)
             .await
             .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to update secrets in Vault: {}", e))
+                error!(ns=%ns, deployment_id=%deployment_id, error = %e, "🚨 Failed to update secrets in Vault");
+                AppError::InternalServerError(format!("🚨 Failed to update secrets in Vault: {}", e))
             })?;
 
         Ok(())
     }
 
     /// Delete deployment secrets
-    pub async fn delete_secrets(
-        &self,
-        namespace: &str,
-        deployment_id: &str,
-    ) -> Result<(), AppError> {
-        let path = format!("{}/{}", namespace, deployment_id);
+    pub async fn delete_secrets(&self, ns: &str, deployment_id: &str) -> Result<(), AppError> {
+        let path = format!("{}/{}", ns, deployment_id);
 
         kv2::delete_latest(&*self.client, &self.cfg.kv_mount, &path)
             .await
             .map_err(|e| {
-                AppError::InternalServerError(format!("Failed to delete secrets from Vault: {}", e))
+                error!(ns=%ns, deployment_id=%deployment_id, error = %e, "🚨 Failed to delete secrets from Vault");
+                AppError::InternalServerError(format!("🚨 Failed to delete secrets from Vault: {}", e))
             })?;
 
         Ok(())

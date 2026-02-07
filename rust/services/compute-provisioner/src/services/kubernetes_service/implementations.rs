@@ -341,7 +341,6 @@ impl KubernetesService {
         let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
         let _ = secret_api.delete(&secret_name, &dp).await;
 
-        info!("✅ K8s resources deleted for deployment {}", deployment_id);
         Ok(())
     }
 
