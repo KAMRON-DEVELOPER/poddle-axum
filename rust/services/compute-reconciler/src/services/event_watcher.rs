@@ -3,7 +3,7 @@ use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
-use compute_core::schemas::{Pod, PodMeta};
+use compute_core::schemas::{Pod, PodMeta, PodPhase};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::core::v1::Pod as K8sPod;
@@ -214,15 +214,8 @@ async fn handle_pod_event(
 
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
+
             let uid = pod.metadata.uid.as_ref().unwrap().to_string();
-
-            info!(
-                project_id = %project_id,
-                deployment_id = %deployment_id,
-                uid = %uid,
-                "📥 Pod Event::Apply received",
-            );
-
             let name = pod.metadata.name.as_ref().unwrap().to_string();
             let phase = pod
                 .status
@@ -284,6 +277,16 @@ async fn handle_pod_event(
                 }
             }
 
+            info!(
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                uid = %uid,
+                name = %name,
+                phase = %phase,
+                restart_count = %restart_count,
+                "📥 Pod Event::Apply received",
+            );
+
             let mut p = pipe();
             let ttl = cfg.prometheus.scrape_interval_secs * cfg.prometheus.snapshots_to_keep;
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
@@ -323,12 +326,34 @@ async fn handle_pod_event(
 
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
+
             let uid = pod.metadata.uid.as_ref().unwrap().to_string();
+            let name = pod.metadata.name.as_ref().unwrap().to_string();
+            let phase: PodPhase = pod
+                .status
+                .as_ref()
+                .and_then(|s| s.phase.as_deref())
+                .unwrap_or("Unknown")
+                .into();
+            let mut restart_count = 0;
+
+            if let Some(statuses) = pod
+                .status
+                .as_ref()
+                .and_then(|s| s.container_statuses.as_ref())
+            {
+                for status in statuses {
+                    restart_count += status.restart_count;
+                }
+            }
 
             info!(
                 project_id = %project_id,
                 deployment_id = %deployment_id,
                 uid = %uid,
+                name = %name,
+                phase = %phase,
+                restart_count = %restart_count,
                 "📥 Pod Event::Delete received",
             );
 
