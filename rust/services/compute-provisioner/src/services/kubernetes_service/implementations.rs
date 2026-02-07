@@ -310,6 +310,41 @@ impl KubernetesService {
         Ok(())
     }
 
+    #[tracing::instrument(name = "kubernetes_service.delete", skip_all, fields(project_id = %msg.project_id, deployment_id = %msg.deployment_id), err)]
+    pub async fn delete(&self, msg: DeleteDeploymentMessage) -> Result<(), AppError> {
+        let user_id = msg.user_id;
+        let deployment_id = msg.deployment_id;
+
+        let ns = self.ensure_namespace(&user_id).await?;
+        let name = format_resource_name(&deployment_id);
+
+        let dp = DeleteParams::default();
+
+        let ingressroute_api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &ns);
+        let _ = ingressroute_api.delete(&name, &dp).await;
+
+        let service_api: Api<Service> = Api::namespaced(self.client.clone(), &ns);
+        let _ = service_api.delete(&name, &dp).await;
+
+        let deployment_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &ns);
+        let _ = deployment_api.delete(&name, &dp).await;
+
+        let vault_static_secret_api: Api<VaultStaticSecret> =
+            Api::namespaced(self.client.clone(), &ns);
+        let _ = vault_static_secret_api.delete(&name, &dp).await;
+
+        let secret_name = format!("{}-secrets", name);
+        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
+        let _ = secret_api.delete(&secret_name, &dp).await;
+
+        let secret_name = format!("{}-registry", name);
+        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
+        let _ = secret_api.delete(&secret_name, &dp).await;
+
+        info!("✅ K8s resources deleted for deployment {}", deployment_id);
+        Ok(())
+    }
+
     // ============================================================================================
     // PRIVATE APPLY FUNCTIONS
     // ============================================================================================
@@ -404,8 +439,8 @@ impl KubernetesService {
         )
         .await
         .map_err(|e| {
-            error!(ns=%ns, name=%name, "❌ Deployment SSA failed");
-            AppError::InternalServerError(format!("Deployment SSA failed: {}", e))
+            error!(ns=%ns, name=%name, error = %e, "🚨 Deployment SSA failed");
+            AppError::InternalServerError(format!("🚨 Deployment SSA failed: {}", e))
         })?;
 
         Ok(())
@@ -584,7 +619,7 @@ impl KubernetesService {
         Ok(())
     }
 
-    #[tracing::instrument(name = "kubernetes_service.update_ingressroute", skip_all, err)]
+    #[tracing::instrument(name = "kubernetes_service.apply_ingressroute", skip_all, err)]
     async fn apply_ingressroute(
         &self,
         ns: &str,
@@ -685,7 +720,7 @@ impl KubernetesService {
             },
             spec: IngressRouteSpec {
                 entry_points: self.cfg.traefik.entry_points.clone(),
-                routes, // Pass the dynamically built vectors
+                routes,
                 tls: Some(IngressRouteTls {
                     // This uses "letsencrypt"
                     // Traefik will use this resolver for domains that don't match the TLSStore.
@@ -878,8 +913,8 @@ impl KubernetesService {
             .instrument(info_span!("create_vault_connection"))
             .await
             .map_err(|e| {
-                error!(ns=%ns, "Failed to create VaultConnection");
-                AppError::InternalServerError(format!("Failed to create VaultConnection: {}", e))
+                error!(ns=%ns, error = %e, "🚨 Failed to create VaultConnection");
+                AppError::InternalServerError(format!("🚨 Failed to create VaultConnection: {}", e))
             })?;
         vault_auth_api
             .create(&PostParams::default(), &vault_auth)
@@ -966,71 +1001,41 @@ impl KubernetesService {
     // HELPERS
     // ============================================================================================
 
+    #[tracing::instrument(name = "kubernetes_service.notify_status", skip_all, fields(project_id = %project_id, deployment_id = %deployment_id), err)]
     async fn notify_status(
         &self,
-        pid: &Uuid,
-        did: &Uuid,
+        project_id: &Uuid,
+        deployment_id: &Uuid,
         status: DeploymentStatus,
         con: &mut MultiplexedConnection,
     ) -> Result<(), AppError> {
-        let channel = ChannelNames::deployments_metrics(&pid.to_string());
-        let message = ComputeEvent::DeploymentStatusUpdate { id: did, status };
+        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
+        let message = ComputeEvent::DeploymentStatusUpdate {
+            id: deployment_id,
+            status,
+        };
         con.publish(channel, message).await?;
         Ok(())
     }
 
+    #[tracing::instrument(name = "kubernetes_service.finalize_status", skip_all, fields(project_id = %project_id, deployment_id = %deployment_id), err)]
     async fn finalize_status(
         &self,
-        pid: &Uuid,
-        did: &Uuid,
+        project_id: &Uuid,
+        deployment_id: &Uuid,
         status: DeploymentStatus,
         pool: &PgPool,
         con: &mut MultiplexedConnection,
     ) -> Result<(), AppError> {
-        let res = DeploymentRepository::update_status(did, status, pool).await?;
+        let res = DeploymentRepository::update_status(deployment_id, status, pool).await?;
         if res.rows_affected() == 0 {
-            warn!("⚠️ Update deployment status affected zero rows for {}", did);
+            warn!(
+                "⚠️ Update deployment status affected zero rows for {}",
+                deployment_id
+            );
         }
-        self.notify_status(pid, did, status, con).await?;
-        Ok(())
-    }
-
-    // --------------------------------------------------------------------------------------------
-    // delete
-    // --------------------------------------------------------------------------------------------
-
-    /// Starting point
-    pub async fn delete(&self, msg: DeleteDeploymentMessage) -> Result<(), AppError> {
-        let user_id = msg.user_id;
-        let deployment_id = msg.deployment_id;
-
-        let ns = self.ensure_namespace(&user_id).await?;
-        let name = format_resource_name(&deployment_id);
-
-        let dp = DeleteParams::default();
-
-        let ingressroute_api: Api<IngressRoute> = Api::namespaced(self.client.clone(), &ns);
-        let _ = ingressroute_api.delete(&name, &dp).await;
-
-        let service_api: Api<Service> = Api::namespaced(self.client.clone(), &ns);
-        let _ = service_api.delete(&name, &dp).await;
-
-        let deployment_api: Api<K8sDeployment> = Api::namespaced(self.client.clone(), &ns);
-        let _ = deployment_api.delete(&name, &dp).await;
-
-        let vault_static_secret_api: Api<VaultStaticSecret> =
-            Api::namespaced(self.client.clone(), &ns);
-        let _ = vault_static_secret_api.delete(&name, &dp).await;
-
-        let secret_name = format!("{}-secrets", name);
-        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
-        let _ = secret_api.delete(&secret_name, &dp).await;
-
-        let secret_name = format!("{}-registry", name);
-        let secret_api: Api<K8sSecret> = Api::namespaced(self.client.clone(), &ns);
-        let _ = secret_api.delete(&secret_name, &dp).await;
-
-        info!("✅ K8s resources deleted for deployment {}", deployment_id);
+        self.notify_status(project_id, deployment_id, status, con)
+            .await?;
         Ok(())
     }
 }
