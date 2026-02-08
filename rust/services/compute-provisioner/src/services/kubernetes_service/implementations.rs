@@ -167,7 +167,7 @@ impl KubernetesService {
             .apply_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
             .await?;
 
-        let image_pull_secret = if let Some(secret) = msg.image_pull_secret.as_ref() {
+        let image_pull_secret_data = if let Some(secret) = msg.image_pull_secret.as_ref() {
             Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
         } else {
             None
@@ -184,7 +184,7 @@ impl KubernetesService {
             &ns,
             &name,
             Some(&msg.image),
-            image_pull_secret,
+            image_pull_secret_data,
             Some(msg.port),
             Some(msg.desired_replicas),
             Some(&msg.resource_spec),
@@ -260,13 +260,14 @@ impl KubernetesService {
             .apply_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
             .await?;
 
-        let image_pull_secret = match msg.image_pull_secret.as_ref() {
+        let image_pull_secret_data = match msg.image_pull_secret.as_ref() {
             Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
             None => None,
         };
 
-        // image_pull_secret is optional, not need to check
+        // image_pull_secret is not optional because we add automatic restart when image pull secret change
         if msg.image.is_some()
+            || msg.image_pull_secret.is_some()
             || msg.port.is_some()
             || msg.resource_spec.is_some()
             || msg.desired_replicas.is_some()
@@ -278,7 +279,7 @@ impl KubernetesService {
                 &ns,
                 &name,
                 msg.image.as_deref(),
-                image_pull_secret,
+                image_pull_secret_data,
                 msg.port,
                 msg.desired_replicas,
                 msg.resource_spec.as_ref(),
@@ -379,7 +380,7 @@ impl KubernetesService {
         ns: &str,
         name: &str,
         image: Option<&str>,
-        image_pull_secret: Option<String>,
+        image_pull_secret_data: Option<(String, String)>,
         port: Option<i32>,
         desired_replicas: Option<i32>,
         resource_spec: Option<&ResourceSpec>,
@@ -405,15 +406,28 @@ impl KubernetesService {
             environment_variables,
         );
 
+        let (pull_secret, pull_secret_checksum) = match image_pull_secret_data {
+            Some((n, c)) => (Some(n), Some(c)),
+            None => (None, None),
+        };
+
+        let image_pull_secrets = pull_secret.map(|name| vec![LocalObjectReference { name }]);
+
         // PodSpec:
         //      image_pull_secrets: Option<Vec<LocalObjectReference>>
         //      containers: Vec<Container>
-        let image_pull_secrets = image_pull_secret.map(|name| vec![LocalObjectReference { name }]);
         let pod_spec = PodSpec {
             image_pull_secrets,
             containers: vec![container],
             ..Default::default()
         };
+
+        let mut annotations: Option<BTreeMap<String, String>> = None;
+        if let Some(sum) = pull_secret_checksum {
+            // MAGIC IS HERE: Changing this value forces a restart
+            let a = annotations.get_or_insert_with(BTreeMap::new);
+            a.insert("poddle.io/registry-checksum".to_string(), sum);
+        }
 
         // PodTemplateSpec:
         //      metadata: Option<ObjectMeta>
@@ -421,6 +435,7 @@ impl KubernetesService {
         let pod_template_spec = PodTemplateSpec {
             metadata: Some(ObjectMeta {
                 labels: labels.clone().cloned(),
+                annotations,
                 ..Default::default()
             }),
             spec: Some(pod_spec),
@@ -778,7 +793,7 @@ impl KubernetesService {
         ns: &str,
         name: &str,
         secret: &ImagePullSecret,
-    ) -> Result<String, AppError> {
+    ) -> Result<(String, String), AppError> {
         let secret_name = format!("{}-registry", name);
 
         let auth = base64::engine::general_purpose::STANDARD
@@ -792,13 +807,19 @@ impl KubernetesService {
                     "auth": auth
                 }
             }
-        });
+        })
+        .to_string();
+
+        // Calculate SHA256 Checksum of the config
+        // When secrets change pods doesn't restart until timeout beacuse name and image not changed
+        // if we set checksum as label to pod they does restart
+        let checksum = sha256::digest(&dockerconfig);
 
         let data = Some(BTreeMap::from([(
             ".dockerconfigjson".to_string(),
             ByteString(
                 base64::engine::general_purpose::STANDARD
-                    .encode(dockerconfig.to_string())
+                    .encode(dockerconfig)
                     .into_bytes(),
             ),
         )]));
@@ -839,7 +860,7 @@ impl KubernetesService {
             AppError::InternalServerError(format!("🚨 Image Pull Secret SSA failed: {}", e))
         })?;
 
-        Ok(secret_name)
+        Ok((secret_name, checksum))
     }
 
     #[tracing::instrument(name = "kubernetes_service.ensure_namespace", skip_all, fields(user_id = %user_id), err)]

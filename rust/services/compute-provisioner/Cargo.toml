@@ -40,3 +40,4 @@ tracing.workspace = true
 config.workspace = true
 base64 = "0.22.1"
 tracing-opentelemetry.workspace = true
+sha256 = "1.6.0"
