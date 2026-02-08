@@ -83,7 +83,7 @@ function App() {
     <div
       className='app'
       style={{ padding: 40, fontFamily: 'sans-serif' }}>
-      <h1>PaaS Test App</h1>
+      <h1>Simple Full Stack Frontend</h1>
 
       <input
         className='item-input'

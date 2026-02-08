@@ -1,5 +1,9 @@
 server {
     listen ${PORT};
+
+    # This tells Nginx to use Docker's internal DNS to resolve variables
+    # resolver 127.0.0.11 valid=30s;
+
     location / {
         root /usr/share/nginx/html;
         index index.html;
