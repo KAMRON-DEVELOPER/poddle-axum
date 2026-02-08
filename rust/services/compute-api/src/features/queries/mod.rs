@@ -38,8 +38,7 @@ pub struct LogQuery {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TailQuery {
-    #[serde(default = "default_start")]
-    pub start: Option<DateTime<Utc>>,
+    pub start: i64,
     #[serde(default = "default_tail_minutes")]
     pub minutes: i64,
 }

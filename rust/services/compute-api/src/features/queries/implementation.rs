@@ -1,4 +1,4 @@
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Duration, TimeZone, Utc};
 
 use crate::features::queries::{
     DeploymentMetricsQuery, DeploymentsMetricsQuery, LogQuery, TailQuery, error::TimeRangeError,
@@ -81,28 +81,15 @@ impl LogQuery {
 }
 
 impl TailQuery {
-    /// Resolves start timestamp for tailing logs
-    /// Defaults to N minutes ago if not provided
-    pub fn resolve(&self) -> Result<DateTime<Utc>, TimeRangeError> {
-        let now = Utc::now();
-
-        match self.start {
-            Some(start) => {
-                if start >= now {
-                    return Err(TimeRangeError::StartInFuture);
-                }
-                Ok(start)
-            }
-            None => {
-                let minutes = self.minutes.max(1);
-                Ok(now - Duration::minutes(minutes))
-            }
-        }
-    }
-
     /// Returns start timestamp in nanoseconds as string for Loki tail query
     pub fn resolve_nanos(&self) -> Result<String, TimeRangeError> {
-        let start = self.resolve()?;
+        let now = Utc::now();
+        let start = Utc.timestamp_nanos(self.start);
+
+        if start >= now {
+            return Err(TimeRangeError::StartInFuture);
+        }
+
         let start_nanos = start
             .timestamp_nanos_opt()
             .ok_or(TimeRangeError::TimestampConversion)?;
