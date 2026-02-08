@@ -11,9 +11,11 @@
   will-change: filter;
   transition: filter 300ms;
 }
+
 .logo:hover {
   filter: drop-shadow(0 0 2em #646cffaa);
 }
+
 .logo.react:hover {
   filter: drop-shadow(0 0 2em #61dafbaa);
 }
@@ -22,6 +24,7 @@
   from {
     transform: rotate(0deg);
   }
+
   to {
     transform: rotate(360deg);
   }
@@ -39,4 +42,71 @@
 
 .read-the-docs {
   color: #888;
+}
+
+.app {
+  --accent-border: #646cff;
+  --control-width: 220px;
+}
+
+.item-input {
+  width: var(--control-width);
+  box-sizing: border-box;
+  display: block;
+  margin: 0 auto;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  outline: none;
+}
+
+.item-input:focus {
+  border-color: var(--accent-border);
+}
+
+.add-button {
+  width: var(--control-width);
+  box-sizing: border-box;
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  margin-top: 0.6rem;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.add-button:hover {
+  border-color: var(--accent-border);
+}
+
+.item-list {
+  list-style: none;
+  padding: 0;
+  margin: 1.2rem auto 0;
+  max-width: 520px;
+}
+
+.item-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.35rem 0;
+}
+
+.item-title {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.delete-button {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  line-height: 28px;
+  font-size: 0.85rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  flex: 0 0 28px;
 }
