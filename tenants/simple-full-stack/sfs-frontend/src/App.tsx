@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react';
 import './App.css';
 
-const API_URL: string = (import.meta.env.VITE_API_URL as string | undefined) || 'http://localhost:8000';
+// We use `Vite`'s built-in `import.meta.env.DEV` boolean.
+// This is `true` when you run `npm run dev` and `false` when you build for production.
+const API_URL = import.meta.env.DEV ? 'http://localhost:8000' : '/api';
 
 interface Item {
   id: string;
