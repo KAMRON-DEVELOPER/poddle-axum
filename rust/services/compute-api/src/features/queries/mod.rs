@@ -34,7 +34,7 @@ pub struct LogQuery {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TailQuery {
-    pub start: i64,
+    pub start: Option<i64>,
 }
 
 fn default_minutes() -> i64 {

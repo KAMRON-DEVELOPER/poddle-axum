@@ -70,12 +70,18 @@ impl TailQuery {
     /// Returns start timestamp in nanoseconds as string for Loki tail query
     pub fn resolve_nanos(&self) -> Result<String, TimeRangeError> {
         let now = Utc::now();
-        let start = Utc.timestamp_nanos(self.start);
+        let start = match self.start {
+            Some(ns) => Utc.timestamp_nanos(ns),
+            None => now,
+        };
 
         if start > now {
             return Err(TimeRangeError::StartInFuture);
         }
 
-        Ok(self.start.to_string())
+        Ok(start
+            .timestamp_nanos_opt()
+            .ok_or(TimeRangeError::TimestampConversion)?
+            .to_string())
     }
 }
