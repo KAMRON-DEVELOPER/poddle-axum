@@ -517,15 +517,18 @@ pub async fn get_logs_handler(
     );
 
     // Convert to nanoseconds - validation happens inside
-    let (start_nanos, end_nanos) = q.resolve_nanos()?;
+    let (start_nanos, option_end_nanos) = q.resolve_nanos()?;
 
-    let query = [
-        ("query", &query),
-        ("start", &start_nanos),
-        ("end", &end_nanos),
-        ("direction", &"backward".to_string()),
-        ("limit", &"5000".to_string()),
+    let mut query = vec![
+        ("query", query),
+        ("start", start_nanos),
+        ("direction", "backward".to_string()),
+        ("limit", "5000".to_string()),
     ];
+
+    if let Some(option_end_nanos) = option_end_nanos {
+        query.push(("end", option_end_nanos));
+    };
 
     info!(
         "Sending request to Loki: {} with Tenant: {}",

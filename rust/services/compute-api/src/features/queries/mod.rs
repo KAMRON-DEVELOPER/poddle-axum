@@ -26,44 +26,17 @@ pub struct DeploymentsMetricsQuery {
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LogQuery {
-    #[serde(default = "default_start")]
-    pub start: Option<DateTime<Utc>>,
-    #[serde(default = "default_end")]
+    pub start: DateTime<Utc>,
     pub end: Option<DateTime<Utc>>,
-    #[serde(default = "default_log_minutes")]
-    pub minutes: i64,
 }
 
 /// Query for tailing live logs (WebSocket streaming)
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TailQuery {
-    #[serde(default = "default_tail_start")]
-    pub start: Option<i64>,
-    #[serde(default = "default_tail_minutes")]
-    pub minutes: i64,
+    pub start: i64,
 }
 
 fn default_minutes() -> i64 {
     30
-}
-
-fn default_start() -> Option<DateTime<Utc>> {
-    Some(Utc::now())
-}
-
-fn default_tail_start() -> Option<i64> {
-    Utc::now().timestamp_nanos_opt()
-}
-
-fn default_end() -> Option<DateTime<Utc>> {
-    Some(Utc::now())
-}
-
-fn default_log_minutes() -> i64 {
-    15
-}
-
-fn default_tail_minutes() -> i64 {
-    1
 }
