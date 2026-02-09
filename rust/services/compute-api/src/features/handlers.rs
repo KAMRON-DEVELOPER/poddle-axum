@@ -523,7 +523,7 @@ pub async fn get_logs_handler(
         ("query", query),
         ("start", start_nanos),
         ("end", end_nanos),
-        ("direction", "backward".to_string()),
+        ("direction", "forward".to_string()),
         ("limit", "5000".to_string()),
     ];
 
