@@ -29,15 +29,15 @@ impl LogQuery {
     /// Compatible with Loki's Unix nanosecond timestamps
     pub fn resolve_nanos(&self) -> Result<(String, String), TimeRangeError> {
         let now = Utc::now();
-        let mut start = self.start;
-        let mut end = self.end.unwrap_or(now);
-        if end > now {
-            end = now;
+        let start = self.start;
+        let end = self.end.unwrap_or(now);
+
+        if start > now {
+            return Err(TimeRangeError::StartInFuture);
         }
 
-        // If start is accidentally in future, clamp to Now.
-        if start > now {
-            start = now;
+        if end > now {
+            return Err(TimeRangeError::EndInFuture);
         }
 
         if start >= end {
