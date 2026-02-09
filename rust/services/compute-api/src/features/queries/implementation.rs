@@ -27,42 +27,33 @@ impl DeploymentsMetricsQuery {
 impl LogQuery {
     /// Returns (start_nanos, end_nanos) as strings for Loki query
     /// Compatible with Loki's Unix nanosecond timestamps
-    pub fn resolve_nanos(&self) -> Result<(String, Option<String>), TimeRangeError> {
+    pub fn resolve_nanos(&self) -> Result<(String, String), TimeRangeError> {
         let now = Utc::now();
-
-        if self.start > now {
-            return Err(TimeRangeError::StartInFuture);
+        let mut start = self.start;
+        let mut end = self.end.unwrap_or(now);
+        if end > now {
+            end = now;
         }
 
-        match self.end {
-            Some(end) => {
-                if self.start >= end {
-                    return Err(TimeRangeError::StartAfterEnd);
-                }
-                if end > now {
-                    return Err(TimeRangeError::EndInFuture);
-                }
-
-                Ok((
-                    self.start
-                        .timestamp_nanos_opt()
-                        .ok_or(TimeRangeError::TimestampConversion)?
-                        .to_string(),
-                    Some(
-                        end.timestamp_nanos_opt()
-                            .ok_or(TimeRangeError::TimestampConversion)?
-                            .to_string(),
-                    ),
-                ))
-            }
-            None => Ok((
-                self.start
-                    .timestamp_nanos_opt()
-                    .ok_or(TimeRangeError::TimestampConversion)?
-                    .to_string(),
-                None,
-            )),
+        // If start is accidentally in future, clamp to Now.
+        if start > now {
+            start = now;
         }
+
+        if start >= end {
+            return Err(TimeRangeError::StartAfterEnd);
+        };
+
+        let start_nanos = start
+            .timestamp_nanos_opt()
+            .ok_or(TimeRangeError::TimestampConversion)?
+            .to_string();
+        let end_nanos = end
+            .timestamp_nanos_opt()
+            .ok_or(TimeRangeError::TimestampConversion)?
+            .to_string();
+
+        Ok((start_nanos, end_nanos))
     }
 }
 
@@ -70,13 +61,14 @@ impl TailQuery {
     /// Returns start timestamp in nanoseconds as string for Loki tail query
     pub fn resolve_nanos(&self) -> Result<String, TimeRangeError> {
         let now = Utc::now();
-        let start = match self.start {
+        let mut start = match self.start {
             Some(ns) => Utc.timestamp_nanos(ns),
             None => now,
         };
 
+        // If start is accidentally in future, clamp to Now.
         if start > now {
-            return Err(TimeRangeError::StartInFuture);
+            start = now;
         }
 
         Ok(start
