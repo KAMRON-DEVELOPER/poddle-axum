@@ -124,6 +124,7 @@ impl From<(Deployment, Vec<MetricSnapshot>)> for DeploymentsResponse {
             status: d.status,
             domain: d.domain,
             subdomain: d.subdomain,
+            service: d.service,
             created_at: d.created_at,
             updated_at: d.updated_at,
             metrics,
@@ -153,6 +154,7 @@ impl From<Deployment> for DeploymentResponse {
             status: d.status,
             domain: d.domain,
             subdomain: d.subdomain,
+            service: d.service,
             created_at: d.created_at,
             updated_at: d.updated_at,
         }

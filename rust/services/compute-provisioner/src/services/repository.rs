@@ -70,6 +70,7 @@ impl DeploymentRepository {
                 status AS "status: DeploymentStatus",
                 domain,
                 subdomain,
+                service,
                 created_at,
                 updated_at
             FROM deployments

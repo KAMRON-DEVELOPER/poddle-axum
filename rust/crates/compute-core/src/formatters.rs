@@ -12,11 +12,12 @@ pub fn format_namespace(user_id: &Uuid) -> String {
     )
 }
 
-/// generate resource name like `app-{id[:8]}`
-pub fn format_resource_name(id: &Uuid) -> String {
+/// generate resource name like `app-{deployment_id[:8]}`
+pub fn format_resource_name(deployment_id: &Uuid) -> String {
     format!(
         "app-{}",
-        id.as_simple()
+        deployment_id
+            .as_simple()
             .to_string()
             .chars()
             .take(8)

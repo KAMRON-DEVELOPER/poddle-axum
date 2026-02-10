@@ -1,4 +1,5 @@
 use compute_core::{
+    formatters::format_resource_name,
     models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
     schemas::{CreateDeploymentRequest, CreateProjectRequest, UpdateDeploymentRequest},
 };
@@ -218,6 +219,7 @@ impl DeploymentRepository {
                 d.status AS "status: DeploymentStatus",
                 d.domain,
                 d.subdomain,
+                d.service,
                 d.created_at,
                 d.updated_at,
                 COUNT(*) OVER() as "total!"
@@ -263,6 +265,7 @@ impl DeploymentRepository {
                 status: r.status,
                 domain: r.domain,
                 subdomain: r.subdomain,
+                service: r.service,
                 created_at: r.created_at,
                 updated_at: r.updated_at,
             })
@@ -300,6 +303,7 @@ impl DeploymentRepository {
                 d.status AS "status: DeploymentStatus",
                 d.domain,
                 d.subdomain,
+                d.service,
                 d.created_at,
                 d.updated_at
             FROM deployments d
@@ -327,10 +331,14 @@ impl DeploymentRepository {
             .as_ref()
             .map(|l| serde_json::to_value(l).unwrap());
 
+        let id = Uuid::new_v4();
+        let name = format_resource_name(&id);
+
         sqlx::query_as!(
             Deployment,
             r#"
             INSERT INTO deployments (
+                id,
                 user_id,
                 project_id,
                 name,
@@ -343,9 +351,10 @@ impl DeploymentRepository {
                 environment_variables,
                 labels,
                 domain,
-                subdomain
+                subdomain,
+                service
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             RETURNING
                 id,
                 user_id,
@@ -366,9 +375,11 @@ impl DeploymentRepository {
                 status AS "status: DeploymentStatus",
                 domain,
                 subdomain,
+                service,
                 created_at,
                 updated_at
             "#,
+            id,
             user_id,
             project_id,
             &req.name,
@@ -382,6 +393,7 @@ impl DeploymentRepository {
             labels,
             req.domain,
             req.subdomain,
+            name
         )
         .fetch_one(&mut **tx)
         .await
@@ -466,6 +478,7 @@ impl DeploymentRepository {
                 d.status AS "status: DeploymentStatus",
                 d.domain,
                 d.subdomain,
+                d.service,
                 d.created_at,
                 d.updated_at
             "#,

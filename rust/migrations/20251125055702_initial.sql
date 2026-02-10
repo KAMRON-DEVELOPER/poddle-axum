@@ -228,6 +228,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     status deployment_status NOT NULL DEFAULT 'queued',
     domain VARCHAR(253),
     subdomain VARCHAR(63),
+    service VARCHAR(255) NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

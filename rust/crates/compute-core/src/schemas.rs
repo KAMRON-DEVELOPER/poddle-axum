@@ -120,6 +120,7 @@ pub struct DeploymentResponse {
     pub status: DeploymentStatus,
     pub domain: Option<String>,
     pub subdomain: Option<String>,
+    pub service: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -146,6 +147,7 @@ pub struct DeploymentsResponse {
     pub status: DeploymentStatus,
     pub domain: Option<String>,
     pub subdomain: Option<String>,
+    pub service: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub metrics: Vec<MetricSnapshot>,
