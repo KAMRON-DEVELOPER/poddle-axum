@@ -294,7 +294,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
             // let ttl = cfg.scrape_interval_secs * cfg.snapshots_to_keep;
 
             // Append Snapshot
-            p.lpush(&key, &snapshot).ignore();
+            p.lpush_exists(&key, &snapshot).ignore();
             p.ltrim(&key, -cfg.snapshots_to_keep as isize, -1).ignore();
             // p.expire(&key, ttl).ignore();
 
@@ -332,7 +332,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
                 // p.expire(&meta_key, ttl).ignore();
 
                 // Append snapshots
-                p.lpush(&metrics_key, &snapshot).ignore();
+                p.lpush_exists(&metrics_key, &snapshot).ignore();
                 p.ltrim(&metrics_key, -cfg.snapshots_to_keep as isize, -1)
                     .ignore();
                 // p.expire(&metrics_key, ttl).ignore();

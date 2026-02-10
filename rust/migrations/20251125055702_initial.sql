@@ -35,6 +35,8 @@ DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
     'suspended',
     -- 9. Configuration error (Image pull backoff, etc.)
     'failed'
+    -- 10. Deleted
+    'deleted'
 );
 EXCEPTION
 WHEN duplicate_object THEN NULL;

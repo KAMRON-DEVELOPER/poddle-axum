@@ -4,7 +4,7 @@ use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
-use compute_core::schemas::{Pod, PodMeta, PodPhase};
+use compute_core::schemas::{MetricSnapshot, Pod, PodMeta, PodPhase};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::core::v1::Pod as K8sPod;
@@ -80,6 +80,19 @@ async fn handle_deployment_event(
                 return Ok(());
             }
 
+            // If the deployment is deleted in the DB, ignore this Pod event.
+            let is_active = sqlx::query_scalar!(
+                "SELECT EXISTS(SELECT 1 FROM deployments WHERE id = $1 AND status != 'deleted')",
+                deployment_id
+            )
+            .fetch_one(pool)
+            .await?
+            .unwrap_or(false);
+
+            if !is_active {
+                return Ok(());
+            }
+
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
 
@@ -106,6 +119,17 @@ async fn handle_deployment_event(
                 "📥 Deployment Event::Apply received",
             );
 
+            // Initialize redis deployment metrics structure
+            let metrics_key = CacheKeys::deployment_metrics(&deployment_id.to_string());
+            let exists = con.exists(&metrics_key).await?;
+            if !exists {
+                let ts = Utc::now().timestamp();
+                let cpu = 0.0;
+                let memory = 0.0;
+                let idle_snapshot = MetricSnapshot { ts, cpu, memory };
+                con.lpush(&metrics_key, idle_snapshot).await?;
+            }
+
             // Update database
             let query_result = sqlx::query!(
                 r#"
@@ -127,7 +151,7 @@ async fn handle_deployment_event(
                 id: &deployment_id,
                 status: new_status,
             };
-            send_deployments_message(&project_id, message, con).await?
+            send_deployments_message(&project_id, message, con).await?;
         }
         Ok(Event::Delete(deployment)) => {
             let labels = deployment.metadata.labels.as_ref();
@@ -156,18 +180,19 @@ async fn handle_deployment_event(
             let index_keys = CacheKeys::deployment_pods(&dep_id);
 
             // fetch pod uids
-            let uids: Vec<String> = con.zrange(&index_keys, 0, -1).await?;
+            // let uids: Vec<String> = con.zrange(&index_keys, 0, -1).await?;
+
+            let mut p = pipe();
 
             // delete all pod data
-            let mut p = pipe();
-            for uid in uids {
-                p.del(CacheKeys::deployment_pod_meta(&dep_id, &uid))
-                    .ignore();
-                p.del(CacheKeys::deployment_pod_metrics(&dep_id, &uid))
-                    .ignore();
-            }
+            // for uid in uids {
+            //     p.del(CacheKeys::deployment_pod_meta(&dep_id, &uid))
+            //         .ignore();
+            //     p.del(CacheKeys::deployment_pod_metrics(&dep_id, &uid))
+            //         .ignore();
+            // }
 
-            // delete deployment keys
+            // delete deployment metrics & index keys
             p.del(CacheKeys::deployment_metrics(&dep_id)).ignore();
             p.del(index_keys).ignore();
 
@@ -208,6 +233,19 @@ async fn handle_pod_event(
 
             if project_id.is_none() || deployment_id.is_none() {
                 // Not our deployment, skip
+                return Ok(());
+            }
+
+            // If the deployment is deleted in the DB, ignore this Pod event.
+            let is_active = sqlx::query_scalar!(
+                "SELECT EXISTS(SELECT 1 FROM deployments WHERE id = $1 AND status != 'deleted')",
+                deployment_id
+            )
+            .fetch_one(pool)
+            .await?
+            .unwrap_or(false);
+
+            if !is_active {
                 return Ok(());
             }
 
@@ -287,11 +325,15 @@ async fn handle_pod_event(
             );
 
             let mut p = pipe();
-            let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
+            let dep_id = &deployment_id.to_string();
+
+            let index_key = CacheKeys::deployment_pods(dep_id);
+            let meta_key = CacheKeys::deployment_pod_meta(dep_id, &uid);
+            let metrics_key = CacheKeys::deployment_pod_metrics(dep_id, &uid);
+
             let score = Utc::now().timestamp();
             p.zadd(&index_key, &uid, score).ignore();
 
-            let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
             let meta = PodMeta {
                 uid,
                 name,
@@ -301,7 +343,17 @@ async fn handle_pod_event(
             let items = meta.as_redis_items();
             p.hset_multiple(&meta_key, &items).ignore();
 
-            let channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
+            // Initialize redis deployment metrics structure
+            let exists = con.exists(&metrics_key).await?;
+            if !exists {
+                let ts = Utc::now().timestamp();
+                let cpu = 0.0;
+                let memory = 0.0;
+                let idle_snapshot = MetricSnapshot { ts, cpu, memory };
+                con.lpush(&metrics_key, idle_snapshot).await?;
+            }
+
+            let channel = ChannelNames::deployment_metrics(dep_id);
             let message = ComputeEvent::PodApply {
                 pod: Pod {
                     meta,
@@ -360,10 +412,11 @@ async fn handle_pod_event(
 
             let mut p = pipe();
 
-            let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
+            // let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
             let metrics_key = CacheKeys::deployment_pod_metrics(&deployment_id.to_string(), &uid);
-            p.zrem(index_key, &uid).ignore();
+
+            // p.zrem(index_key, &uid).ignore();
             p.del(&meta_key).ignore();
             p.del(&metrics_key).ignore();
 
