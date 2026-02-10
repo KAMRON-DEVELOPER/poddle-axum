@@ -412,11 +412,11 @@ async fn handle_pod_event(
 
             let mut p = pipe();
 
-            // let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
+            let index_key = CacheKeys::deployment_pods(&deployment_id.to_string());
             let meta_key = CacheKeys::deployment_pod_meta(&deployment_id.to_string(), &uid);
             let metrics_key = CacheKeys::deployment_pod_metrics(&deployment_id.to_string(), &uid);
 
-            // p.zrem(index_key, &uid).ignore();
+            p.zrem(index_key, &uid).ignore();
             p.del(&meta_key).ignore();
             p.del(&metrics_key).ignore();
 
