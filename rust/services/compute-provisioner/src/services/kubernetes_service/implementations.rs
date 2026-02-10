@@ -254,7 +254,7 @@ impl KubernetesService {
         labels.insert("poddle.io/project-id".into(), msg.project_id.into());
         labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
 
-        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &pool)
+        let deployment = DeploymentRepository::get_preset_id(&deployment_id, &pool)
             .await
             .map_err(|e| {
                 error!(ns=%ns, name=%name, error = %e, "🚨 Failed to get deployment from database");
