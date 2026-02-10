@@ -21,7 +21,7 @@ A note-taking microservice built with Express and TypeScript, featuring comprehe
 - **Express 5.x** - Web framework
 - **TypeScript 5.x** - Type safety
 - **OpenTelemetry** - Distributed tracing
-- **Node.js 22** - Runtime
+- **Node.js 24** - Runtime
 
 ## API Endpoints
 
