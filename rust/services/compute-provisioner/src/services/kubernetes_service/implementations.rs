@@ -254,9 +254,18 @@ impl KubernetesService {
         labels.insert("poddle.io/project-id".into(), msg.project_id.into());
         labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
 
-        if let Some(preset) = msg.preset_id {
-            labels.insert("poddle.io/preset-id".into(), preset.to_string());
-        }
+        let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &pool)
+            .await
+            .map_err(|e| {
+                error!(ns=%ns, name=%name, error = %e, "🚨 Failed to get deployment from database");
+                AppError::InternalServerError(format!(
+                    "🚨 Failed to get deployment from database: {}",
+                    e
+                ))
+            })?;
+
+        let preset_id = msg.preset_id.unwrap_or(deployment.preset_id);
+        labels.insert("poddle.io/preset-id".into(), preset_id.to_string());
 
         // Selector is invariant
         let mut selector = BTreeMap::new();
@@ -316,12 +325,6 @@ impl KubernetesService {
             let port = if let Some(p) = msg.port {
                 p
             } else {
-                let deployment = DeploymentRepository::get_one_by_id(&deployment_id, &pool)
-                .await
-                .map_err(|e| {
-                    error!(ns=%ns, name=%name, error = %e, "🚨 Failed to get deployment from database");
-                    AppError::InternalServerError(format!("🚨 Failed to get deployment from database: {}", e))
-                })?;
                 deployment.port
             };
 
