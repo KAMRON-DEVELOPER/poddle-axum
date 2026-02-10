@@ -154,6 +154,7 @@ impl KubernetesService {
         labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
         labels.insert("poddle.io/preset-id".into(), msg.preset_id.into());
 
+        // Selector is invariant
         let mut selector = BTreeMap::new();
         selector.insert(
             "poddle.io/deployment-id".to_string(),
@@ -247,6 +248,16 @@ impl KubernetesService {
         let ns = self.ensure_namespace(&msg.user_id).await?;
         let name = format_resource_name(&msg.deployment_id);
 
+        // Define Labels & Selector
+        let mut labels = BTreeMap::new();
+        labels.insert("poddle.io/managed-by".into(), "poddle".into());
+        labels.insert("poddle.io/project-id".into(), msg.project_id.into());
+        labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
+
+        if let Some(preset) = msg.preset_id {
+            labels.insert("poddle.io/preset-id".into(), preset.to_string());
+        }
+
         // Selector is invariant
         let mut selector = BTreeMap::new();
         selector.insert(
@@ -285,7 +296,7 @@ impl KubernetesService {
                 msg.resource_spec.as_ref(),
                 secret_ref,
                 msg.environment_variables,
-                None,
+                Some(&labels),
                 &selector,
             )
             .await?;
