@@ -123,6 +123,8 @@ pub async fn google_oauth_callback_handler(
         get_google_oauth_user_response
     );
 
+    // TODO We need to check status code and potential errors
+
     let google_oauth_user = get_google_oauth_user_response
         .json::<GoogleOAuthUser>()
         .await?;
