@@ -726,8 +726,10 @@ pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
 
         let mut removal = Cookie::build((name, value))
             .http_only(http_only)
-            .secure(secure)
-            .max_age(CookieDuration::seconds(0));
+            .path("/")
+            .same_site(SameSite::Lax)
+            .max_age(CookieDuration::seconds(0))
+            .secure(secure);
 
         if let Some(path) = path {
             removal = removal.path(path);
