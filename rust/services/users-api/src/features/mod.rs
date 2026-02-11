@@ -20,7 +20,7 @@ pub fn get_routes() -> Router<AppState> {
                 .delete(handlers::delete_user_handler),
         )
         .route("/api/v1/auth/refresh", post(handlers::refresh_handler))
-        .route("/api/v1/auth/logout", get(handlers::logout_handler))
+        .route("/api/v1/auth/logout", post(handlers::logout_handler))
         .route("/api/v1/auth/verify", get(handlers::verify_handler))
         .route("/api/v1/auth/google", get(handlers::google_oauth_handler))
         .route("/api/v1/auth/github", get(handlers::github_oauth_handler))
