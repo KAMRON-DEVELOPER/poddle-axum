@@ -104,7 +104,7 @@ pub struct UserOut {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct PlatformStatsResponse {
+pub struct StatsResponse {
     pub users_total: i64,
     pub deployments_total: i64,
 }

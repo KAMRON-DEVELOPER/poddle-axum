@@ -6,7 +6,7 @@ use crate::{
         repository::UsersRepository,
         schemas::{
             AuthIn, AuthOut, CreateFeedbackRequest, GithubOAuthUser, GoogleOAuthUser,
-            OAuthCallback, PlatformStatsResponse, RedirectResponse, Tokens, UserIn, VerifyQuery,
+            OAuthCallback, RedirectResponse, StatsResponse, Tokens, UserIn, VerifyQuery,
         },
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
@@ -746,8 +746,8 @@ pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
     )
 }
 
-#[tracing::instrument(name = "get_platform_stats_handler", skip_all)]
-pub async fn get_platform_stats_handler(
+#[tracing::instrument(name = "get_stats_handler", skip_all)]
+pub async fn get_stats_handler(
     State(database): State<Database>,
 ) -> Result<impl IntoResponse, AppError> {
     let users_total = sqlx::query_scalar!("SELECT COUNT(*) from users")
@@ -757,7 +757,7 @@ pub async fn get_platform_stats_handler(
         .fetch_one(&database.pool)
         .await?;
 
-    Ok(Json(PlatformStatsResponse {
+    Ok(Json(StatsResponse {
         users_total: users_total.unwrap_or(0),
         deployments_total: deployments_total.count.unwrap_or(0),
     }))
@@ -779,9 +779,7 @@ pub async fn create_feedback_handler(
     State(db): State<Database>,
     Json(req): Json<CreateFeedbackRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    let query_result = UsersRepository::create_feedback(&req, &db.pool)
-        .await
-        .map_err(|e| AppError::InternalServerError(format!("Database error: {}", e)))?;
+    let query_result = UsersRepository::create_feedback(&req, &db.pool).await?;
 
     if query_result.rows_affected() == 0 {
         return Err(AppError::InternalServerError(
