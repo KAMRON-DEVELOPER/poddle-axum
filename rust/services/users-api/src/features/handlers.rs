@@ -571,9 +571,11 @@ pub async fn get_user_handler(
 // -- =====================
 // -- UPDATE USER
 // -- =====================
-// TODO
+#[tracing::instrument(name = "update_user_handler", skip_all, err)]
 pub async fn update_user_handler(
+    _claims: Claims,
     State(s3): State<AmazonS3>,
+    State(_database): State<Database>,
     mut multipart: Multipart,
 ) -> Result<impl IntoResponse, AppError> {
     let mut oauth_user_schema = UserIn {
