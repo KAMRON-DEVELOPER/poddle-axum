@@ -150,8 +150,8 @@ pub async fn google_oauth_callback_handler(
     let user = UsersRepository::create_user(
         oauth_user.username.unwrap_or_default(),
         oauth_user.email.unwrap_or_default(),
-        None,
         oauth_user.picture,
+        None,
         google_oauth_user_sub.clone(),
         &mut tx,
     )
@@ -298,8 +298,8 @@ pub async fn github_oauth_callback_handler(
     let user = UsersRepository::create_user(
         oauth_user.username.unwrap_or_default(),
         oauth_user.email.unwrap_or_default(),
-        None,
         oauth_user.picture,
+        None,
         github_oauth_user_id.clone(),
         &mut tx,
     )
