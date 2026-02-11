@@ -151,6 +151,7 @@ pub async fn google_oauth_callback_handler(
         oauth_user.username.unwrap_or_default(),
         oauth_user.email.unwrap_or_default(),
         None,
+        oauth_user.picture,
         google_oauth_user_sub.clone(),
         &mut tx,
     )
@@ -298,6 +299,7 @@ pub async fn github_oauth_callback_handler(
         oauth_user.username.unwrap_or_default(),
         oauth_user.email.unwrap_or_default(),
         None,
+        oauth_user.picture,
         github_oauth_user_id.clone(),
         &mut tx,
     )
@@ -453,6 +455,7 @@ pub async fn continue_with_email_handler(
         auth_in.username.clone().unwrap_or_default(),
         auth_in.email,
         Some(hash_password),
+        None,
         email_oauth_user_id,
         &mut tx,
     )

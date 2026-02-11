@@ -80,6 +80,7 @@ impl UsersRepository {
     pub async fn create_user(
         username: String,
         email: String,
+        picture: Option<String>,
         hash_password: Option<String>,
         oauth_user_id: String,
         tx: &mut Transaction<'_, Postgres>,
@@ -87,8 +88,8 @@ impl UsersRepository {
         Ok(sqlx::query_as!(
             User,
             r#"
-            INSERT INTO users (username, email, password, oauth_user_id)
-            VALUES ($1,$2,$3,$4)
+            INSERT INTO users (username, email, password, picture, oauth_user_id)
+            VALUES ($1,$2,$3,$4, $5)
             RETURNING
                 id,
                 username,
@@ -105,6 +106,7 @@ impl UsersRepository {
             username,
             email,
             hash_password,
+            picture,
             oauth_user_id
         )
         .fetch_one(&mut **tx)
