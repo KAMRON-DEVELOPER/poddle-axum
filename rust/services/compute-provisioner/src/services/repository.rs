@@ -81,4 +81,42 @@ impl DeploymentRepository {
         .fetch_one(pool)
         .await
     }
+
+    #[instrument("deployment_repository.set_vault_path", skip_all, fields(deployment_id = %id), err)]
+    pub async fn set_vault_secret_path(
+        id: &Uuid,
+        path: &str,
+        pool: &PgPool,
+    ) -> Result<PgQueryResult, sqlx::Error> {
+        sqlx::query!(
+            r#"
+            UPDATE deployments
+            SET vault_secret_path = $1
+            WHERE id = $2
+            "#,
+            path,
+            id
+        )
+        .execute(pool)
+        .await
+    }
+
+    #[instrument("deployment_repository.set_secret_keys", skip_all, fields(deployment_id = %id), err)]
+    pub async fn set_secret_keys(
+        id: &Uuid,
+        keys: Vec<String>,
+        pool: &PgPool,
+    ) -> Result<PgQueryResult, sqlx::Error> {
+        sqlx::query!(
+            r#"
+            UPDATE deployments
+            SET secret_keys = $1
+            WHERE id = $2
+            "#,
+            &keys,
+            id
+        )
+        .execute(pool)
+        .await
+    }
 }

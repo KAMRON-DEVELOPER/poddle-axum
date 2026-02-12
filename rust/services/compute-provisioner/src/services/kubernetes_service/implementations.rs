@@ -165,7 +165,7 @@ impl KubernetesService {
 
         // This creates the VSO Resource AND writes the initial data to Vault
         let secret_ref = self
-            .apply_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
+            .apply_vault_static_secret(&msg.deployment_id, &ns, &name, msg.secrets, &pool)
             .await?;
 
         let image_pull_secret_data = if let Some(secret) = msg.image_pull_secret.as_ref() {
@@ -277,7 +277,7 @@ impl KubernetesService {
         // Update Secrets (if provided)
         // We call the same function. It updates Vault data. VSO detects change -> Restarts Pods.
         let secret_ref = self
-            .apply_vault_static_secret(&msg.deployment_id.to_string(), &ns, &name, msg.secrets)
+            .apply_vault_static_secret(&msg.deployment_id, &ns, &name, msg.secrets, &pool)
             .await?;
 
         let image_pull_secret_data = match msg.image_pull_secret.as_ref() {
@@ -1000,10 +1000,11 @@ impl KubernetesService {
     #[tracing::instrument(name = "kubernetes_service.create_vault_static_secret", skip_all, fields(deployment_id = %deployment_id), err)]
     async fn apply_vault_static_secret(
         &self,
-        deployment_id: &str,
+        deployment_id: &Uuid,
         ns: &str,
         name: &str,
         secrets: Option<HashMap<String, String>>,
+        pool: &PgPool,
     ) -> Result<Option<String>, AppError> {
         let secrets = match secrets {
             Some(s) if !s.is_empty() => s,
@@ -1012,11 +1013,16 @@ impl KubernetesService {
 
         let secret_name = format!("{}-secrets", name);
 
+        let keys = secrets.keys().cloned().collect();
+
         // Write to Vault
         let path = self
             .vault_service
-            .store_secrets(ns, deployment_id, secrets)
+            .store_secrets(ns, &deployment_id.to_string(), secrets)
             .await?;
+
+        DeploymentRepository::set_vault_secret_path(deployment_id, &path, pool).await?;
+        DeploymentRepository::set_secret_keys(deployment_id, keys, pool).await?;
 
         let vault_static_secret = VaultStaticSecret {
             metadata: ObjectMeta {
