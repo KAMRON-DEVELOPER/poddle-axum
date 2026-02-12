@@ -1,11 +1,12 @@
 use axum::{
     Json,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     response::IntoResponse,
 };
 use factory::factories::database::Database;
 use http_contracts::{list::schema::ListResponse, pagination::schema::Pagination};
 use users_core::jwt::Claims;
+use uuid::Uuid;
 
 use crate::{error::AppError, features::repository::BillingRepository};
 
@@ -21,8 +22,17 @@ pub async fn get_balance(
 
 #[tracing::instrument(name = "get_presets", skip_all, err)]
 pub async fn get_presets(State(database): State<Database>) -> Result<impl IntoResponse, AppError> {
-    let balance = BillingRepository::get_presets(&database.pool).await?;
-    Ok(Json(balance))
+    let presets = BillingRepository::get_presets(&database.pool).await?;
+    Ok(Json(presets))
+}
+
+#[tracing::instrument(name = "get_preset", skip_all, err)]
+pub async fn get_preset(
+    Path(preset_id): Path<Uuid>,
+    State(database): State<Database>,
+) -> Result<impl IntoResponse, AppError> {
+    let preset = BillingRepository::get_preset(preset_id, &database.pool).await?;
+    Ok(Json(preset))
 }
 
 #[tracing::instrument(name = "get_addon_price", skip_all, err)]

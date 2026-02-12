@@ -28,6 +28,15 @@ impl BillingRepository {
             .await
     }
 
+    #[tracing::instrument(name = "billing_repository.get_preset", skip_all, err)]
+    pub async fn get_preset(preset_id: Uuid, pool: &PgPool) -> Result<Preset, sqlx::Error> {
+        let a = sqlx::query_as!(Preset, r#"SELECT * FROM presets WHERE id = $1"#, preset_id)
+            .fetch_one(pool)
+            .await?;
+
+        Ok(a)
+    }
+
     #[tracing::instrument(name = "billing_repository.get_addon_price", skip_all, err)]
     pub async fn get_addon_price(pool: &PgPool) -> Result<AddonPrice, sqlx::Error> {
         sqlx::query_as::<Postgres, AddonPrice>(r#"SELECT * FROM addon_prices"#)
