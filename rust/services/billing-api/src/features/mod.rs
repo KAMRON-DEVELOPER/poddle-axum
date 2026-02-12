@@ -13,6 +13,10 @@ pub fn get_routes() -> Router<AppState> {
         .route("/api/v1/billing/balance", get(handlers::get_balance))
         .route("/api/v1/billing/presets", get(handlers::get_presets))
         .route(
+            "/api/v1/billing/presets/{preset_id}",
+            get(handlers::get_preset),
+        )
+        .route(
             "/api/v1/billing/addon-price",
             get(handlers::get_addon_price),
         )
