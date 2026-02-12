@@ -168,7 +168,7 @@ CREATE TRIGGER set_projects_timestamp BEFORE UPDATE ON projects FOR EACH ROW EXE
 CREATE TABLE IF NOT EXISTS presets (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
     name VARCHAR(50) NOT NULL UNIQUE,
-    description TEXT,
+    description TEXT NOT NULL,
     -- Resources (What is included in the plan)
     cpu_millicores INTEGER NOT NULL CHECK (cpu_millicores > 0),
     memory_mb INTEGER NOT NULL CHECK (memory_mb > 0),

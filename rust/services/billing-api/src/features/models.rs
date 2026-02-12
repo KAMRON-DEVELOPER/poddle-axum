@@ -36,7 +36,7 @@ pub struct Balance {
 pub struct Preset {
     pub id: Uuid,
     pub name: String,
-    pub description: Option<String>,
+    pub description: String,
     // Resources
     pub cpu_millicores: i32,
     pub memory_mb: i32,
