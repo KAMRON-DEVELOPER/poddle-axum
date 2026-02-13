@@ -44,8 +44,10 @@ RUN test -n "$SERVICE_NAME" || (echo "⚠️ SERVICE_NAME argument not set" && f
 COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 
-# Copy full source *after* deps are cached
-COPY . .
+# Copy the actual source code
+COPY Cargo.toml Cargo.lock ./
+COPY crates/ crates/
+COPY services/${SERVICE_NAME}/ services/${SERVICE_NAME}/
 
 # Build the specific binary
 RUN cargo build --release --bin ${SERVICE_NAME}
@@ -54,14 +56,16 @@ RUN cargo build --release --bin ${SERVICE_NAME}
 # Stage 5: Runtime (Minimal Distroless)
 # ------------------------------------------------------
 FROM gcr.io/distroless/cc-debian13 AS runtime
-WORKDIR /app
 
 # Re-declare ARGs for runtime context
 ARG SERVICE_NAME
 ARG PORT=8000
 
-# Copy the compiled binary
-COPY --from=builder /app/target/release/${SERVICE_NAME} /app/server
+# This matches the "CARGO_MANIFEST_DIR" path baked into the binary
+WORKDIR /services/${SERVICE_NAME}
+
+# Copy the binary
+COPY --from=builder /app/target/release/${SERVICE_NAME} ./
 
 EXPOSE ${PORT}
 
