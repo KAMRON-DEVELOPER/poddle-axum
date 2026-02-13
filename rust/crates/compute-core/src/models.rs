@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 #[derive(Type, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
-#[sqlx(type_name = "deployment_status", rename_all = "lowercase")]
+#[sqlx(type_name = "deployment_status", rename_all = "camelCase")]
 pub enum DeploymentStatus {
     Queued,
     Provisioning,
