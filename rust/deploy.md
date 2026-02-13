@@ -198,9 +198,9 @@ After adding `.dockerignore`, the `COPY . .` command becomes both safe and corre
 To build a specific service:
 
 ```bash
-docker build --build-arg SERVICE_NAME=users-api --build-arg DATABASE_URL=postgresql://postgres:password@localhost:5432/poddle_db -t poddle/users-api:1.0.0 .
-docker build --build-arg SERVICE_NAME=compute-api --build-arg DATABASE_URL=postgresql://postgres:password@localhost:5432/poddle_db -t poddle/compute-api:1.0.0 .
-docker build --build-arg SERVICE_NAME=billing-api --build-arg DATABASE_URL=postgresql://postgres:password@localhost:5432/poddle_db -t poddle/billing-api:1.0.0 .
+docker build --build-arg SERVICE_NAME=users-api -t kamronbekdev/poddle-users-api:1.0.0 .
+docker build --build-arg SERVICE_NAME=compute-api -t kamronbekdev/poddle-compute-api:1.0.0 .
+docker build --build-arg SERVICE_NAME=billing-api -t kamronbekdev/poddle-billing-api:1.0.0 .
 ```
 
 ## Performance Metrics
