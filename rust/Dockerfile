@@ -14,7 +14,8 @@ FROM chef AS planner
 # Copy only the files needed to calculate dependencies
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml shared/Cargo.toml
-COPY services services
+COPY crates/*/Cargo.toml crates/*/Cargo.toml
+COPY services/*/Cargo.toml services/*/Cargo.toml
 # This prepares the dependency recipe for the whole workspace
 RUN cargo chef prepare --recipe-path recipe.json
 
