@@ -14,8 +14,8 @@ FROM chef AS planner
 WORKDIR /app
 # Copy only the files needed to calculate dependencies
 COPY Cargo.toml Cargo.lock ./
-COPY crates/*/Cargo.toml crates/*/Cargo.toml
-COPY services/*/Cargo.toml services/*/Cargo.toml
+COPY crates/ crates/
+COPY services/ services/
 # This prepares the dependency recipe for the whole workspace
 RUN cargo chef prepare --recipe-path recipe.json
 
@@ -43,12 +43,13 @@ RUN test -n "$SERVICE_NAME" || (echo "⚠️ SERVICE_NAME argument not set" && f
 COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 
-# Copy the actual source code
+# Copy the actual source code, all services beacuse of cargo workspace...
 COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
-COPY services/${SERVICE_NAME}/ services/${SERVICE_NAME}/
+COPY services/ services/
 
 # Build the specific binary
+# At this point, CARGO_MANIFEST_DIR is baked as "/app/services/${SERVICE_NAME}"
 RUN cargo build --release --bin ${SERVICE_NAME}
 
 # ------------------------------------------------------
@@ -58,17 +59,22 @@ FROM gcr.io/distroless/cc-debian13 AS runtime
 
 # Re-declare ARGs for runtime context
 ARG SERVICE_NAME
-ARG PORT=8000
 
 # This matches the "CARGO_MANIFEST_DIR" path baked into the binary
-WORKDIR /services/${SERVICE_NAME}
+WORKDIR /app/services/${SERVICE_NAME}
 
 # Copy the binary
-COPY --from=builder /app/target/release/${SERVICE_NAME} ./
+COPY --from=builder /app/target/release/${SERVICE_NAME} ./server
 
+ENV PORT=8000
 EXPOSE ${PORT}
 
 # Distroless runs as non-root (uid 65532) by default
 USER nonroot:nonroot
 
-ENTRYPOINT ["/app/server"]
+ENTRYPOINT ["./server"]
+
+# In a Distroless images there is no shell (/bin/sh or /bin/bash).
+# Variable expansion like $SERVICE_NAME will not work inside the ENTRYPOINT brackets
+# ENV SERVICE_NAME=$SERVICE_NAME
+# ENTRYPOINT ["/services", "$SERVICE_NAME"]
