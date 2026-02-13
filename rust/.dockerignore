@@ -10,6 +10,12 @@ infrastructure
 migrations
 *.md
 !README.md
+README.md
+ARCHITECTURE.md
+DECISIONS.md
+deploy.md
+Dockerfile
+.dockerignore
 .vscode
 .idea
 *.log

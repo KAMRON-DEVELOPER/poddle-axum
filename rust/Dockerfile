@@ -38,16 +38,16 @@ FROM chef AS builder
 WORKDIR /app
 ARG SERVICE_NAME
 # Fail the build if no service name is provided
-RUN test -n "$SERVICE_NAME"
+RUN test -n "$SERVICE_NAME" || (echo "⚠️ SERVICE_NAME argument not set" && false)
 
-# Copy cached dependencies from cacher
+# Copy cached dependencies
 COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
 
 # Copy full source *after* deps are cached
 COPY . .
 
-# Build the specific service binary
+# Build the specific binary
 RUN cargo build --release --bin ${SERVICE_NAME}
 
 # ------------------------------------------------------
