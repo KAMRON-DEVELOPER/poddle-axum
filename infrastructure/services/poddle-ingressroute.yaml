@@ -1,7 +1,7 @@
 apiVersion: traefik.containo.us/v1alpha1
 kind: IngressRoute
 metadata:
-  name: poddle-ir
+  name: poddle-ingressroute
   namespace: poddle-system
 spec:
   entryPoints: []
@@ -9,7 +9,7 @@ spec:
     - match: Host(`poddle.uz`) && PathPrefix(`/`)
       kind: Rule
       services:
-        - name: poddle-frontend
+        - name: frontend
           port: 80
 
     - match: Host(`poddle.uz`) && PathPrefix(`/api/v1/users`)
