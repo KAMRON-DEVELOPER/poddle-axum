@@ -1,0 +1,31 @@
+apiVersion: traefik.containo.us/v1alpha1
+kind: IngressRoute
+metadata:
+  name: poddle-ir
+  namespace: poddle-system
+spec:
+  entryPoints: []
+  routes:
+    - match: Host(`poddle.uz`) && PathPrefix(`/`)
+      kind: Rule
+      services:
+        - name: poddle-frontend
+          port: 80
+
+    - match: Host(`poddle.uz`) && PathPrefix(`/api/v1/users`)
+      kind: Rule
+      services:
+        - name: users-api
+          port: 8000
+
+    - match: Host(`poddle.uz`) && PathPrefix(`/api/v1/billing`)
+      kind: Rule
+      services:
+        - name: billing-api
+          port: 8000
+
+    - match: Host(`poddle.uz`) && PathPrefix(`/api/v1/compute`)
+      kind: Rule
+      services:
+        - name: compute-api
+          port: 8000
