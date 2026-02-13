@@ -11,6 +11,7 @@ RUN cargo install cargo-chef
 # Stage 2: Planner (Workspace Skeleton)
 # ------------------------------------------------------
 FROM chef AS planner
+WORKDIR /app
 # Copy only the files needed to calculate dependencies
 COPY Cargo.toml Cargo.lock ./
 COPY shared/Cargo.toml shared/Cargo.toml
@@ -23,6 +24,7 @@ RUN cargo chef prepare --recipe-path recipe.json
 # Stage 3: Cacher (Dependency Pre-build)
 # ------------------------------------------------------
 FROM chef AS cacher
+WORKDIR /app
 # System dependencies for compilation
 RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 COPY --from=planner /app/recipe.json recipe.json
@@ -33,6 +35,7 @@ RUN cargo chef cook --release --recipe-path recipe.json
 # Stage 4: Builder (Application Build)
 # ------------------------------------------------------
 FROM chef AS builder
+WORKDIR /app
 ARG SERVICE_NAME
 # Fail the build if no service name is provided
 RUN test -n "$SERVICE_NAME"
