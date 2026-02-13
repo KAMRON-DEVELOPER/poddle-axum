@@ -45,11 +45,6 @@ ARG SERVICE_NAME
 # Fail the build if no SERVICE_NAME is provided
 RUN test -n "$SERVICE_NAME" || (echo "⚠️ SERVICE_NAME argument not set" && false)
 
-# sqlx need to perform compile time check
-ARG DATABASE_URL
-# Fail the build if no DATABASE_URL is provided
-RUN test -n "$DATABASE_URL" || (echo "⚠️ DATABASE_URL argument not set" && false)
-
 # Copy cached dependencies
 COPY --from=cacher /app/target target
 COPY --from=cacher /usr/local/cargo /usr/local/cargo
@@ -59,7 +54,7 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY services/ services/
 
-# sqlx offline mode
+# sqlx offline mode stuffs
 COPY .sqlx .sqlx
 
 ENV SQLX_OFFLINE=true
