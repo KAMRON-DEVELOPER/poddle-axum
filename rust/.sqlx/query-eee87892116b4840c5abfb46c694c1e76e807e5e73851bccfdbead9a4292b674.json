@@ -1,0 +1,69 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id, user_id, status as \"status: DeploymentStatus\", desired_replicas, ready_replicas, available_replicas\n        FROM deployments\n        WHERE status NOT IN ('failed', 'suspended', 'image_pull_error')\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "status: DeploymentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "deployment_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "provisioning",
+                "starting",
+                "running",
+                "unhealthy",
+                "degraded",
+                "updating",
+                "suspended",
+                "failed",
+                "deleted",
+                "image_pull_error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "desired_replicas",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "ready_replicas",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "available_replicas",
+        "type_info": "Int4"
+      }
+    ],
+    "parameters": {
+      "Left": []
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "eee87892116b4840c5abfb46c694c1e76e807e5e73851bccfdbead9a4292b674"
+}

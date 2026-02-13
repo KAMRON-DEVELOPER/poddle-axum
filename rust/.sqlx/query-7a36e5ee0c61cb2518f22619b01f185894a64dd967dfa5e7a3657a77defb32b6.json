@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE deployments\n                        SET status = 'image_pull_error'\n                        WHERE id = $1 AND status != 'image_pull_error'\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "7a36e5ee0c61cb2518f22619b01f185894a64dd967dfa5e7a3657a77defb32b6"
+}

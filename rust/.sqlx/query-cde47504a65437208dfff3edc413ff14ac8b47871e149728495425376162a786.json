@@ -1,0 +1,94 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT *\n            FROM presets\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 2,
+        "name": "description",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 3,
+        "name": "cpu_millicores",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 4,
+        "name": "memory_mb",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "currency",
+        "type_info": "Bpchar"
+      },
+      {
+        "ordinal": 6,
+        "name": "monthly_price",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 7,
+        "name": "hourly_price",
+        "type_info": "Numeric"
+      },
+      {
+        "ordinal": 8,
+        "name": "max_addon_cpu_millicores",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "max_addon_memory_mb",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 10,
+        "name": "is_active",
+        "type_info": "Bool"
+      },
+      {
+        "ordinal": 11,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 12,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "cde47504a65437208dfff3edc413ff14ac8b47871e149728495425376162a786"
+}

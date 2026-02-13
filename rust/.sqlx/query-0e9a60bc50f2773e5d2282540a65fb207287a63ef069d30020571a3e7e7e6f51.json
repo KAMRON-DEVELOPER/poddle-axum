@@ -1,0 +1,167 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                id,\n                user_id,\n                project_id,\n                name,\n                image,\n                port,\n                desired_replicas,\n                ready_replicas,\n                available_replicas,\n                preset_id,\n                addon_cpu_millicores,\n                addon_memory_mb,\n                vault_secret_path,\n                secret_keys,\n                environment_variables AS \"environment_variables: Json<Option<HashMap<String, String>>>\",\n                labels AS \"labels: Json<Option<HashMap<String, String>>>\",\n                status AS \"status: DeploymentStatus\",\n                domain,\n                subdomain,\n                service,\n                created_at,\n                updated_at\n            FROM deployments\n            WHERE id = $1\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "image",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 5,
+        "name": "port",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 6,
+        "name": "desired_replicas",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 7,
+        "name": "ready_replicas",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 8,
+        "name": "available_replicas",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 9,
+        "name": "preset_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 10,
+        "name": "addon_cpu_millicores",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 11,
+        "name": "addon_memory_mb",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 12,
+        "name": "vault_secret_path",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 13,
+        "name": "secret_keys",
+        "type_info": "VarcharArray"
+      },
+      {
+        "ordinal": 14,
+        "name": "environment_variables: Json<Option<HashMap<String, String>>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 15,
+        "name": "labels: Json<Option<HashMap<String, String>>>",
+        "type_info": "Jsonb"
+      },
+      {
+        "ordinal": 16,
+        "name": "status: DeploymentStatus",
+        "type_info": {
+          "Custom": {
+            "name": "deployment_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "provisioning",
+                "starting",
+                "running",
+                "unhealthy",
+                "degraded",
+                "updating",
+                "suspended",
+                "failed",
+                "deleted",
+                "image_pull_error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 17,
+        "name": "domain",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 18,
+        "name": "subdomain",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 19,
+        "name": "service",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 20,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 21,
+        "name": "updated_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      true,
+      true,
+      true,
+      false,
+      true,
+      true,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "0e9a60bc50f2773e5d2282540a65fb207287a63ef069d30020571a3e7e7e6f51"
+}

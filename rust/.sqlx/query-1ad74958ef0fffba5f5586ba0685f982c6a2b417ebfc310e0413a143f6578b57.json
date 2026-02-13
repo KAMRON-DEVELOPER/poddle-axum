@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT d.preset_id\n            FROM deployments d\n            INNER JOIN projects p ON d.project_id = p.id\n            WHERE d.id = $1 AND p.owner_id = $2\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "preset_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "1ad74958ef0fffba5f5586ba0685f982c6a2b417ebfc310e0413a143f6578b57"
+}

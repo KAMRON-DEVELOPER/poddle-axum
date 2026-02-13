@@ -59,6 +59,11 @@ COPY Cargo.toml Cargo.lock ./
 COPY crates/ crates/
 COPY services/ services/
 
+# sqlx offline mode
+COPY .sqlx .sqlx
+
+ENV SQLX_OFFLINE=true
+
 # Build the specific binary
 # At this point, CARGO_MANIFEST_DIR is baked as "/app/services/${SERVICE_NAME}"
 RUN cargo build --release --bin ${SERVICE_NAME}

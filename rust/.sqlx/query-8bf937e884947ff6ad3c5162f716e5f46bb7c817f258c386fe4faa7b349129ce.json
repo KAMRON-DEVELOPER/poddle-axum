@@ -1,0 +1,34 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE deployments\n                        SET status = $2\n                        WHERE id = $1\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        {
+          "Custom": {
+            "name": "deployment_status",
+            "kind": {
+              "Enum": [
+                "queued",
+                "provisioning",
+                "starting",
+                "running",
+                "unhealthy",
+                "degraded",
+                "updating",
+                "suspended",
+                "failed",
+                "deleted",
+                "image_pull_error"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8bf937e884947ff6ad3c5162f716e5f46bb7c817f258c386fe4faa7b349129ce"
+}

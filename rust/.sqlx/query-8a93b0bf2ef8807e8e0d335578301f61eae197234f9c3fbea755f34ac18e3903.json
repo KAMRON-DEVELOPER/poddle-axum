@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE users\n            SET email_verified = TRUE, status = 'active' WHERE id = $1\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "8a93b0bf2ef8807e8e0d335578301f61eae197234f9c3fbea755f34ac18e3903"
+}

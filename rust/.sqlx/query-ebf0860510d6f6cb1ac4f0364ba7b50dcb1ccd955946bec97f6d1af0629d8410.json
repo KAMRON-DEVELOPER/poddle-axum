@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            UPDATE deployments\n            SET secret_keys = $1\n            WHERE id = $2\n            ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "VarcharArray",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "ebf0860510d6f6cb1ac4f0364ba7b50dcb1ccd955946bec97f6d1af0629d8410"
+}

@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE deployments\n                        SET desired_replicas = $2\n                        WHERE id = $1\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Int4"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "982be525d965dd3d6f975cfd1ca9af56dedc64f7e94091265e08d08ba8c77c37"
+}

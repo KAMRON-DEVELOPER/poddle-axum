@@ -1,0 +1,14 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n                        UPDATE deployments\n                        SET status = 'unhealthy'\n                        WHERE id = $1 AND status NOT IN ('unhealthy', 'failed', 'suspended')\n                        ",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "9153ac7b79b9a01f362cdc8d4d00e9a11977deeb9cf93bdf77646c26fb53099d"
+}
