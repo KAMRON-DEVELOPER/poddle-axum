@@ -19,4 +19,9 @@ impl CacheKeys {
     pub fn deployment_pod_metrics(id: &str, uid: &str) -> String {
         format!("deployment:{id}:pod:{uid}:metrics")
     }
+
+    /// `deployment:{id}:image_error_notified`
+    pub fn deployment_image_error_notified(id: &str) -> String {
+        format!("deployment:{id}:image_error_notified")
+    }
 }

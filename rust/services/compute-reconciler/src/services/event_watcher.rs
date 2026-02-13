@@ -264,6 +264,7 @@ async fn handle_pod_event(
 
             // Health Analysis
             let mut crash_reason: Option<String> = None;
+            let mut crash_message: Option<String> = None;
 
             if let Some(statuses) = pod
                 .status
@@ -273,13 +274,14 @@ async fn handle_pod_event(
                 for status in statuses {
                     restart_count += status.restart_count;
 
-                    if let Some(waiting) = &status.state.as_ref().and_then(|s| s.waiting.as_ref()) {
+                    if let Some(waiting) = status.state.as_ref().and_then(|s| s.waiting.as_ref()) {
                         let reason = waiting.reason.as_deref().unwrap_or_default();
-                        if reason == "CrashLoopBackOff"
-                            || reason == "ImagePullBackOff"
-                            || reason == "ErrImagePull"
-                        {
+                        if matches!(
+                            reason,
+                            "CrashLoopBackOff" | "ImagePullBackOff" | "ErrImagePull"
+                        ) {
                             crash_reason = Some(reason.to_string());
+                            crash_message = waiting.message.clone();
                         }
                     }
                 }
@@ -292,25 +294,65 @@ async fn handle_pod_event(
                     name, ns, reason, restart_count
                 );
 
-                // Update DB Status (Only if strictly needed)
-                sqlx::query!(
-                    r#"
-                    UPDATE deployments
-                    SET status = 'unhealthy'
-                    WHERE id = $1 AND status NOT IN ('unhealthy', 'failed', 'suspended')
-                    "#,
-                    deployment_id
-                )
-                .execute(pool)
-                .await?;
+                let is_image_error = reason == "ImagePullBackOff" || reason == "ErrImagePull";
 
-                if restart_count > 0 && restart_count % 3 == 0 {
-                    let message = ComputeEvent::DeploymentSystemMessage {
-                        id: &deployment_id,
-                        message: format!("Deployment is crashing: {}", reason),
-                        level: EventLevel::Error,
-                    };
-                    send_deployments_message(&project_id, message, con).await?
+                if is_image_error {
+                    // Update DB Status (Only if strictly needed)
+                    sqlx::query!(
+                        r#"
+                        UPDATE deployments
+                        SET status = 'image_pull_error'
+                        WHERE id = $1 AND status != 'image_pull_error'
+                        "#,
+                        deployment_id
+                    )
+                    .execute(pool)
+                    .await?;
+
+                    // rate limit using Redis SETNX + TTL
+                    let notified_key =
+                        CacheKeys::deployment_image_error_notified(&deployment_id.to_string());
+
+                    let first_time: bool = con.set_nx(&notified_key, 1).await?;
+
+                    if first_time {
+                        // 5 minutes TTL (or longer)
+                        con.expire(&notified_key, 300).await?;
+
+                        let mut msg = "Image pull failed. This image may be private or credentials are missing/invalid.".to_string();
+                        if let Some(detail) = &crash_message {
+                            msg.push_str(&format!(" Details: {}", detail));
+                        }
+
+                        let message = ComputeEvent::DeploymentSystemMessage {
+                            id: &deployment_id,
+                            message: msg,
+                            level: EventLevel::Error,
+                        };
+                        send_deployments_message(&project_id, message, con).await?;
+                    }
+                } else {
+                    // Update DB Status (Only if strictly needed)
+                    sqlx::query!(
+                        r#"
+                        UPDATE deployments
+                        SET status = 'unhealthy'
+                        WHERE id = $1 AND status NOT IN ('unhealthy', 'failed', 'suspended')
+                        "#,
+                        deployment_id
+                    )
+                    .execute(pool)
+                    .await?;
+
+                    // keep your CrashLoopBackOff restart-based spam control if you want
+                    if restart_count > 0 && restart_count % 3 == 0 {
+                        let message = ComputeEvent::DeploymentSystemMessage {
+                            id: &deployment_id,
+                            message: format!("Deployment is crashing: {}", reason),
+                            level: EventLevel::Error,
+                        };
+                        send_deployments_message(&project_id, message, con).await?;
+                    }
                 }
             }
 

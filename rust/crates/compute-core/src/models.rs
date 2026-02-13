@@ -24,6 +24,7 @@ pub enum DeploymentStatus {
     Suspended,
     Failed,
     Deleted,
+    ImagePullError,
 }
 
 impl std::fmt::Display for DeploymentStatus {
@@ -39,6 +40,7 @@ impl std::fmt::Display for DeploymentStatus {
             Self::Suspended => write!(f, "suspended"),
             Self::Failed => write!(f, "failed"),
             Self::Deleted => write!(f, "deleted"),
+            Self::ImagePullError => write!(f, "image_pull_error"),
         }
     }
 }
