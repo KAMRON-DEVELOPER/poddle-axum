@@ -1,7 +1,7 @@
 # ------------------------------------------------------
 # Stage 1: Chef (Base Image + Tooling)
 # ------------------------------------------------------
-FROM 1.92.0-slim-bookworm AS chef
+FROM rust:1.92.0-slim-bookworm AS chef
 WORKDIR /app
 # We only pay the installation cost once,
 # it will be cached from the second build onwards
