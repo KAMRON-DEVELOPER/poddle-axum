@@ -31,6 +31,6 @@ COPY --from=builder /app/package*.json ./
 # Install only production dependencies
 RUN npm ci --only=production
 
-EXPOSE 3000
+EXPOSE ${PORT}
 
 CMD ["node", "dist/app.js"]

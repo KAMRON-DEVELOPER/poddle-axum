@@ -20,7 +20,8 @@ RUN uv sync --locked
 # Copy application code
 COPY main.py ./
 
-EXPOSE 8000
+ENV PORT=8000
+EXPOSE ${PORT}
 
 # Run the app
 CMD ["uv", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
