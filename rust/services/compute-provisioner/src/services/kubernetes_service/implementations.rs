@@ -829,13 +829,10 @@ impl KubernetesService {
         // if we set checksum as label to pod they does restart
         let checksum = sha256::digest(&dockerconfig);
 
+        // ByteString type from k8s-openapi automatically Base64 encodes its contents
         let data = Some(BTreeMap::from([(
             ".dockerconfigjson".to_string(),
-            ByteString(
-                base64::engine::general_purpose::STANDARD
-                    .encode(dockerconfig)
-                    .into_bytes(),
-            ),
+            ByteString(dockerconfig.into_bytes()),
         )]));
 
         let secret = K8sSecret {
