@@ -25,7 +25,12 @@ RUN cargo chef prepare --recipe-path recipe.json
 FROM chef AS cacher
 WORKDIR /app
 # System dependencies for compilation
-RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y \
+    pkg-config \
+    libssl-dev \
+    build-essential \
+    cmake \
+    && rm -rf /var/lib/apt/lists/*
 COPY --from=planner /app/recipe.json recipe.json
 # Build *only dependencies*; cached until manifests change
 RUN cargo chef cook --release --recipe-path recipe.json
