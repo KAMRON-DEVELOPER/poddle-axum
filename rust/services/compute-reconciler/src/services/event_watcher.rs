@@ -330,6 +330,11 @@ async fn handle_pod_event(
                             level: EventLevel::Error,
                         };
                         send_deployments_message(&project_id, message, con).await?;
+                        let message = ComputeEvent::DeploymentStatusUpdate {
+                            id: &deployment_id,
+                            status: DeploymentStatus::ImagePullError,
+                        };
+                        send_deployments_message(&project_id, message, con).await?;
                     }
                 } else {
                     // Update DB Status (Only if strictly needed)
@@ -350,6 +355,11 @@ async fn handle_pod_event(
                             id: &deployment_id,
                             message: format!("Deployment is crashing: {}", reason),
                             level: EventLevel::Error,
+                        };
+                        send_deployments_message(&project_id, message, con).await?;
+                        let message = ComputeEvent::DeploymentStatusUpdate {
+                            id: &deployment_id,
+                            status: DeploymentStatus::Unhealthy,
                         };
                         send_deployments_message(&project_id, message, con).await?;
                     }
