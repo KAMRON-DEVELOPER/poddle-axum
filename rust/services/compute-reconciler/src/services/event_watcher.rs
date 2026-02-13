@@ -317,7 +317,7 @@ async fn handle_pod_event(
 
                     if first_time {
                         // 5 minutes TTL (or longer)
-                        con.expire(&notified_key, 30).await?;
+                        con.expire(&notified_key, 300).await?;
 
                         let mut msg = "Image pull failed. This image may be private or credentials are missing/invalid.".to_string();
                         if let Some(detail) = &crash_message {
