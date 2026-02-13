@@ -40,7 +40,7 @@ async fn reconcile_deployments(pool: &PgPool, client: &Client) -> Result<(), App
         r#"
         SELECT id, user_id, status as "status: DeploymentStatus", desired_replicas, ready_replicas, available_replicas
         FROM deployments
-        WHERE status NOT IN ('failed', 'suspended')
+        WHERE status NOT IN ('failed', 'suspended', 'image_pull_error')
         "#
     )
     .fetch_all(pool)
