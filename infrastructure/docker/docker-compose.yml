@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:bookworm
+    container_name: postgres_container
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    ports:
+      - "static:5432:5432"
+    networks:
+      - local_network_bridge
+    volumes:
+      - ./volumes/postgres_storage:/var/lib/postgresql/18/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  redis:
+    image: redis/redis-stack-server:latest
+    container_name: redis_container
+    restart: unless-stopped
+    command: ["redis-server", "/redis-stack.conf"]
+    env_file:
+      - ./.env
+    ports:
+      - "static:6379:6379"
+    networks:
+      - local_network_bridge
+    volumes:
+      - ./volumes/redis_storage:/data
+      - ./configs/redis-stack/redis-stack.local.conf:/redis-stack.conf:ro
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD} ping | grep PONG"]
+      interval: 5s
+      timeout: 5s
+      retries: 3
+
+  rabbitmq:
+    image: rabbitmq:management
+    container_name: rabbitmq_container
+    restart: unless-stopped
+    env_file:
+      - ./.env
+    ports:
+      - static:5672:5672
+      - static:15672:15672
+    networks:
+      - local_network_bridge
+    volumes:
+      - ./volumes/rabbitmq_storage:/var/lib/rabbitmq
+      - ./configs/rabbitmq/rabbitmq.local.conf:/etc/rabbitmq/rabbitmq.conf:ro
+
+volumes:
+  postgres_storage:
+    name: postgres_storage_volume
+  redis_storage:
+    name: redis_storage_volume
+  rabbitmq_storage:
+    name: rabbitmq_storage_volume
+
+networks:
+  local_network_bridge:
+    driver: bridge
