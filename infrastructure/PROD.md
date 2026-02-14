@@ -99,7 +99,17 @@ kubectl get clusterissuers
 ```
 
 ```bash
+kubectl create namespace traefik
 kubectl apply -f infrastructure/charts/cert-manager/wildcard-certificate-prod.yaml
+```
+
+Check
+
+```bash
+kubectl get certificates -n traefik
+# NAME                              READY   AGE
+# letsencrypt-production-dns01-ci   True    107s
+# vault-root-ca-ci                  True    20m
 ```
 
 ### Traefik

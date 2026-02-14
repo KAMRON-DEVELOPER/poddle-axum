@@ -3,14 +3,14 @@
 ipam:
   mode: kubernetes
 # This IP must match vm IP
-k8sServiceHost: 192.168.31.544
+k8sServiceHost: 10.212.0.7
 k8sServicePort: 6443
 kubeProxyReplacement: true
 
 resources:
-  limits:
-    cpu: 400m
-    memory: 768Mi
   requests:
     cpu: 100m
     memory: 512Mi
+  limits:
+    cpu: 400m
+    memory: 768Mi
