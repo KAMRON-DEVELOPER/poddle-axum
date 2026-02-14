@@ -57,19 +57,6 @@ gcloud projects list
 gcloud config set project poddle-mvp
 ```
 
-Open 6643
-
-```bash
-gcloud compute firewall-rules create allow-k3s-api \
-    --allow tcp:6443 \
-    --source-ranges 0.0.0.0/0 \
-    --description "Allow kubectl to connect to k3s API"
-# Creating firewall...⠹Created [https://www.googleapis.com/compute/v1/projects/poddle-mvp/global/firewalls/allow-k3s-api].
-# Creating firewall...done.
-# NAME           NETWORK  DIRECTION  PRIORITY  ALLOW     DENY  DISABLED
-# allow-k3s-api  default  INGRESS    1000      tcp:6443        False
-```
-
 We use Cloudflare beacuse we need DNS-01 challange for wildcard domains.
 
 ```bash
