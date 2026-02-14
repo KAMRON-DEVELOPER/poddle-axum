@@ -103,19 +103,18 @@ kubectl create namespace traefik
 kubectl apply -f infrastructure/charts/cert-manager/wildcard-certificate-prod.yaml
 ```
 
-Check
+Check (You need to wait, this one take quiet a bit long)
 
 ```bash
 kubectl get certificates -n traefik
-# NAME                              READY   AGE
-# letsencrypt-production-dns01-ci   True    107s
-# vault-root-ca-ci                  True    20m
+# NAME                   READY   SECRET                AGE
+# wildcard-certificate   True    wildcard-tls-secret   3m27s
 ```
 
 ### Traefik
 
 ```bash
-kubectl apply -f 
+kubectl apply -f
 ```
 
 ### Vault (HA)
