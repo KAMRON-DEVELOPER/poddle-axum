@@ -166,9 +166,29 @@ kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3_PROD
 kubectl exec -n vault vault-0 -- vault login $VAULT_TOKEN_PROD
 ```
 
-## Create `config.json` for services
+## Application setup
+
+Create `config.json` for services
 
 ```bash
 kubectl -n poddle-system create configmap service-config \
   --from-file=config.json=infrastructure/deploy/config.json
+```
+
+Deployments
+
+```bash
+kubectl -f infrastructure/deploy/deployments
+```
+
+Services
+
+```bash
+kubectl -f infrastructure/deploy/poddle-services.yaml
+```
+
+IngressRoutes
+
+```bash
+kubectl -f infrastructure/deploy/poddle-ingressroutes.yaml
 ```
