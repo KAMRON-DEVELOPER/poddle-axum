@@ -166,9 +166,9 @@ kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3_PRO
 kubectl exec -n vault vault-0 -- vault login $VAULT_TOKEN_PROD
 ```
 
-## CREATE `config.json` for services
+## Create `config.json` for services
 
 ```bash
-kubectl -n poddle-system create secret generic poddle-config \
-  --from-file=service-account.json=certs/poddle-gcs-sa-key.json
+kubectl -n poddle-system create secret generic service-config \
+  --from-file=config.json=infrastructure/deploy/config.json
 ```
