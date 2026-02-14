@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute-provisioner
+  namespace: poddle-system
+  labels:
+    service: compute-provisioner
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: compute-provisioner
+  template:
+    metadata:
+      labels:
+        service: compute-provisioner
+    spec:
+      containers:
+        - name: compute-provisioner
+          image: kamronbekdev/poddle-compute-provisioner:1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: service-config
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 30
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

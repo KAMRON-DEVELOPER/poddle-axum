@@ -169,6 +169,6 @@ kubectl exec -n vault vault-0 -- vault login $VAULT_TOKEN_PROD
 ## Create `config.json` for services
 
 ```bash
-kubectl -n poddle-system create secret generic service-config \
+kubectl -n poddle-system create configmap service-config \
   --from-file=config.json=infrastructure/deploy/config.json
 ```

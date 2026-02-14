@@ -1,9 +1,0 @@
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: users-api-config
-data:
-  OTEL_SERVICE_NAME: users-api
-  TRACING_LEVEL: debug
-  SERVER_ADDRESS: 0.0.0.0:8000
-  FRONTEND_ENDPOINT: https://poddle.uz

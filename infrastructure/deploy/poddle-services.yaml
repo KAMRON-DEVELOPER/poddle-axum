@@ -1,0 +1,81 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: users-api
+spec:
+  type: ClusterIP
+  selector:
+    service: users-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing-api
+spec:
+  type: ClusterIP
+  selector:
+    service: billing-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-api
+spec:
+  type: ClusterIP
+  selector:
+    service: compute-api
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-provisioner
+spec:
+  type: ClusterIP
+  selector:
+    service: compute-provisioner
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-metrics-worker
+spec:
+  type: ClusterIP
+  selector:
+    service: compute-metrics-worker
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: compute-reconciler
+spec:
+  type: ClusterIP
+  selector:
+    service: compute-reconciler
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 8000

@@ -16,16 +16,16 @@ spec:
       kind: Rule
       services:
         - name: users-api
-          port: 8000
+          port: 80
 
     - match: Host(`poddle.uz`) && PathPrefix(`/api/v1/billing`)
       kind: Rule
       services:
         - name: billing-api
-          port: 8000
+          port: 80
 
     - match: Host(`poddle.uz`) && PathPrefix(`/api/v1/compute`)
       kind: Rule
       services:
         - name: compute-api
-          port: 8000
+          port: 80

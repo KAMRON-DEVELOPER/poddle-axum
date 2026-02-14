@@ -1,51 +1,45 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: users-api
+  name: compute-api
+  namespace: poddle-system
   labels:
-    app: users-api
+    service: compute-api
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: users-api
+      service: compute-api
   template:
     metadata:
       labels:
-        app: users-api
+        service: compute-api
     spec:
       containers:
-        - name: users-api
-          image: registry.poddle.uz/users-api:latest
+        - name: compute-api
+          image: kamronbekdev/poddle-compute-api:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
-          env:
-            - name: APP_ENV
-              value: production
-            - name: K8S_IN_CLUSTER
-              value: "true"
           envFrom:
             - configMapRef:
-                name: users-api-config
-            - secretRef:
-                name: users-api-secrets
+                name: service-config
           readinessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10
           livenessProbe:
             httpGet:
               path: /health
               port: 8000
-            initialDelaySeconds: 15
-            periodSeconds: 20
+            initialDelaySeconds: 10
+            periodSeconds: 30
           resources:
             requests:
               cpu: "100m"
               memory: "128Mi"
             limits:
               cpu: "500m"
-              memory: "512Mi"
+              memory: "256Mi"
