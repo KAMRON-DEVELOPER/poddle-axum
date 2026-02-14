@@ -9,7 +9,7 @@ Use EXTERNAL IP (and your domain) for --tls-san. This allows your local laptop's
 ```bash
 # Replace 10.x.x.x with your GCP VM Internal IP
 # Replace 34.x.x.x with your GCP Static External IP
-curl -sfL <https://get.k3s.io> | sh -s - server \
+curl -sfL https://get.k3s.io | sh -s - server \
   --write-kubeconfig-mode=644 \
   --disable traefik \
   --disable servicelb \
@@ -28,7 +28,9 @@ curl -sfL <https://get.k3s.io> | sh -s - server \
 
 ```bash
 curl -sfL https://get.k3s.io | K3S_URL="https://${MASTER_IP}:6443" \
-  K3S_TOKEN="${NODE_TOKEN}" sh -s - --node-ip=10.x.x.x --node-external-ip=34.x.x.x
+  K3S_TOKEN="${NODE_TOKEN}" sh -s - \
+  --node-ip=10.x.x.x \
+  --node-external-ip=34.x.x.x
 ```
 
 if you can ssh into VM you can copy kube config or by cat.
@@ -192,3 +194,49 @@ IngressRoutes
 ```bash
 kubectl -f infrastructure/deploy/poddle-ingressroutes.yaml
 ```
+
+## GCP Setup
+
+Phase 1: Configure the Instance Group (Named Ports)
+
+A TCP Proxy Load Balancer needs to know which "Named Port" to look for on your Instance Group.
+
+  Go to Compute Engine -> Instance Groups.
+
+  Click on your Unmanaged Instance Group.
+
+  Click Edit.
+
+  Look for the Port mapping or Named ports section.
+
+  Add the following two items:
+
+  Name: traefik-http | Port: 30000
+
+  Name: traefik-https | Port: 30443
+
+  Save the changes.
+
+Phase 2: Create Firewall Rules
+
+The Load Balancer and Health Checkers need permission to talk to your VMs.
+
+  Go to VPC network -> Firewall.
+
+  Click Create Firewall Rule.
+
+  Name: allow-lb-health-check
+
+  Targets: All instances in the network (or use Service Account/Tags if you configured them for your VMs).
+
+  Source IPv4 ranges: Add these two specific ranges (these are Google's Load Balancer ranges):
+
+  130.211.0.0/22
+
+  35.191.0.0/16
+
+  Protocols and ports:
+
+  Check TCP and enter: 30000, 30443
+
+  Click Create.
