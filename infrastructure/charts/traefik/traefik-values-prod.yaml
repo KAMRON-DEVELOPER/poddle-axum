@@ -1,0 +1,170 @@
+# yaml-language-server: $schema=values.schema.json
+
+# EntryPoints
+ports:
+  web:
+    port: 80
+    nodePort: 30000
+    redirections:
+      entryPoint:
+        to: websecure
+        scheme: https
+        permanent: true
+
+  websecure:
+    port: 443
+    nodePort: 30443
+    tls:
+      enabled: true
+
+  otlp-grpc:
+    port: 4317
+    nodePort: 30317
+    protocol: TCP
+    expose:
+      default: true
+    tls:
+      enabled: true
+
+  otlp-http:
+    port: 4318
+    nodePort: 30318
+    protocol: TCP
+    expose:
+      default: true
+    tls:
+      enabled: true
+
+  tcp:
+    port: 8443
+    protocol: TCP
+    expose:
+      default: false
+
+  udp:
+    port: 9000
+    protocol: UDP
+    expose:
+      default: false
+
+# Providers
+providers:
+  kubernetesCRD: # Watches IngressRoute, Middleware, TLSStore, etc.
+    enabled: true
+    allowCrossNamespace: true
+    # allowExternalNameServices: false
+  kubernetesIngress: # Watches standard Kubernetes Ingress
+    enabled: true
+    # allowExternalNameServices: false
+  kubernetesGateway: # Watches Gateway API (HTTPRoute, TCPRoute, etc.)
+    enabled: true
+
+experimental:
+  kubernetesGateway:
+    enabled: true
+
+ingressClass:
+  enabled: true # Creates IngressClass resource
+  isDefaultClass: true # Makes it the default IngressClass
+  name: "traefik" # Name of the IngressClass
+
+gatewayClass:
+  enabled: true # Creates GatewayClass resource
+  name: "traefik" # Name of the GatewayClass
+
+# Gateway
+gateway:
+  enabled: true
+  name: "traefik"
+  annotations:
+    cert-manager.io/issuer: letsencrypt-production-ci
+  listeners:
+    web:
+      port: 80
+      protocol: HTTP
+      namespacePolicy:
+        from: All
+
+    websecure:
+      port: 443
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: wildcard-tls-secret
+          kind: Secret
+
+    otlp-http:
+      port: 4318
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: wildcard-tls-secret
+          kind: Secret
+
+    otlp-grpc:
+      port: 4317
+      protocol: HTTPS
+      namespacePolicy:
+        from: All
+      certificateRefs:
+        - name: wildcard-tls-secret
+          kind: Secret
+
+# Default TLSStore with wildcard cert
+tlsStore:
+  default:
+    defaultCertificate:
+      secretName: wildcard-tls-secret
+
+service:
+  enabled: true
+  single: true
+  type: NodePort
+
+# Persistence for ACME certificates
+persistence:
+  enabled: true
+  name: data
+  size: 1Gi
+  storageClass: "local-path"
+
+# Dashboard
+api:
+  dashboard: true
+  insecure: false
+
+ingressRoute:
+  dashboard:
+    enabled: true
+    matchRule: Host(`traefik.poddle.uz`)
+    entryPoints: ["websecure"]
+    middlewares:
+      - name: traefik-dashboard-auth
+
+# Dashboard auth
+extraObjects:
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: traefik-dashboard-auth-secret
+    type: kubernetes.io/basic-auth
+    stringData:
+      username: admin
+      password: "1213"
+
+  - apiVersion: traefik.io/v1alpha1
+    kind: Middleware
+    metadata:
+      name: traefik-dashboard-auth
+    spec:
+      basicAuth:
+        secret: traefik-dashboard-auth-secret
+
+# Enable Observability
+logs:
+  general:
+    level: INFO
+  access:
+    enabled: true

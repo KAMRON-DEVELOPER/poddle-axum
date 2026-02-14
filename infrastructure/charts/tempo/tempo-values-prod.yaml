@@ -1,0 +1,75 @@
+tempo:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+
+  # -- If true, Tempo will report anonymous usage data about the shape of a deployment to Grafana Labs
+  reportingEnabled: false
+  metricsGenerator:
+    # -- If true, enables Tempo's metrics generator (https://grafana.com/docs/tempo/next/metrics-generator/)
+    enabled: true
+    remoteWriteUrl: "http://prometheus-server.prometheus.svc.cluster.local:80/api/v1/write"
+
+  retention: 30h
+
+  # -- The standard overrides configuration section. This can include a `defaults` object for applying to all tenants (not to be confused with the `global` property of the same name, which overrides `max_byte_per_trace` for all tenants). For an example on how to enable the metrics generator using the `overrides` object, see the 'Activate metrics generator' section below. Refer to [Standard overrides](https://grafana.com/docs/tempo/latest/configuration/#standard-overrides) for more details.
+  overrides:
+    # -- Default config values for all tenants, can be overridden by per-tenant overrides. If a tenant's specific overrides are not found in the `per_tenant_overrides` block, the values in this `default` block will be used. Configs inside this block should follow the new overrides indentation format
+    defaults:
+      metrics_generator:
+        processors:
+          - service-graphs
+          - span-metrics
+
+  storage:
+    trace:
+      # tempo storage backend.
+      # Refers to: https://grafana.com/docs/tempo/latest/configuration/#storage
+      backend: gcs
+      gcs:
+        bucket_name: poddle-tempo
+
+  # this configuration will listen on all ports and protocols that tempo is capable of.
+  # the receives all come from the OpenTelemetry collector.  more configuration information can
+  # be found there: https://github.com/open-telemetry/opentelemetry-collector/tree/master/receiver
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+        http:
+          endpoint: "0.0.0.0:4318"
+
+  ## Additional container arguments
+  extraArgs:
+    config.expand-env: true
+
+  # -- Environment variables to add to the single binary pods
+  extraEnv:
+    - name: GOOGLE_APPLICATION_CREDENTIALS
+      value: /var/secrets/gcp/service-account.json
+
+  # -- Volume mounts to add to the single binary pods
+  extraVolumeMounts:
+    - name: poddle-gcs-sa-key-volume
+      mountPath: /var/secrets/gcp
+      readOnly: true
+
+serviceMonitor:
+  enabled: false
+  interval: ""
+
+persistence:
+  enabled: true
+  storageClassName: local-path
+  size: 10Gi
+
+# -- Volumes to add to the single binary pods
+extraVolumes:
+  - name: poddle-gcs-sa-key-volume
+    secret:
+      secretName: poddle-gcs-sa-key

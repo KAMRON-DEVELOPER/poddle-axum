@@ -1,0 +1,17 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: wildcard-certificate
+  namespace: traefik
+spec:
+  secretName: wildcard-tls-secret
+  issuerRef:
+    name: letsencrypt-production-dns01-ci
+    kind: ClusterIssuer
+    group: cert-manager.io
+  commonName: "*.poddle.uz"
+  dnsNames:
+    - "*.poddle.uz"
+    - "poddle.uz"
+  duration: 720h # 30 days
+  renewBefore: 168h # Renew 7 days before expiry
