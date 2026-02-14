@@ -159,7 +159,7 @@ kubectl exec -n vault vault-1 -- vault operator unseal $UNSEAL_KEY3_PROD
 
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY1_PROD
 kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY2_PROD
-kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3_PRO
+kubectl exec -n vault vault-2 -- vault operator unseal $UNSEAL_KEY3_PROD
 ```
 
 ```bash
