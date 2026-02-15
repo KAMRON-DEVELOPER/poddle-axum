@@ -34,9 +34,9 @@ DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
     -- 8. Stopped by user or billing
     'suspended',
     -- 9. Configuration error (Image pull backoff, etc.)
-    'failed'
+    'failed',
     -- 10. Deleted
-    'deleted'
+    'deleted',
     -- 11. Image pull error
     'image_pull_error'
 );
