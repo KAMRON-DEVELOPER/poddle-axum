@@ -132,10 +132,9 @@ pub async fn google_oauth_callback_handler(
     let oauth_user: OAuthUser = google_oauth_user.into();
     debug!("oauth_user: {:#?}", oauth_user);
 
-    // let user = UsersRepository::upsert_user_from_oauth(&oauth_user, &database.pool).await?;
-
     let mut tx = database.pool.begin().await?;
 
+    // Upsert oauth user (won't fail if already exists)
     let google_oauth_user_sub = UsersRepository::create_oauth_user(
         &oauth_user.id,
         oauth_user.username.as_deref(),
@@ -147,15 +146,22 @@ pub async fn google_oauth_callback_handler(
     )
     .await?;
 
-    let user = UsersRepository::create_user(
-        oauth_user.username.unwrap_or_default(),
-        oauth_user.email.unwrap_or_default(),
-        oauth_user.picture,
-        None,
-        google_oauth_user_sub.clone(),
-        &mut tx,
-    )
-    .await?;
+    // If user already exists, reuse it
+    let user = if let Some(existing) =
+        UsersRepository::find_user_by_oauth_user_id(&google_oauth_user_sub, &mut *tx).await?
+    {
+        existing
+    } else {
+        UsersRepository::create_user(
+            oauth_user.username.clone().unwrap_or_default(),
+            oauth_user.email.clone().unwrap_or_default(),
+            oauth_user.picture.clone(),
+            None,
+            google_oauth_user_sub.clone(),
+            &mut tx,
+        )
+        .await?
+    };
 
     tx.commit().await?;
 
@@ -280,10 +286,9 @@ pub async fn github_oauth_callback_handler(
     let oauth_user: OAuthUser = github_oauth_user.into();
     debug!("oauth_user: {:#?}", oauth_user);
 
-    // let user = UsersRepository::upsert_user_from_oauth(&oauth_user, &database.pool).await?;
-
     let mut tx = database.pool.begin().await?;
 
+    // Upsert oauth user (won't fail if already exists)
     let github_oauth_user_id = UsersRepository::create_oauth_user(
         &oauth_user.id,
         oauth_user.username.as_deref(),
@@ -295,15 +300,22 @@ pub async fn github_oauth_callback_handler(
     )
     .await?;
 
-    let user = UsersRepository::create_user(
-        oauth_user.username.unwrap_or_default(),
-        oauth_user.email.unwrap_or_default(),
-        oauth_user.picture,
-        None,
-        github_oauth_user_id.clone(),
-        &mut tx,
-    )
-    .await?;
+    // If user already exists, reuse it
+    let user = if let Some(existing) =
+        UsersRepository::find_user_by_oauth_user_id(&github_oauth_user_id, &mut *tx).await?
+    {
+        existing
+    } else {
+        UsersRepository::create_user(
+            oauth_user.username.unwrap_or_default(),
+            oauth_user.email.unwrap_or_default(),
+            oauth_user.picture,
+            None,
+            github_oauth_user_id.clone(),
+            &mut tx,
+        )
+        .await?
+    };
 
     tx.commit().await?;
 

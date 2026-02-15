@@ -32,8 +32,17 @@ impl UsersRepository {
             r#"
             INSERT INTO oauth_users (id, username, email, picture, password, provider)
             VALUES ($1, $2, $3, $4, $5, $6)
+            ON CONFLICT (id) DO UPDATE
+            SET
+                username = EXCLUDED.username,
+                email = EXCLUDED.email,
+                picture = EXCLUDED.picture,
+                provider = EXCLUDED.provider,
+                -- keep existing password unless a new one is provided
+                password = COALESCE(EXCLUDED.password, oauth_users.password),
+                updated_at = NOW()
             RETURNING id
-            "#,
+        "#,
             id,
             username,
             email,
@@ -42,6 +51,41 @@ impl UsersRepository {
             provider as Provider,
         )
         .fetch_one(executor)
+        .await
+    }
+
+    // ----------------------------------------------------------------------------
+    // find_user_by_oauth_user_id
+    // ----------------------------------------------------------------------------
+    #[tracing::instrument("users_repository.find_user_by_oauth_user_id", skip_all, err)]
+    pub async fn find_user_by_oauth_user_id<'e, E>(
+        oauth_user_id: &str,
+        executor: E,
+    ) -> Result<Option<User>, sqlx::Error>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        sqlx::query_as!(
+            User,
+            r#"
+            SELECT
+                id,
+                username,
+                email,
+                password,
+                picture,
+                role AS "role: UserRole",
+                status AS "status: UserStatus",
+                email_verified,
+                oauth_user_id,
+                created_at,
+                updated_at
+            FROM users
+            WHERE oauth_user_id = $1
+        "#,
+            oauth_user_id
+        )
+        .fetch_optional(executor)
         .await
     }
 
