@@ -15,6 +15,7 @@ spec:
       labels:
         service: compute-provisioner
     spec:
+      serviceAccountName: compute-provisioner
       volumes:
         - name: config-volume
           configMap:
