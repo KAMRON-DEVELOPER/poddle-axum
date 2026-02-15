@@ -22,6 +22,9 @@ spec:
             items:
               - key: config.json
                 path: config.json
+        - name: ca-bundle-volume
+          secret:
+            secretName: vault-root-ca-bundle
       containers:
         - name: compute-provisioner
           image: kamronbekdev/poddle-compute-provisioner:1.0.0
@@ -35,10 +38,16 @@ spec:
           #   - name: config-volume
           #     mountPath: /etc/poddle
           #     readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/poddle/certs/tls.crt
           volumeMounts:
             - name: config-volume
               mountPath: /app/services/compute-provisioner/config.json
               subPath: config.json
+              readOnly: true
+            - name: ca-bundle-volume
+              mountPath: /etc/poddle/certs
               readOnly: true
           readinessProbe:
             httpGet: { path: /health, port: 8000 }
