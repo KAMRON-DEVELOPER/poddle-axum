@@ -5,6 +5,9 @@ metadata:
   namespace: poddle-system
 spec:
   entryPoints: []
+    # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
+    # - web
+    # - websecure
   routes:
     - match: Host(`poddle.uz`) && PathPrefix(`/`)
       kind: Rule
@@ -29,3 +32,5 @@ spec:
       services:
         - name: compute-api
           port: 80
+  # tls:
+  #   secretName: wildcard-tls-secret
