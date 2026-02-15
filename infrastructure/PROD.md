@@ -185,7 +185,7 @@ kubectl create configmap service-config \
 Compute provisioner need access to cert manager for preflight check, we create RBACK
 
 ```bash
-kubeclt apply -f infrastructure/deploy/compute-provisioner-rbac.yaml
+kubectl apply -f infrastructure/deploy/compute-provisioner-rbac.yaml
 ```
 
 Deployments
