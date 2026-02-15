@@ -4,12 +4,35 @@ kind: ClusterRole
 metadata:
   name: compute-provisioner-role
 rules:
-  # Allow reading Cert-Manager resources
+  # --- Cluster-scoped ---
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create"]
+
+  # --- Cert-manager ---
   - apiGroups: ["cert-manager.io"]
-    resources: ["clusterissuers", "certificates"]
+    resources: ["clusterissuers"]
     verbs: ["get", "list", "watch"]
 
-  # Allow reading Traefik IngressRoutes
+  - apiGroups: ["cert-manager.io"]
+    resources: ["certificates"]
+    verbs: ["get", "list", "watch"]
+
+  # --- Traefik IngressRoute ---
   - apiGroups: ["traefik.io"]
     resources: ["ingressroutes"]
-    verbs: ["get", "list", "watch"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+
+  # --- VSO (HashiCorp Secrets Operator) resources ---
+  - apiGroups: ["secrets.hashicorp.com"]
+    resources: ["vaultconnections", "vaultauths", "vaultstaticsecrets"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+
+  # --- Tenant namespace resources ---
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+
+  - apiGroups: [""]
+    resources: ["services", "secrets"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
