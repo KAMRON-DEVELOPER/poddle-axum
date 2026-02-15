@@ -182,10 +182,15 @@ kubectl create configmap service-config \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-Compute provisioner need access to cert manager for preflight check, we create RBACK
+`compute-provisioner` need access to `cert-manager` for preflight check, we create rback
+`compute-reconciler` need t owatch all `pods` and `deployments`, also need proper rback
 
 ```bash
-kubectl apply -f infrastructure/deploy/compute-provisioner-rbac.yaml
+kubectl apply -f infrastructure/deploy/compute-provisioner-cr.yaml
+kubectl apply -f infrastructure/deploy/compute-provisioner-crb.yaml
+kubectl apply -f infrastructure/deploy/compute-reconciler-sa.yaml
+kubectl apply -f infrastructure/deploy/compute-reconciler-cr.yaml
+kubectl apply -f infrastructure/deploy/compute-reconciler-crb.yaml
 ```
 
 Deployments

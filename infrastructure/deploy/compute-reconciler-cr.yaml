@@ -1,0 +1,15 @@
+# The Role: Defines "WHAT" can be done
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: compute-reconciler-role
+rules:
+  # Allow watching Pods (Core API group "")
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+
+  # Allow watching Deployments (Apps API group)
+  - apiGroups: ["apps"]
+    resources: ["deployments"]
+    verbs: ["get", "list", "watch"]
