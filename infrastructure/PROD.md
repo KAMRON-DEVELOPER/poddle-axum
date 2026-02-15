@@ -132,7 +132,6 @@ kubectl exec -n vault vault-0 -- vault operator init -key-shares=5 -key-threshol
 ```
 
 ```bash
-touch .zsh_secrets_prod
 cat > ~/.zsh_secrets_prod <<EOF
 # Vault unseal keys
 export UNSEAL_KEY1_PROD="$(jq -r '.unseal_keys_b64[0]' ~/certs/vault-keys-prod.json)"
@@ -169,6 +168,7 @@ kubectl exec -n vault vault-0 -- vault login $VAULT_TOKEN_PROD
 Create `config.json` for services
 
 ```bash
+kubectl create namespace poddle-system
 kubectl -n poddle-system create configmap service-config \
   --from-file=config.json=infrastructure/deploy/config.json
 ```

@@ -7,7 +7,7 @@ spec:
   serverName: vault-active
   insecureSkipVerify: false
   rootCAs:
-    - secret: vault-root-ca-secret
+    - secret: vault-root-ca-bundle
   # This is for mTLS
   # certificatesSecrets:
-  #   - vault-root-ca-secret
+  #   - vault-root-ca-bundle
