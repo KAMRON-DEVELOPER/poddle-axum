@@ -1,10 +1,24 @@
 # yaml-language-server: $schema=values.schema.json
 
+deployment:
+  # -- Enable deployment
+  enabled: true
+  # -- Deployment or DaemonSet
+  kind: DaemonSet
+  # -- Number of pods of the deployment (only applies when kind == Deployment)
+  replicas: 1
+
+updateStrategy:
+  # -- Customize updateStrategy of Deployment or DaemonSet
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 1
+    maxSurge: 0
+
 # EntryPoints
 ports:
   web:
     port: 80
-    nodePort: 30000
     redirections:
       entryPoint:
         to: websecure
@@ -13,13 +27,11 @@ ports:
 
   websecure:
     port: 443
-    nodePort: 30443
     tls:
       enabled: true
 
   otlp-grpc:
     port: 4317
-    nodePort: 30317
     protocol: TCP
     expose:
       default: true
@@ -28,7 +40,6 @@ ports:
 
   otlp-http:
     port: 4318
-    nodePort: 30318
     protocol: TCP
     expose:
       default: true
@@ -59,9 +70,10 @@ providers:
   kubernetesGateway: # Watches Gateway API (HTTPRoute, TCPRoute, etc.)
     enabled: true
 
-experimental:
-  kubernetesGateway:
-    enabled: true
+# No longer experimental
+# experimental:
+#   kubernetesGateway:
+#     enabled: true
 
 ingressClass:
   enabled: true # Creates IngressClass resource
@@ -121,14 +133,32 @@ tlsStore:
 service:
   enabled: true
   single: true
-  type: NodePort
+  type: ClusterIP
 
 # Persistence for ACME certificates
 persistence:
-  enabled: true
+  enabled: false # this fail in DaemonSet
   name: data
   size: 1Gi
   storageClass: "local-path"
+
+# -- If hostNetwork is true, runs traefik in the host network namespace
+# To prevent unschedulable pods due to port collisions, if hostNetwork=true
+# and replicas>1, a pod anti-affinity is recommended and will be set if the
+# affinity is left as default.
+hostNetwork: true
+
+# -- [SecurityContext](https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#security-context-1)
+# @default -- See _values.yaml_
+securityContext:
+  allowPrivilegeEscalation: true
+  capabilities:
+    drop: [ALL]
+    add: [NET_BIND_SERVICE]
+  readOnlyRootFilesystem: true
+  runAsNonRoot: false
+  runAsUser: 0
+  runAsGroup: 0
 
 # Dashboard
 api:
