@@ -37,7 +37,8 @@ spec:
           #     readOnly: true
           volumeMounts:
             - name: config-volume
-              mountPath: /app/services/compute-api
+              mountPath: /app/services/compute-api/config.json
+              subPath: config.json
               readOnly: true
           readinessProbe:
             httpGet:
