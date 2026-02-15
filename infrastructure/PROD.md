@@ -186,11 +186,11 @@ kubectl create configmap service-config \
 `compute-reconciler` need t owatch all `pods` and `deployments`, also need proper rback
 
 ```bash
-kubectl apply -f infrastructure/deploy/compute-provisioner-cr.yaml
-kubectl apply -f infrastructure/deploy/compute-provisioner-crb.yaml
-kubectl apply -f infrastructure/deploy/compute-reconciler-sa.yaml
-kubectl apply -f infrastructure/deploy/compute-reconciler-cr.yaml
-kubectl apply -f infrastructure/deploy/compute-reconciler-crb.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-provisioner-cr.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-provisioner-crb.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-reconciler-sa.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-reconciler-cr.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-reconciler-crb.yaml
 ```
 
 Deployments
