@@ -176,19 +176,19 @@ kubectl -n poddle-system create configmap service-config \
 Deployments
 
 ```bash
-kubectl -f infrastructure/deploy/deployments
+kubectl apply -f infrastructure/deploy/deployments
 ```
 
 Services
 
 ```bash
-kubectl -f infrastructure/deploy/poddle-services.yaml
+kubectl apply -f infrastructure/deploy/poddle-services.yaml
 ```
 
 IngressRoutes
 
 ```bash
-kubectl -f infrastructure/deploy/poddle-ingressroutes.yaml
+kubectl apply -f infrastructure/deploy/poddle-ingressroutes.yaml
 ```
 
 ## GCP Setup
