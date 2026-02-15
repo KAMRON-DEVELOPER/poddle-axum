@@ -15,6 +15,7 @@ spec:
       labels:
         service: compute-reconciler
     spec:
+      serviceAccountName: compute-reconciler
       volumes:
         - name: config-volume
           configMap:
