@@ -195,6 +195,12 @@ After adding `.dockerignore`, the `COPY . .` command becomes both safe and corre
 
 ## Build Commands
 
+First prepare offline sqlx cache
+
+```bash
+cargo sqlx prepare --workspace
+```
+
 To build a specific service:
 
 ```bash
