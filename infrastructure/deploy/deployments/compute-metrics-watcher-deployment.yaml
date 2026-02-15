@@ -24,7 +24,7 @@ spec:
                 path: config.json
       containers:
         - name: compute-metrics-watcher
-          image: kamronbekdev/poddle-compute-metrics-watcher:1.0.0
+          image: kamronbekdev/poddle-compute-metrics-worker:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
