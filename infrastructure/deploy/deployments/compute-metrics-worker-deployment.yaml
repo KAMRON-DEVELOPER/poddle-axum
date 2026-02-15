@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: compute-metrics-watcher
+  name: compute-metrics-worker
   namespace: poddle-system
   labels:
-    service: compute-metrics-watcher
+    service: compute-metrics-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: compute-metrics-watcher
+      service: compute-metrics-worker
   template:
     metadata:
       labels:
-        service: compute-metrics-watcher
+        service: compute-metrics-worker
     spec:
       volumes:
         - name: config-volume
@@ -23,7 +23,7 @@ spec:
               - key: config.json
                 path: config.json
       containers:
-        - name: compute-metrics-watcher
+        - name: compute-metrics-worker
           image: kamronbekdev/poddle-compute-metrics-worker:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
@@ -37,7 +37,7 @@ spec:
           #     readOnly: true
           volumeMounts:
             - name: config-volume
-              mountPath: /app/services/compute-metrics-watcher/config.json
+              mountPath: /app/services/compute-metrics-worker/config.json
               subPath: config.json
               readOnly: true
           readinessProbe:
