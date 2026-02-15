@@ -169,8 +169,17 @@ Create `config.json` for services
 
 ```bash
 kubectl create namespace poddle-system
-kubectl -n poddle-system create configmap service-config \
+kubectl create configmap service-config \
+  -n poddle-system \
   --from-file=config.json=infrastructure/deploy/config.json
+
+# or
+
+kubectl create namespace poddle-system --dry-run=client -o yaml | kubectl apply -f -
+kubectl create configmap service-config \
+  -n poddle-system \
+  --from-file=config.json=infrastructure/deploy/config.json \
+  --dry-run=client -o yaml | kubectl apply -f -
 ```
 
 Deployments
