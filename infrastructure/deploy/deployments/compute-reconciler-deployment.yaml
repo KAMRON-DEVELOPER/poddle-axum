@@ -15,15 +15,30 @@ spec:
       labels:
         service: compute-reconciler
     spec:
+      volumes:
+        - name: config-volume
+          configMap:
+            name: service-config
+            items:
+              - key: config.json
+                path: config.json
       containers:
         - name: compute-reconciler
           image: kamronbekdev/poddle-compute-reconciler:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
-          envFrom:
-            - configMapRef:
-                name: service-config
+          # env:
+          #   - name: CONFIG
+          #     value: /etc/poddle/config.json
+          # volumeMounts:
+          #   - name: config-volume
+          #     mountPath: /etc/poddle
+          #     readOnly: true
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/services/compute-reconciler
+              readOnly: true
           readinessProbe:
             httpGet:
               path: /health

@@ -2,6 +2,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: users-api
+  namespace: poddle-system
 spec:
   type: ClusterIP
   selector:
@@ -15,6 +16,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: billing-api
+  namespace: poddle-system
 spec:
   type: ClusterIP
   selector:
@@ -29,6 +31,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: compute-api
+  namespace: poddle-system
 spec:
   type: ClusterIP
   selector:
@@ -43,6 +46,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: compute-provisioner
+  namespace: poddle-system
 spec:
   type: ClusterIP
   selector:
@@ -57,6 +61,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: compute-metrics-worker
+  namespace: poddle-system
 spec:
   type: ClusterIP
   selector:
@@ -71,6 +76,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: compute-reconciler
+  namespace: poddle-system
 spec:
   type: ClusterIP
   selector:
