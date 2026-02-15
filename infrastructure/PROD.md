@@ -182,6 +182,12 @@ kubectl create configmap service-config \
   --dry-run=client -o yaml | kubectl apply -f -
 ```
 
+Compute provisioner need access to cert manager for preflight check, we create RBACK
+
+```bash
+kubeclt apply -f infrastructure/deploy/compute-provisioner-rbac.yaml
+```
+
 Deployments
 
 ```bash

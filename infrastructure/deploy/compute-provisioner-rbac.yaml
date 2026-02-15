@@ -1,0 +1,31 @@
+---
+# The Role: Defines "WHAT" can be done
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: compute-provisioner-role
+rules:
+  # Allow reading Cert-Manager resources
+  - apiGroups: ["cert-manager.io"]
+    resources: ["clusterissuers", "certificates"]
+    verbs: ["get", "list", "watch"]
+
+  # Allow reading Traefik IngressRoutes
+  - apiGroups: ["traefik.io"]
+    resources: ["ingressroutes"]
+    verbs: ["get", "list", "watch"]
+
+---
+# The Binding: Connects "WHO" (your app) to "WHAT" (the role)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: compute-provisioner-binding
+subjects:
+  - kind: ServiceAccount
+    name: compute-provisioner
+    namespace: poddle-system
+roleRef:
+  kind: ClusterRole
+  name: compute-provisioner-role
+  apiGroup: rbac.authorization.k8s.io
