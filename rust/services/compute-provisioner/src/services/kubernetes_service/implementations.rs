@@ -10,7 +10,11 @@ use compute_core::{
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
 };
 use k8s_openapi::ByteString;
-use k8s_openapi::api::core::v1::{EnvFromSource, LocalObjectReference, SecretEnvSource};
+use k8s_openapi::api::batch::v1::{Job, JobSpec};
+use k8s_openapi::api::core::v1::{
+    EmptyDirVolumeSource, EnvFromSource, LocalObjectReference, SecretEnvSource, SecretVolumeSource,
+    SecurityContext, Volume, VolumeMount,
+};
 use k8s_openapi::{
     api::{
         apps::v1::{Deployment as K8sDeployment, DeploymentSpec},
@@ -1070,6 +1074,168 @@ impl KubernetesService {
         })?;
 
         Ok(Some(secret_name))
+    }
+
+    // ============================================================================================
+    // BUILD
+    // ============================================================================================
+
+    #[tracing::instrument(name = "kubernetes_service.spawn_buildkit_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    pub async fn spawn_buildkit_job(
+        &self,
+        project_id: &str,
+        deployment_id: &str,
+        preset_id: &str,
+        build_id: &str,
+        git_repo_url: &str,
+        context_path: Option<&str>,
+        dockerfile_path: Option<&str>,
+    ) -> Result<(), AppError> {
+        let namespace = "poddle-builds";
+        let job_name = format!("build-{}", build_id);
+        let image_name = format!("{}", build_id);
+        let cache = format!("{}-cache", build_id);
+
+        let context = context_path.unwrap_or(".");
+        let dockerfile_path = dockerfile_path.unwrap_or("Dockerfile");
+
+        let (dockerfile, filename) = match dockerfile_path.rsplit_once('/') {
+            Some((dir, file)) if !dir.is_empty() && !file.is_empty() => (dir, file),
+            _ => (".", dockerfile_path),
+        };
+
+        let build_script = format!(
+            "buildctl-daemonless.sh build \
+            --frontend=dockerfile.v0 \
+            --local context=/workspace/{context} \
+            --local dockerfile=/workspace/{dockerfile} \
+            --opt filename={filename} \
+            --output type=image,name={image_name},push=true \
+            --export-cache type=registry,ref={cache},mode=max \
+            --import-cache type=registry,ref={cache} \
+            --progress=plain",
+        );
+
+        let labels: BTreeMap<String, String> = BTreeMap::from([
+            ("poddle.io/managed-by".into(), "poddle".into()),
+            ("poddle.io/project-id".into(), project_id.into()),
+            ("poddle.io/deployment-id".into(), deployment_id.into()),
+            ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
+        ]);
+
+        // --- Init container: git clone ---
+        let init_containers = Some(vec![Container {
+            name: "git-clone".into(),
+            image: Some("alpine/git:latest".into()),
+            args: Some(vec![
+                "clone".into(),
+                git_repo_url.into(),
+                "/workspace".into(),
+            ]),
+            volume_mounts: Some(vec![VolumeMount {
+                name: "workspace".into(),
+                mount_path: "/workspace".into(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        }]);
+
+        // --- Build container ---
+        let mut limits = BTreeMap::new();
+        limits.insert("cpu".to_string(), Quantity("2000m".to_string()));
+        limits.insert("memory".to_string(), Quantity("4Gi".to_string()));
+
+        let mut requests = BTreeMap::new();
+        requests.insert("cpu".to_string(), Quantity("500m".to_string()));
+        requests.insert("memory".to_string(), Quantity("1Gi".to_string()));
+
+        let containers = vec![Container {
+            name: "buildkit".into(),
+            image: Some("moby/buildkit:rootless".into()),
+            command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
+            env: Some(vec![EnvVar {
+                name: "BUILDKITD_FLAGS".into(),
+                value: Some("--oci-worker-no-process-sandbox".into()),
+                ..Default::default()
+            }]),
+            working_dir: Some("/workspace".into()),
+            volume_mounts: Some(vec![
+                VolumeMount {
+                    name: "workspace".into(),
+                    mount_path: "/workspace".into(),
+                    ..Default::default()
+                },
+                VolumeMount {
+                    name: "registery-secret-volume".into(),
+                    mount_path: "/home/user/.docker".into(),
+                    ..Default::default()
+                },
+            ]),
+            security_context: Some(SecurityContext {
+                seccomp_profile: Some(k8s_openapi::api::core::v1::SeccompProfile {
+                    type_: "Unconfined".into(),
+                    ..Default::default()
+                }),
+                app_armor_profile: Some(k8s_openapi::api::core::v1::AppArmorProfile {
+                    type_: "Unconfined".into(),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }];
+
+        let job = Job {
+            metadata: ObjectMeta {
+                name: Some(job_name.clone()),
+                namespace: Some(namespace.to_string()),
+                labels: Some(labels),
+                ..Default::default()
+            },
+            spec: Some(JobSpec {
+                ttl_seconds_after_finished: Some(300),
+                backoff_limit: Some(0),
+                template: PodTemplateSpec {
+                    spec: Some(PodSpec {
+                        init_containers,
+                        containers,
+                        restart_policy: Some("Never".into()),
+                        security_context: Some(k8s_openapi::api::core::v1::PodSecurityContext {
+                            fs_group: Some(1000),
+                            run_as_user: Some(1000),
+                            run_as_group: Some(1000),
+                            ..Default::default()
+                        }),
+                        volumes: Some(vec![
+                            Volume {
+                                name: "workspace".into(),
+                                empty_dir: Some(EmptyDirVolumeSource::default()),
+                                ..Default::default()
+                            },
+                            Volume {
+                                name: "registery-secret-volume".into(),
+                                secret: Some(SecretVolumeSource {
+                                    secret_name: Some("registery-secret".into()),
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            },
+                        ]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
+        jobs.create(&PostParams::default(), &job).await?;
+
+        info!("🚀 Spawned BuildKit Job: {}", job_name);
+        Ok(())
     }
 
     // ============================================================================================
