@@ -21,3 +21,19 @@ vault-unseal-staging
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY1
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY2
 kubectl exec -n vault vault-0 -- vault operator unseal $UNSEAL_KEY3
+
+## KUBECTL
+
+## Fix the contexts to point to the correct clusters and users
+
+kubectl config set-context local --cluster=local --user=local
+kubectl config set-context poddle-mvp --cluster=poddle-mvp --user=poddle-mvp
+
+## Verify the fix
+
+kubectl config get-contexts
+
+## Now test
+
+kubectl config use-context poddle-mvp
+kubectl get nodes
