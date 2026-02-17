@@ -1,11 +1,15 @@
 # 1. Initialize vault and save keys
 
+```bash
 kubectl exec -n vault vault-0 -- vault operator init \
   -key-shares=5 -key-threshold=3 -format=json > ~/certs/vault-keys.json
+```
 
 ## 2. Add to your config
 
+```bash
 add-vault-config ~/certs/vault-keys.json
+```
 
 ## Enter: staging
 
