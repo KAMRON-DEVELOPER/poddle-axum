@@ -17,6 +17,7 @@ $$ LANGUAGE plpgsql;
 -- ENUM TYPES
 -- ==============================================
 DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
+    'building',
     -- 1. Saved in DB, waiting for Worker
     'queued',
     -- 2. Worker is creating K8s resources
@@ -35,6 +36,7 @@ DO $$ BEGIN CREATE TYPE deployment_status AS ENUM (
     'suspended',
     -- 9. Configuration error (Image pull backoff, etc.)
     'failed',
+    'build_failed',
     -- 10. Deleted
     'deleted',
     -- 11. Image pull error
@@ -215,7 +217,7 @@ CREATE TABLE IF NOT EXISTS deployments (
     user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     project_id UUID NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     name VARCHAR(128) NOT NULL,
-    image VARCHAR(500) NOT NULL,
+    source JSONB NOT NULL,
     port INT NOT NULL,
     desired_replicas INTEGER NOT NULL DEFAULT 1 CHECK (desired_replicas >= 1),
     ready_replicas INTEGER NOT NULL DEFAULT 0,
@@ -259,6 +261,18 @@ CREATE TRIGGER set_deployment_events_timestamp BEFORE UPDATE ON deployment_event
 CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_events (deployment_id);
 
 CREATE INDEX IF NOT EXISTS idx_deployment_events_created ON deployment_events (created_at DESC);
+
+-- ==============================================
+-- BUILD
+-- ==============================================
+
+CREATE TABLE IF NOT EXISTS build (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    repo_url TEXT NOT NULL,
+    pat VARCHAR(255),
+    status build_status NOT NULL DEFAULT 'queued',
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 -- ==============================================
 -- BILLINGS

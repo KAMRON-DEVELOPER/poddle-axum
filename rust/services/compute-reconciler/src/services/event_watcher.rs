@@ -4,12 +4,19 @@ use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
-use compute_core::schemas::{MetricSnapshot, Pod, PodMeta, PodPhase};
+use compute_core::schemas::{
+    DeploymentSourceRequest, MetricSnapshot, Pod, PodMeta, PodPhase, UpdateDeploymentMessage,
+};
+use factory::factories::amqp::{Amqp, AmqpPropagator};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
+use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod as K8sPod;
 use kube::runtime::watcher::{Config as WatcherConfig, Event};
 use kube::{Api, Client};
+use lapin::BasicProperties;
+use lapin::options::BasicPublishOptions;
+use lapin::types::FieldTable;
 use redis::aio::MultiplexedConnection;
 use redis::{AsyncTypedCommands, pipe};
 use sqlx::PgPool;
@@ -20,18 +27,21 @@ use crate::config::Config;
 use crate::error::AppError;
 
 pub async fn event_watcher(
-    pool: PgPool,
     cfg: Config,
+    pool: PgPool,
     mut redis: MultiplexedConnection,
+    amqp: Amqp,
     client: Client,
 ) -> Result<(), AppError> {
     let watcher_config = WatcherConfig::default().labels("poddle.io/managed-by=poddle");
 
     let deployment: Api<K8sDeployment> = Api::all(client.clone());
     let pod: Api<K8sPod> = Api::all(client.clone());
+    let job: Api<Job> = Api::all(client.clone());
 
     let mut deployment_stream = kube::runtime::watcher(deployment, watcher_config.clone()).boxed();
-    let mut pod_stream = kube::runtime::watcher(pod, watcher_config).boxed();
+    let mut pod_stream = kube::runtime::watcher(pod, watcher_config.clone()).boxed();
+    let mut job_stream = kube::runtime::watcher(job, watcher_config).boxed();
 
     info!("🔍 Starting Kubernetes watchers");
     loop {
@@ -42,8 +52,13 @@ pub async fn event_watcher(
                 }
             }
             Some(event) = pod_stream.next() => {
-                if let Err(e) = handle_pod_event(event,&cfg, &pool, &mut redis).await {
+                if let Err(e) = handle_pod_event(event, &cfg, &pool, &mut redis).await {
                     error!(error = %e, "❌ Failed to handle pod event");
+                }
+            }
+            Some(event) = job_stream.next() => {
+                if let Err(e) = handle_job_event(event, &cfg, &pool, &mut redis, &amqp).await {
+                    error!(error = %e, "❌ Failed to handle job event");
                 }
             }
             else => {
@@ -213,7 +228,7 @@ async fn handle_deployment_event(
     Ok(())
 }
 
-#[tracing::instrument("handle_deployment_event", skip_all, err)]
+#[tracing::instrument("handle_pod_event", skip_all, err)]
 async fn handle_pod_event(
     event: Result<Event<K8sPod>, kube::runtime::watcher::Error>,
     _cfg: &Config,
@@ -297,7 +312,6 @@ async fn handle_pod_event(
                 let is_image_error = reason == "ImagePullBackOff" || reason == "ErrImagePull";
 
                 if is_image_error {
-                    // Update DB Status (Only if strictly needed)
                     sqlx::query!(
                         r#"
                         UPDATE deployments
@@ -337,7 +351,6 @@ async fn handle_pod_event(
                         send_deployments_message(&project_id, message, con).await?;
                     }
                 } else {
-                    // Update DB Status (Only if strictly needed)
                     sqlx::query!(
                         r#"
                         UPDATE deployments
@@ -481,6 +494,125 @@ async fn handle_pod_event(
         Err(e) => error!("❌ Pod watcher error: {}", e),
     }
 
+    Ok(())
+}
+
+#[tracing::instrument("handle_job_event", skip_all, err)]
+async fn handle_job_event(
+    event: Result<Event<Job>, kube::runtime::watcher::Error>,
+    _cfg: &Config,
+    pool: &PgPool,
+    con: &mut MultiplexedConnection,
+    amqp: &Amqp,
+) -> Result<(), AppError> {
+    match event {
+        Ok(Event::Apply(job)) => {
+            let labels = job.metadata.labels.as_ref();
+
+            let name = job.metadata.name.as_ref().unwrap();
+            let project_id = labels
+                .and_then(|l| l.get("poddle.io/project-id"))
+                .and_then(|id| Uuid::parse_str(id).ok());
+            let deployment_id = labels
+                .and_then(|l| l.get("poddle.io/deployment-id"))
+                .and_then(|id| Uuid::parse_str(id).ok());
+            let build_id = labels.and_then(|l| l.get("poddle.io/build-id"));
+
+            if project_id.is_none() || deployment_id.is_none() || build_id.is_none() {
+                return Ok(());
+            }
+
+            let project_id = project_id.unwrap();
+            let deployment_id = deployment_id.unwrap();
+            let build_id = build_id.unwrap();
+
+            // Check Status
+            let succeeded = job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0);
+            let failed = job.status.as_ref().and_then(|s| s.failed).unwrap_or(0);
+
+            if succeeded > 0 {
+                info!("✅ Build Job {} Succeeded", name);
+
+                // Construct the new image string, this depends on build
+                let image = format!("me-central1-docker.pkg.dev/poddle-mvp/poddle/{}", build_id);
+
+                let user_id = sqlx::query_scalar!(
+                    "SELECT user_id FROM deployments WHERE id = $1",
+                    deployment_id
+                )
+                .fetch_one(pool)
+                .await?;
+
+                // We send an Update message. The worker will receive this, see the `image` field,
+                // fetch the rest of the config (env vars, ports) from the DB, and run apply_deployment.
+                let message = UpdateDeploymentMessage {
+                    user_id,
+                    project_id,
+                    deployment_id,
+                    source: Some(DeploymentSourceRequest::Image {
+                        url: image,
+                        image_pull_secret: None,
+                    }),
+                    name: None,
+                    port: None,
+                    desired_replicas: None,
+                    preset_id: None,
+                    resource_spec: None,
+                    secrets: None,
+                    environment_variables: None,
+                    labels: None,
+                    domain: None,
+                    subdomain: None,
+                    timestamp: Utc::now().timestamp(),
+                };
+
+                let channel = amqp.channel().await;
+
+                let payload = serde_json::to_vec(&message)?;
+
+                let mut headers = FieldTable::default();
+                AmqpPropagator::inject_context(&mut headers);
+
+                // Publish message
+                channel
+                    .basic_publish(
+                        "compute",
+                        "compute.update",
+                        BasicPublishOptions::default(),
+                        &payload,
+                        BasicProperties::default()
+                            .with_delivery_mode(2)
+                            .with_content_type("application/json".into())
+                            .with_headers(headers),
+                    )
+                    .instrument(info_span!("basic_publish.compute.update"))
+                    .await?
+                    .await?;
+
+                info!(
+                    "📤 Published deployment update message for {}",
+                    deployment_id
+                );
+            } else if failed > 0 {
+                error!("❌ Build Job {} Failed", name);
+
+                sqlx::query!(
+                    "UPDATE deployments SET status = 'build_failed' WHERE id = $1",
+                    deployment_id
+                )
+                .execute(pool)
+                .await?;
+
+                let message = ComputeEvent::DeploymentStatusUpdate {
+                    id: &deployment_id,
+                    status: DeploymentStatus::BuildFailed,
+                };
+                let channel = ChannelNames::deployments_metrics(&project_id.to_string());
+                con.publish(channel, message).await?;
+            }
+        }
+        _ => {}
+    }
     Ok(())
 }
 

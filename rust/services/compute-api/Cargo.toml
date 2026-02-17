@@ -43,6 +43,7 @@ tokio-tungstenite.workspace = true
 http.workspace = true
 async-stream.workspace = true
 url.workspace = true
+ghrepo.workspace = true
 
 #anyhow.workspace = true
 #thiserror.workspace = true

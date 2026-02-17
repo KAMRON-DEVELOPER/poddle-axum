@@ -256,3 +256,24 @@ The Load Balancer and Health Checkers need permission to talk to your VMs.
   Check TCP and enter: 30000, 30443
 
   Click Create.
+
+```bash
+kubectl create namespace poddle-builds
+```
+
+```bash
+kubectl create secret docker-registry registery-secret \
+  --namespace=poddle-builds \
+  --docker-server=me-central1-docker.pkg.dev \
+  --docker-username=_json_key \
+  --docker-password="$(cat certs/poddle-artifact-registery-key.json)"
+
+# or
+
+# jq -c makes the JSON a single line
+kubectl create secret docker-registry registry-secret \
+  --namespace=poddle-builds \
+  --docker-server="https://me-central1-docker.pkg.dev" \
+  --docker-username="_json_key" \
+  --docker-password="$(jq -c . < certs/poddle-artifact-registery-key.json)"
+```

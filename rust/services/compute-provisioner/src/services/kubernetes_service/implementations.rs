@@ -4,16 +4,17 @@ use base64::Engine;
 use compute_core::event::ComputeEvent;
 use compute_core::formatters::{format_namespace, format_resource_name};
 use compute_core::models::{DeploymentStatus, ResourceSpec};
-use compute_core::schemas::ImagePullSecret;
+use compute_core::schemas::{DeploymentSource, DeploymentSourceRequest, ImagePullSecret};
 use compute_core::{
     channel_names::ChannelNames,
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
 };
+use ghrepo::GHRepo;
 use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
-    EmptyDirVolumeSource, EnvFromSource, LocalObjectReference, SecretEnvSource, SecretVolumeSource,
-    SecurityContext, Volume, VolumeMount,
+    EmptyDirVolumeSource, EnvFromSource, KeyToPath, LocalObjectReference, SecretEnvSource,
+    SecretVolumeSource, SecurityContext, Volume, VolumeMount,
 };
 use k8s_openapi::{
     api::{
@@ -129,17 +130,10 @@ impl KubernetesService {
         mut con: MultiplexedConnection,
         msg: CreateDeploymentMessage,
     ) -> Result<(), AppError> {
-        self.notify_status(
-            &msg.project_id,
-            &msg.deployment_id,
-            DeploymentStatus::Provisioning,
-            &mut con,
-        )
-        .await?;
-
         let user_id = msg.user_id.clone();
         let project_id = msg.project_id.clone();
         let deployment_id = msg.deployment_id.clone();
+        let preset_id = msg.preset_id.clone();
 
         info!(
             user_id = %user_id,
@@ -151,20 +145,6 @@ impl KubernetesService {
         let ns = self.ensure_namespace(&msg.user_id).await?;
         let name = format_resource_name(&msg.deployment_id);
 
-        // Define Labels & Selector
-        let mut labels = BTreeMap::new();
-        labels.insert("poddle.io/managed-by".into(), "poddle".into());
-        labels.insert("poddle.io/project-id".into(), msg.project_id.into());
-        labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
-        labels.insert("poddle.io/preset-id".into(), msg.preset_id.into());
-
-        // Selector is invariant
-        let mut selector = BTreeMap::new();
-        selector.insert(
-            "poddle.io/deployment-id".to_string(),
-            deployment_id.to_string(),
-        );
-
         self.apply_vso_resources(&ns).await?;
 
         // This creates the VSO Resource AND writes the initial data to Vault
@@ -172,57 +152,169 @@ impl KubernetesService {
             .apply_vault_static_secret(&msg.deployment_id, &ns, &name, msg.secrets, &pool)
             .await?;
 
-        let image_pull_secret_data = if let Some(secret) = msg.image_pull_secret.as_ref() {
-            Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
-        } else {
-            None
-        };
+        match msg.source.clone() {
+            DeploymentSourceRequest::Image {
+                url,
+                image_pull_secret,
+            } => {
+                self.notify_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Provisioning,
+                    &mut con,
+                )
+                .await?;
 
-        let otel_resource_attributes = format!(
-            "project_id={},deployment_id={},managed_by=poddle",
-            msg.project_id, msg.deployment_id
-        );
+                // Define Labels & Selector
+                let mut labels = BTreeMap::new();
+                labels.insert("poddle.io/managed-by".into(), "poddle".into());
+                labels.insert("poddle.io/project-id".into(), msg.project_id.into());
+                labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
+                labels.insert("poddle.io/preset-id".into(), msg.preset_id.into());
 
-        self.apply_deployment(
-            Some(&msg.name),
-            Some(&otel_resource_attributes),
-            &ns,
-            &name,
-            Some(&msg.image),
-            image_pull_secret_data,
-            Some(msg.port),
-            Some(msg.desired_replicas),
-            Some(&msg.resource_spec),
-            secret_ref,
-            msg.environment_variables,
-            Some(&labels),
-            &selector,
-        )
-        .await?;
+                // Selector is invariant
+                let mut selector = BTreeMap::new();
+                selector.insert(
+                    "poddle.io/deployment-id".to_string(),
+                    deployment_id.to_string(),
+                );
 
-        // deployment_id will be selector
-        self.apply_service(&ns, &name, msg.port, Some(&labels), &selector)
-            .await?;
+                let image_pull_secret_data = if let Some(secret) = image_pull_secret.as_ref() {
+                    Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
+                } else {
+                    None
+                };
 
-        self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, msg.port)
-            .await?;
+                let otel_resource_attributes = format!(
+                    "project_id={},deployment_id={},managed_by=poddle",
+                    msg.project_id, msg.deployment_id
+                );
 
-        self.finalize_status(
-            &msg.project_id,
-            &msg.deployment_id,
-            DeploymentStatus::Running,
-            &pool,
-            &mut con,
-        )
-        .await?;
+                self.apply_deployment(
+                    Some(&msg.name),
+                    Some(&otel_resource_attributes),
+                    &ns,
+                    &name,
+                    Some(&url),
+                    image_pull_secret_data,
+                    Some(msg.port),
+                    Some(msg.desired_replicas),
+                    Some(&msg.resource_spec),
+                    secret_ref,
+                    msg.environment_variables,
+                    Some(&labels),
+                    &selector,
+                )
+                .await?;
 
-        info!("✅ Created deployment {}", msg.deployment_id);
+                // deployment_id will be selector
+                self.apply_service(&ns, &name, msg.port, Some(&labels), &selector)
+                    .await?;
 
-        Ok(())
+                self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, msg.port)
+                    .await?;
+
+                self.finalize_status(
+                    &msg.project_id,
+                    &msg.deployment_id,
+                    DeploymentStatus::Running,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+
+                info!("✅ Created deployment {}", msg.deployment_id);
+                Ok(())
+            }
+            DeploymentSourceRequest::Dockerfile {
+                repo,
+                pat,
+                context_path,
+                dockerfile_path,
+            } => {
+                self.notify_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &mut con,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+
+                let build_id = Uuid::new_v4().to_string();
+
+                self.spawn_buildkit_job(
+                    &project_id.to_string(),
+                    &deployment_id.to_string(),
+                    &preset_id.to_string(),
+                    &build_id,
+                    repo,
+                    pat.as_deref(),
+                    context_path.as_deref(),
+                    dockerfile_path.as_deref(),
+                )
+                .await?;
+                Ok(())
+            }
+            DeploymentSourceRequest::Code { repo } => {
+                self.notify_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &mut con,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+
+                let build_id = Uuid::new_v4().to_string();
+
+                self.spawn_kpack_job(
+                    &project_id.to_string(),
+                    &deployment_id.to_string(),
+                    &preset_id.to_string(),
+                    &build_id,
+                    repo,
+                )
+                .await?;
+                Ok(())
+            }
+        }
     }
 
     /// Handles "Update" messages.
     /// We pass the `Option` fields directly. `None` means "Don't change".
+    /// ---
+    /// Users can change source but this introduce extra logic
+    /// Case 1:
+    ///     User just change source directly from UI
+    /// Case 2:
+    ///     User created deployment with source type Dockerfile or Build
+    /// To handle this two case we rely on DB.
+    /// DB store everything we need and we can derive secret from `vault_secret_path`
+    /// If `vault_secret_path` is exist in DB which means secret stored in `Vault` and `VSO` already synced
+    /// ---
+    /// When DB source is `Code/Dockerfile` this message means build succeeded and we need to almost create deployment
+    /// We fetch everything from DB.
+    /// `update()` must:
+    ///     apply Deployment (with new image)
+    ///     ensure Service exists
+    ///     ensure IngressRoute exists (if there is domain/subdomain in DB)
     #[tracing::instrument(name = "kubernetes_service.update", skip_all, fields(id = %msg.deployment_id), err)]
     pub async fn update(
         &self,
@@ -238,27 +330,19 @@ impl KubernetesService {
         )
         .await?;
 
-        let user_id = msg.user_id.clone();
-        let project_id = msg.project_id.clone();
-        let deployment_id = msg.deployment_id.clone();
+        let user_id = msg.user_id;
+        let project_id = msg.project_id;
+        let deployment_id = msg.deployment_id;
 
-        info!(
-            user_id = %user_id,
-            project_id = %project_id,
-            deployment_id = %deployment_id,
-            "🚀 Updating deployment"
-        );
+        let ns = self.ensure_namespace(&user_id).await?;
+        let name = format_resource_name(&deployment_id);
 
-        let ns = self.ensure_namespace(&msg.user_id).await?;
-        let name = format_resource_name(&msg.deployment_id);
+        // Internally handle secrets empty or not and refresh the DB, we need to get deployment after this
+        // so deployment will be latest vault secret path
+        self.apply_vault_static_secret(&msg.deployment_id, &ns, &name, msg.secrets, &pool)
+            .await?;
 
-        // Define Labels & Selector
-        let mut labels = BTreeMap::new();
-        labels.insert("poddle.io/managed-by".into(), "poddle".into());
-        labels.insert("poddle.io/project-id".into(), msg.project_id.into());
-        labels.insert("poddle.io/deployment-id".into(), msg.deployment_id.into());
-
-        let deployment = DeploymentRepository::get_preset_id(&deployment_id, &pool)
+        let deployment = DeploymentRepository::get_by_id(&deployment_id, &pool)
             .await
             .map_err(|e| {
                 error!(ns=%ns, name=%name, error = %e, "🚨 Failed to get deployment from database");
@@ -268,85 +352,192 @@ impl KubernetesService {
                 ))
             })?;
 
+        // Define Labels & Selector
+        let mut labels = BTreeMap::new();
+        labels.insert("poddle.io/managed-by".into(), "poddle".into());
+        labels.insert("poddle.io/project-id".into(), project_id.into());
+        labels.insert("poddle.io/deployment-id".into(), deployment_id.into());
+
         let preset_id = msg.preset_id.unwrap_or(deployment.preset_id);
         labels.insert("poddle.io/preset-id".into(), preset_id.to_string());
 
-        // Selector is invariant
         let mut selector = BTreeMap::new();
         selector.insert(
             "poddle.io/deployment-id".to_string(),
             deployment_id.to_string(),
         );
 
-        // Update Secrets (if provided)
-        // We call the same function. It updates Vault data. VSO detects change -> Restarts Pods.
-        let secret_ref = self
-            .apply_vault_static_secret(&msg.deployment_id, &ns, &name, msg.secrets, &pool)
-            .await?;
+        // Trust source is db, not apply_vault_static_secret
+        let secret_ref = deployment
+            .vault_secret_path
+            .map(|_| format!("{}-secrets", name));
 
-        let image_pull_secret_data = match msg.image_pull_secret.as_ref() {
-            Some(secret) => Some(self.apply_image_pull_secret(&ns, &name, secret).await?),
-            None => None,
-        };
+        let materialize = matches!(msg.source, Some(DeploymentSourceRequest::Image { .. }))
+            && matches!(
+                deployment.source.0,
+                DeploymentSource::Code { .. } | DeploymentSource::Dockerfile { .. }
+            );
 
-        // image_pull_secret is not optional because we add automatic restart when image pull secret change
-        if msg.image.is_some()
-            || msg.image_pull_secret.is_some()
-            || msg.port.is_some()
-            || msg.resource_spec.is_some()
-            || msg.desired_replicas.is_some()
-            || msg.environment_variables.is_some()
-        {
-            self.apply_deployment(
-                msg.name.as_deref(),
-                None,
-                &ns,
-                &name,
-                msg.image.as_deref(),
-                image_pull_secret_data,
-                msg.port,
-                msg.desired_replicas,
-                msg.resource_spec.as_ref(),
-                secret_ref,
-                msg.environment_variables,
-                Some(&labels),
-                &selector,
-            )
-            .await?;
-        }
+        if msg.port.is_some() || msg.domain.is_some() || msg.subdomain.is_some() || materialize {
+            let port = msg.port.unwrap_or(deployment.port);
 
-        // Service (Only if port changes)
-        if let Some(port) = msg.port {
             self.apply_service(&ns, &name, port, None, &selector)
                 .await?;
-        }
 
-        // Ingress (If Port OR Domain changes)
-        if msg.port.is_some() || msg.domain.is_some() || msg.subdomain.is_some() {
-            // Determine the port to use for Ingress.
-            // If the user sent a new port, use it.
-            // If not, we MUST fetch the existing port from the DB, because Ingress requires it.
-            let port = if let Some(p) = msg.port {
-                p
-            } else {
-                deployment.port
-            };
-
-            self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, port)
+            let domain = msg.domain.clone().or(deployment.domain.clone());
+            let subdomain = msg.subdomain.clone().or(deployment.subdomain.clone());
+            self.apply_ingressroute(&ns, &name, domain, subdomain, port)
                 .await?;
         }
 
-        self.finalize_status(
-            &msg.project_id,
-            &msg.deployment_id,
-            DeploymentStatus::Running,
-            &pool,
-            &mut con,
-        )
-        .await?;
+        match msg.source {
+            Some(DeploymentSourceRequest::Image {
+                url,
+                image_pull_secret,
+            }) => {
+                let image_pull_secret_data = if let Some(secret) = image_pull_secret.as_ref() {
+                    Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
+                } else {
+                    None
+                };
+
+                let environment_variables = msg
+                    .environment_variables
+                    .or_else(|| deployment.environment_variables.map(|j| j.0).flatten());
+
+                self.apply_deployment(
+                    msg.name.as_deref(),
+                    None,
+                    &ns,
+                    &name,
+                    Some(&url),
+                    image_pull_secret_data,
+                    msg.port.or(Some(deployment.port)),
+                    msg.desired_replicas.or(Some(deployment.desired_replicas)),
+                    msg.resource_spec.as_ref(),
+                    secret_ref,
+                    environment_variables,
+                    Some(&labels),
+                    &selector,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &msg.project_id,
+                    &deployment_id,
+                    DeploymentStatus::Running,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+            }
+            Some(DeploymentSourceRequest::Dockerfile {
+                repo,
+                pat,
+                context_path,
+                dockerfile_path,
+            }) => {
+                info!("🏗️ Source changed to Dockerfile. Building...");
+
+                self.notify_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &mut con,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+
+                let build_id = Uuid::new_v4().to_string();
+
+                self.spawn_buildkit_job(
+                    &project_id.to_string(),
+                    &deployment_id.to_string(),
+                    &preset_id.to_string(),
+                    &build_id,
+                    repo,
+                    pat.as_deref(),
+                    context_path.as_deref(),
+                    dockerfile_path.as_deref(),
+                )
+                .await?;
+            }
+            Some(DeploymentSourceRequest::Code { repo }) => {
+                info!("🏗️ Source changed to Code. Building...");
+
+                self.notify_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &mut con,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &project_id,
+                    &deployment_id,
+                    DeploymentStatus::Building,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+
+                let build_id = Uuid::new_v4().to_string();
+
+                self.spawn_kpack_job(
+                    &project_id.to_string(),
+                    &deployment_id.to_string(),
+                    &preset_id.to_string(),
+                    &build_id,
+                    repo,
+                )
+                .await?;
+            }
+            None => {
+                // "Dumb" update: apply changes to K8s using Server-Side Apply (SSA)
+                // image is None here, so SSA will not overwrite the existing image tag in K8s
+
+                let environment_variables = msg
+                    .environment_variables
+                    .or_else(|| deployment.environment_variables.map(|j| j.0).flatten());
+
+                self.apply_deployment(
+                    msg.name.as_deref(),
+                    None,
+                    &ns,
+                    &name,
+                    None,
+                    None,
+                    msg.port,
+                    msg.desired_replicas,
+                    msg.resource_spec.as_ref(),
+                    secret_ref,
+                    environment_variables,
+                    Some(&labels),
+                    &selector,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &msg.project_id,
+                    &deployment_id,
+                    DeploymentStatus::Running,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+            }
+        }
 
         info!("✅ Updated deployment {}", msg.deployment_id);
-
         Ok(())
     }
 
@@ -1087,17 +1278,46 @@ impl KubernetesService {
         deployment_id: &str,
         preset_id: &str,
         build_id: &str,
-        git_repo_url: &str,
+        repo: GHRepo,
+        pat: Option<&str>,
         context_path: Option<&str>,
         dockerfile_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "poddle-builds";
         let job_name = format!("build-{}", build_id);
-        let image_name = format!("{}", build_id);
+        let image_name = format!("me-central1-docker.pkg.dev/poddle-mvp/poddle/{}", build_id);
         let cache = format!("{}-cache", build_id);
 
         let context = context_path.unwrap_or(".");
         let dockerfile_path = dockerfile_path.unwrap_or("Dockerfile");
+
+        let mut clone_url = repo.clone_url();
+
+        if let Some(pat) = pat {
+            clone_url =
+                clone_url.replacen("https://", &format!("https://x-access-token:{pat}@"), 1);
+        }
+
+        // --- Init container: git clone ---
+        let init_containers = Some(vec![Container {
+            name: "git-clone".into(),
+            image: Some("alpine/git:latest".into()),
+            args: Some(vec!["clone".into(), clone_url, "/workspace".into()]),
+            volume_mounts: Some(vec![VolumeMount {
+                name: "workspace".into(),
+                mount_path: "/workspace".into(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        }]);
+
+        // --- Build container ---
+        let mut requests = BTreeMap::new();
+        requests.insert("cpu".to_string(), Quantity("500m".to_string()));
+        requests.insert("memory".to_string(), Quantity("256Mi".to_string()));
+        let mut limits = BTreeMap::new();
+        limits.insert("cpu".to_string(), Quantity("1000m".to_string()));
+        limits.insert("memory".to_string(), Quantity("1Gi".to_string()));
 
         let (dockerfile, filename) = match dockerfile_path.rsplit_once('/') {
             Some((dir, file)) if !dir.is_empty() && !file.is_empty() => (dir, file),
@@ -1115,40 +1335,6 @@ impl KubernetesService {
             --import-cache type=registry,ref={cache} \
             --progress=plain",
         );
-
-        let labels: BTreeMap<String, String> = BTreeMap::from([
-            ("poddle.io/managed-by".into(), "poddle".into()),
-            ("poddle.io/project-id".into(), project_id.into()),
-            ("poddle.io/deployment-id".into(), deployment_id.into()),
-            ("poddle.io/preset-id".into(), preset_id.into()),
-            ("poddle.io/build-id".into(), build_id.into()),
-        ]);
-
-        // --- Init container: git clone ---
-        let init_containers = Some(vec![Container {
-            name: "git-clone".into(),
-            image: Some("alpine/git:latest".into()),
-            args: Some(vec![
-                "clone".into(),
-                git_repo_url.into(),
-                "/workspace".into(),
-            ]),
-            volume_mounts: Some(vec![VolumeMount {
-                name: "workspace".into(),
-                mount_path: "/workspace".into(),
-                ..Default::default()
-            }]),
-            ..Default::default()
-        }]);
-
-        // --- Build container ---
-        let mut limits = BTreeMap::new();
-        limits.insert("cpu".to_string(), Quantity("2000m".to_string()));
-        limits.insert("memory".to_string(), Quantity("4Gi".to_string()));
-
-        let mut requests = BTreeMap::new();
-        requests.insert("cpu".to_string(), Quantity("500m".to_string()));
-        requests.insert("memory".to_string(), Quantity("1Gi".to_string()));
 
         let containers = vec![Container {
             name: "buildkit".into(),
@@ -1186,6 +1372,14 @@ impl KubernetesService {
             ..Default::default()
         }];
 
+        let labels: BTreeMap<String, String> = BTreeMap::from([
+            ("poddle.io/managed-by".into(), "poddle".into()),
+            ("poddle.io/project-id".into(), project_id.into()),
+            ("poddle.io/deployment-id".into(), deployment_id.into()),
+            ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
+        ]);
+
         let job = Job {
             metadata: ObjectMeta {
                 name: Some(job_name.clone()),
@@ -1217,6 +1411,11 @@ impl KubernetesService {
                                 name: "registery-secret-volume".into(),
                                 secret: Some(SecretVolumeSource {
                                     secret_name: Some("registery-secret".into()),
+                                    items: Some(vec![KeyToPath {
+                                        key: ".dockerconfigjson".into(),
+                                        path: "config.json".into(),
+                                        ..Default::default()
+                                    }]),
                                     ..Default::default()
                                 }),
                                 ..Default::default()
@@ -1235,6 +1434,18 @@ impl KubernetesService {
         jobs.create(&PostParams::default(), &job).await?;
 
         info!("🚀 Spawned BuildKit Job: {}", job_name);
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "kubernetes_service.spawn_kpack_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    pub async fn spawn_kpack_job(
+        &self,
+        _project_id: &str,
+        deployment_id: &str,
+        _preset_id: &str,
+        build_id: &str,
+        _repo: GHRepo,
+    ) -> Result<(), AppError> {
         Ok(())
     }
 

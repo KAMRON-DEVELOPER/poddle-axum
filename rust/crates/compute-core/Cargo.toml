@@ -16,3 +16,4 @@ serde_json.workspace = true
 uuid.workspace = true
 validator.workspace = true
 bigdecimal.workspace = true
+ghrepo.workspace = true

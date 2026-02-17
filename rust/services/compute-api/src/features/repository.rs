@@ -1,7 +1,9 @@
 use compute_core::{
     formatters::format_resource_name,
     models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
-    schemas::{CreateDeploymentRequest, CreateProjectRequest, UpdateDeploymentRequest},
+    schemas::{
+        CreateDeploymentRequest, CreateProjectRequest, DeploymentSource, UpdateDeploymentRequest,
+    },
 };
 use http_contracts::pagination::schema::Pagination;
 use sqlx::{Executor, types::Json};
@@ -204,7 +206,7 @@ impl DeploymentRepository {
                 d.user_id,
                 d.project_id,
                 d.name,
-                d.image,
+                d.source AS "source: Json<DeploymentSource>",
                 d.port,
                 d.desired_replicas,
                 d.ready_replicas,
@@ -250,7 +252,7 @@ impl DeploymentRepository {
                 user_id: r.user_id,
                 project_id: r.project_id,
                 name: r.name,
-                image: r.image,
+                source: r.source,
                 port: r.port,
                 desired_replicas: r.desired_replicas,
                 ready_replicas: r.ready_replicas,
@@ -288,7 +290,7 @@ impl DeploymentRepository {
                 d.user_id,
                 d.project_id,
                 d.name,
-                d.image,
+                d.source AS "source: Json<DeploymentSource>",
                 d.port,
                 d.desired_replicas,
                 d.ready_replicas,
@@ -331,6 +333,8 @@ impl DeploymentRepository {
             .as_ref()
             .map(|l| serde_json::to_value(l).unwrap());
 
+        let source = serde_json::to_value(req.source).unwrap();
+
         let id = Uuid::new_v4();
         let name = format_resource_name(&id);
 
@@ -342,7 +346,7 @@ impl DeploymentRepository {
                 user_id,
                 project_id,
                 name,
-                image,
+                source,
                 port,
                 desired_replicas,
                 preset_id,
@@ -360,7 +364,7 @@ impl DeploymentRepository {
                 user_id,
                 project_id,
                 name,
-                image,
+                source AS "source: Json<DeploymentSource>",
                 port,
                 desired_replicas,
                 ready_replicas,
@@ -383,7 +387,7 @@ impl DeploymentRepository {
             user_id,
             project_id,
             &req.name,
-            &req.image,
+            &source,
             req.port,
             req.desired_replicas,
             req.preset_id,
@@ -436,13 +440,18 @@ impl DeploymentRepository {
             .as_ref()
             .map(|l| l.as_ref().map(|v| serde_json::to_value(v).unwrap()));
 
+        let source = req
+            .source
+            .as_ref()
+            .map(|s| serde_json::to_value(s).unwrap());
+
         sqlx::query_as!(
             Deployment,
             r#"
             UPDATE deployments AS d
             SET
                 name = COALESCE($3, d.name),
-                image = COALESCE($4, d.image),
+                source = COALESCE($4, d.source),
                 port = COALESCE($5, d.port),
                 desired_replicas = COALESCE($6, d.desired_replicas),
                 preset_id = COALESCE($7, d.preset_id),
@@ -463,7 +472,7 @@ impl DeploymentRepository {
                 d.user_id,
                 d.project_id,
                 d.name,
-                d.image,
+                d.source AS "source: Json<DeploymentSource>",
                 d.port,
                 d.desired_replicas,
                 d.ready_replicas,
@@ -485,7 +494,7 @@ impl DeploymentRepository {
             user_id,
             deployment_id,
             req.name,
-            req.image,
+            source,
             req.port,
             req.desired_replicas,
             req.preset_id,

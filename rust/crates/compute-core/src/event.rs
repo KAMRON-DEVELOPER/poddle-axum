@@ -17,6 +17,7 @@ pub enum EventLevel {
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
+    // Deployment
     DeploymentMetricsUpdate {
         updates: Vec<DeploymentMetricUpdate>,
     },
@@ -32,6 +33,7 @@ pub enum ComputeEvent<'a> {
         level: EventLevel,
     },
 
+    // Pod
     PodMetricsUpdate {
         updates: Vec<PodMetricUpdate>,
     },

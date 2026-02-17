@@ -6,6 +6,8 @@ use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type, types::Json};
 use uuid::Uuid;
 
+use crate::schemas::DeploymentSource;
+
 // ---------------------------------------------
 // ENUMS
 // ---------------------------------------------
@@ -14,6 +16,7 @@ use uuid::Uuid;
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "deployment_status", rename_all = "snake_case")]
 pub enum DeploymentStatus {
+    Building,
     Queued,
     Provisioning,
     Starting,
@@ -23,6 +26,7 @@ pub enum DeploymentStatus {
     Updating,
     Suspended,
     Failed,
+    BuildFailed,
     Deleted,
     ImagePullError,
 }
@@ -30,6 +34,7 @@ pub enum DeploymentStatus {
 impl std::fmt::Display for DeploymentStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::Building => write!(f, "building"),
             Self::Queued => write!(f, "queued"),
             Self::Provisioning => write!(f, "provisioning"),
             Self::Starting => write!(f, "starting"),
@@ -39,6 +44,7 @@ impl std::fmt::Display for DeploymentStatus {
             Self::Updating => write!(f, "scaling"),
             Self::Suspended => write!(f, "suspended"),
             Self::Failed => write!(f, "failed"),
+            Self::BuildFailed => write!(f, "build_failed"),
             Self::Deleted => write!(f, "deleted"),
             Self::ImagePullError => write!(f, "image_pull_error"),
         }
@@ -99,7 +105,7 @@ pub struct Deployment {
     pub project_id: Uuid,
     pub preset_id: Uuid,
     pub name: String,
-    pub image: String,
+    pub source: Json<DeploymentSource>,
     pub port: i32,
     pub desired_replicas: i32,
     pub ready_replicas: i32,

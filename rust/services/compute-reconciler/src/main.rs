@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::result::Result::Ok;
 use std::{env, net::SocketAddr};
 
+use factory::factories::amqp::Amqp;
 use factory::factories::{
     database::Database, kubernetes::Kubernetes, observability::Observability, redis::Redis,
 };
@@ -55,14 +56,16 @@ async fn main() -> anyhow::Result<()> {
     let kubernetes = Kubernetes::new().await?;
     let database = Database::new(&cfg.database).await;
     let redis = Redis::new(&cfg.redis).await;
+    let amqp = Amqp::new(&cfg.amqp).await;
 
     let mut set = JoinSet::new();
 
     // Spawn tasks into the set
     set.spawn(event_watcher(
-        database.pool.clone(),
         cfg.clone(),
+        database.pool.clone(),
         redis.con.clone(),
+        amqp.clone(),
         kubernetes.client.clone(),
     ));
     set.spawn(start_reconciliation_loop(

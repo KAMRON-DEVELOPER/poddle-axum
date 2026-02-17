@@ -7,8 +7,9 @@ use crate::{
     event::ComputeEvent,
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
-        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentsResponse,
-        MetricSnapshot, PodMeta, PodPhase, UpdateDeploymentMessage, UpdateDeploymentRequest,
+        CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentSource,
+        DeploymentSourceRequest, DeploymentsResponse, MetricSnapshot, PodMeta, PodPhase,
+        UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
 
@@ -75,6 +76,27 @@ impl ToRedisArgs for MetricSnapshot {
     }
 }
 
+impl Into<DeploymentSource> for DeploymentSourceRequest {
+    fn into(self) -> DeploymentSource {
+        match self {
+            DeploymentSourceRequest::Code { repo } => DeploymentSource::Code { repo: repo.clone() },
+            DeploymentSourceRequest::Dockerfile {
+                repo,
+                context_path,
+                dockerfile_path,
+                ..
+            } => DeploymentSource::Dockerfile {
+                repo: repo.clone(),
+                context_path: context_path.clone(),
+                dockerfile_path: dockerfile_path.clone(),
+            },
+            DeploymentSourceRequest::Image { url, .. } => {
+                DeploymentSource::Image { url: url.clone() }
+            }
+        }
+    }
+}
+
 impl FromRedisValue for MetricSnapshot {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
         match v {
@@ -109,7 +131,7 @@ impl From<(Deployment, Vec<MetricSnapshot>)> for DeploymentsResponse {
             user_id: d.user_id,
             project_id: d.project_id,
             name: d.name,
-            image: d.image,
+            source: d.source.0,
             port: d.port,
             desired_replicas: d.desired_replicas,
             ready_replicas: d.ready_replicas,
@@ -139,7 +161,7 @@ impl From<Deployment> for DeploymentResponse {
             user_id: d.user_id,
             project_id: d.project_id,
             name: d.name,
-            image: d.image,
+            source: d.source.0,
             port: d.port,
             desired_replicas: d.desired_replicas,
             ready_replicas: d.ready_replicas,
@@ -185,8 +207,7 @@ impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)> for CreateDeploym
             project_id,
             deployment_id,
             name: req.name,
-            image: req.image,
-            image_pull_secret: req.image_pull_secret,
+            source: req.source,
             port: req.port,
             desired_replicas: req.desired_replicas,
             preset_id: req.preset_id,
@@ -224,8 +245,7 @@ impl From<(Uuid, Uuid, Uuid, Option<Preset>, UpdateDeploymentRequest)> for Updat
             project_id,
             deployment_id,
             name: req.name,
-            image: req.image,
-            image_pull_secret: req.image_pull_secret,
+            source: req.source,
             port: req.port,
             desired_replicas: req.desired_replicas,
             preset_id: req.preset_id,

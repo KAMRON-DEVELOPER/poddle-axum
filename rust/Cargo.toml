@@ -154,3 +154,4 @@ tokio-tungstenite = { version = "0.28.0", features = [
     "rustls-tls-native-roots",
 ] }
 http = "1.4.0"
+ghrepo = { version = "0.7.1", features = ["serde"] }

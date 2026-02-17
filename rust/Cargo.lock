@@ -802,6 +802,7 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
+ "ghrepo",
  "http",
  "http-common",
  "http-contracts",
@@ -837,6 +838,7 @@ version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "chrono",
+ "ghrepo",
  "once_cell",
  "redis",
  "redis-derive",
@@ -889,6 +891,7 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
+ "ghrepo",
  "http-common",
  "k8s-openapi",
  "kcr_cert_manager_io",
@@ -935,6 +938,7 @@ dependencies = [
  "k8s-openapi",
  "kube",
  "kube-client",
+ "lapin",
  "prometheus-client",
  "prometheus-http-query",
  "redis",
@@ -1837,6 +1841,15 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
+]
+
+[[package]]
+name = "ghrepo"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0e2508da0b48f2f45c3f9dea89d149d04a5f74a76c42401373fde6976be6e4ca"
+dependencies = [
+ "serde",
 ]
 
 [[package]]

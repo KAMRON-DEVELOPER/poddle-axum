@@ -1,5 +1,8 @@
 use crate::error::AppError;
-use compute_core::models::{Deployment, DeploymentStatus};
+use compute_core::{
+    models::{Deployment, DeploymentStatus},
+    schemas::DeploymentSource,
+};
 use sqlx::{PgPool, postgres::PgQueryResult, types::Json};
 use std::collections::HashMap;
 use tracing::instrument;
@@ -46,7 +49,7 @@ impl DeploymentRepository {
     }
 
     #[instrument("deployment_repository.get_one_by_id", skip_all, fields(deployment_id = %id), err)]
-    pub async fn get_preset_id(id: &Uuid, pool: &PgPool) -> Result<Deployment, sqlx::Error> {
+    pub async fn get_by_id(id: &Uuid, pool: &PgPool) -> Result<Deployment, sqlx::Error> {
         sqlx::query_as!(
             Deployment,
             r#"
@@ -55,7 +58,7 @@ impl DeploymentRepository {
                 user_id,
                 project_id,
                 name,
-                image,
+                source AS "source: Json<DeploymentSource>",
                 port,
                 desired_replicas,
                 ready_replicas,
@@ -74,6 +77,22 @@ impl DeploymentRepository {
                 created_at,
                 updated_at
             FROM deployments
+            WHERE id = $1
+            "#,
+            id
+        )
+        .fetch_one(pool)
+        .await
+    }
+
+    #[instrument("deployment_repository.get_vault_secret_path", skip_all, fields(deployment_id = %id), err)]
+    pub async fn get_vault_secret_path(
+        id: &Uuid,
+        pool: &PgPool,
+    ) -> Result<Option<String>, sqlx::Error> {
+        sqlx::query_scalar!(
+            r#"
+            SELECT vault_secret_path FROM deployments
             WHERE id = $1
             "#,
             id
