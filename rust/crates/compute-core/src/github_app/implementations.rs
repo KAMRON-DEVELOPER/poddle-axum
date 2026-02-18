@@ -74,7 +74,7 @@ impl GithubApp {
         &self,
         access_token: &str,
         http: &Client,
-    ) -> Result<Vec<GithubRepo>, GithubAppError> {
+    ) -> Result<(Vec<GithubRepo>, i64), GithubAppError> {
         // GET /installation/repositories
         let res = http
             .get("https://api.github.com/installation/repositories")
@@ -92,6 +92,6 @@ impl GithubApp {
         }
 
         let res = res.json::<InstallationReposResponse>().await?;
-        Ok(res.repositories)
+        Ok((res.repositories, res.total_count))
     }
 }

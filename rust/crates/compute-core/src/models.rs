@@ -136,36 +136,12 @@ pub struct DeploymentEvent {
     pub created_at: DateTime<Utc>,
 }
 
-/*
-CREATE TABLE IF NOT EXISTS git_integrations (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
-    -- 'github' is the only one for now, but good for future (gitlab, bitbucket)
-    provider VARCHAR(50) NOT NULL DEFAULT 'github',
-    -- The Crucial ID. This comes from the callback (installation_id).
-    -- It identifies the connection between Poddle and the User's GitHub account.
-    installation_id BIGINT NOT NULL,
-    -- Metadata for UI (e.g., "Connected to @octocat")
-    account_login VARCHAR(255),
-    account_id BIGINT,
-    account_type VARCHAR(50), -- 'User' or 'Organization'
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    -- Ensure a user doesn't link the same github installation twice
-    UNIQUE (user_id, installation_id)
-);
-*/
-
 #[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
-pub struct GitIntegrations {
+pub struct Installations {
     pub id: Uuid,
     pub user_id: Uuid,
     pub installation_id: i64,
-    pub provider: String,
-    pub account_login: String,
-    pub account_id: i64,
-    pub account_type: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

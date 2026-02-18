@@ -5,6 +5,7 @@ use axum::{
 };
 use compute_core::github_app::GithubApp;
 use factory::factories::database::Database;
+use http_contracts::list::schema::ListResponse;
 use reqwest::Client;
 use users_core::jwt::Claims;
 
@@ -64,10 +65,10 @@ pub async fn get_github_repos(
         .await
         .map_err(|e| AppError::InternalServerError(format!("github access token: {}", e)))?;
 
-    let repos = github_app
+    let (data, total) = github_app
         .list_installation_repos(&access_token, &http)
         .await
         .map_err(|e| AppError::InternalServerError(format!("github repos: {}", e)))?;
 
-    Ok(Json(repos))
+    Ok(Json(ListResponse { data, total }))
 }
