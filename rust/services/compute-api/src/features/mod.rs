@@ -60,5 +60,7 @@ pub fn get_routes() -> Router<AppState> {
             "/api/v1/compute/projects/{project_id}/metrics/see",
             get(see::stream_deployments_metrics_see_handler),
         )
+        .route("/api/v1/compute/github/repositories", get(handlers::github::get_repositories_handler))
+        .route("/api/v1/compute/github/callback", get(handlers::github::github_callback_handler))
         .route("/api/v1/compute/github/webhook", get(webhook::github_webhook))
 }

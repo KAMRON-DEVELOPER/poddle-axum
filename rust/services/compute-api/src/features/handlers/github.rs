@@ -11,8 +11,8 @@ use users_core::jwt::Claims;
 
 use crate::{config::Config, error::AppError, features::schemas::CallbackParams};
 
-#[tracing::instrument(name = "github_callback", skip_all, fields(user_id = %claims.sub), err)]
-pub async fn github_callback(
+#[tracing::instrument(name = "github_callback_handler", skip_all, fields(user_id = %claims.sub), err)]
+pub async fn github_callback_handler(
     claims: Claims,
     State(cfg): State<Config>,
     State(db): State<Database>,
@@ -39,8 +39,8 @@ pub async fn github_callback(
     Ok(redirect.into_response())
 }
 
-#[tracing::instrument(name = "get_github_repos", skip_all, fields(user_id = %claims.sub), err)]
-pub async fn get_github_repos(
+#[tracing::instrument(name = "get_repositories_handler", skip_all, fields(user_id = %claims.sub), err)]
+pub async fn get_repositories_handler(
     claims: Claims,
     State(github_app): State<GithubApp>,
     State(http): State<Client>,
