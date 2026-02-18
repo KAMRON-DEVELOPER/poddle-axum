@@ -2,7 +2,7 @@ use axum::{
     extract::{Query, State},
     response::{IntoResponse, Redirect},
 };
-use compute_core::github_app::{GithubApp, Installation};
+use compute_core::github_app::GithubApp;
 use factory::factories::database::Database;
 use reqwest::Client;
 use serde::Deserialize;
@@ -18,54 +18,23 @@ pub struct CallbackParams {
 
 pub async fn github_callback(
     claims: Claims,
-    State(github_app): State<GithubApp>,
     State(cfg): State<Config>,
-    State(http): State<Client>,
     State(db): State<Database>,
     Query(params): Query<CallbackParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
-    let jwt = github_app.generate_jwt().expect("Failed to sign JWT");
-
-    let res = http
-        .get(format!(
-            "https://api.github.com/app/installations/{}",
-            params.installation_id
-        ))
-        .header("Authorization", format!("Bearer {}", jwt))
-        .header("Accept", "application/vnd.github+json")
-        .header("User-Agent", "poddle-compute")
-        .send()
-        .await?;
-
-    let status = res.status();
-    if status == 200 {
-        let ins = res.json::<Installation>().await?;
-        let account_id = ins.account.id;
-        let account_login = ins.account.login;
-        let account_type = ins.account.account_type;
-
-        sqlx::query!(
-            r#"
-            INSERT INTO installations 
-                (user_id, installation_id, account_login, account_id, account_type)
-            VALUES ($1, $2, 'github', $3, $4, $5)
-            ON CONFLICT (user_id, installation_id) DO NOTHING
-            "#,
-            user_id,
-            params.installation_id,
-            account_login,
-            account_id,
-            account_type
-        )
-        .execute(&db.pool)
-        .await
-        .expect("Failed to save integration");
-    } else if status == 404 {
-        return Err(AppError::BadRequest("installation id is invalid".into()));
-    } else {
-        return Err(AppError::InternalServerError("Something went wrong".into()));
-    }
+    sqlx::query!(
+        r#"
+        INSERT INTO installations 
+            (user_id, installation_id)
+        VALUES ($1, $2)
+        ON CONFLICT (user_id, installation_id) DO NOTHING
+        "#,
+        user_id,
+        params.installation_id,
+    )
+    .execute(&db.pool)
+    .await?;
 
     let redirect = Redirect::to(&format!(
         "{}/dashboard?github_connected=true",
@@ -80,14 +49,14 @@ pub async fn get_github_repos(
     State(http): State<Client>,
     State(db): State<Database>,
 ) -> Result<Json<Value>, String> {
-    // 1. Get Installation ID from DB
-    let integration = sqlx::query!(
-        "SELECT installation_id FROM git_integrations WHERE user_id = $1 LIMIT 1",
-        user.id
+    let user_id = claims.sub;
+
+    let installation_id = sqlx::query_scalar!(
+        "SELECT installation_id FROM installations WHERE user_id = $1",
+        user_id
     )
-    .fetch_optional(&state.db)
-    .await
-    .map_err(|e| e.to_string())?;
+    .fetch_optional(&db.pool)
+    .await?;
 
     let installation_id = match integration {
         Some(i) => i.installation_id,

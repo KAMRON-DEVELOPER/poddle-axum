@@ -7,7 +7,11 @@ use std::{
 
 use chrono::Utc;
 
-use crate::github_app::{GithubApp, GithubAppClaims, error::GithubAppError};
+use crate::github_app::{
+    GithubApp, GithubAppClaims,
+    error::GithubAppError,
+    schemas::{GithubRepo, InstallationReposResponse, InstallationTokenResponse},
+};
 
 impl GithubApp {
     pub fn generate_jwt(&self) -> Result<String, GithubAppError> {
@@ -33,5 +37,60 @@ impl GithubApp {
     /// Read the file content as a string
     fn read_private_key(&self, path: &PathBuf) -> Result<String, Error> {
         fs::read_to_string(path)
+    }
+
+    pub async fn create_installation_token(
+        &self,
+        installation_id: i64,
+    ) -> Result<String, GithubAppError> {
+        // POST /app/installations/{installation_id}/access_tokens
+        let jwt = self.generate_jwt()?;
+
+        let res = self
+            .http
+            .post(format!(
+                "https://api.github.com/app/installations/{}/access_tokens",
+                installation_id
+            ))
+            .header("Authorization", format!("Bearer {}", jwt))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "poddle-compute")
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            return Err(GithubAppError::BadRequest(format!(
+                "GitHub access_tokens failed: {}",
+                res.status()
+            )));
+        }
+
+        let res = res.json::<InstallationTokenResponse>().await?;
+        Ok(res.token)
+    }
+
+    pub async fn list_installation_repos(
+        &self,
+        installation_token: &str,
+    ) -> Result<Vec<GithubRepo>, GithubAppError> {
+        // GET /installation/repositories
+        let res = self
+            .http
+            .get("https://api.github.com/installation/repositories")
+            .header("Authorization", format!("Bearer {}", installation_token))
+            .header("Accept", "application/vnd.github+json")
+            .header("User-Agent", "poddle-compute")
+            .send()
+            .await?;
+
+        if !res.status().is_success() {
+            return Err(GithubAppError::BadRequest(format!(
+                "GitHub list repos failed: {}",
+                res.status()
+            )));
+        }
+
+        let res = res.json::<InstallationReposResponse>().await?;
+        Ok(res.repositories)
     }
 }

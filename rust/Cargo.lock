@@ -844,6 +844,7 @@ dependencies = [
  "redis",
  "redis-derive",
  "regex",
+ "reqwest",
  "rustls-pemfile",
  "serde",
  "serde_json",

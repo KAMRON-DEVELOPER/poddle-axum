@@ -7,4 +7,10 @@ pub enum GithubAppError {
 
     #[error("LsonWebTokenError")]
     LsonWebTokenError(#[from] jsonwebtoken::errors::Error),
+
+    #[error("ReqwestError")]
+    ReqwestError(#[from] reqwest::Error),
+
+    #[error("BadRequest")]
+    BadRequest(String),
 }
