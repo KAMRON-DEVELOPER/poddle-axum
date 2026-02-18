@@ -4,6 +4,7 @@ pub mod configs;
 pub mod determiners;
 pub mod event;
 pub mod formatters;
+pub mod github_app;
 pub mod implementations;
 pub mod models;
 pub mod schemas;

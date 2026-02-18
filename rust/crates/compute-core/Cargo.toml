@@ -17,3 +17,6 @@ uuid.workspace = true
 validator.workspace = true
 bigdecimal.workspace = true
 ghrepo.workspace = true
+rustls-pemfile.workspace = true
+jsonwebtoken.workspace = true
+thiserror.workspace = true

@@ -263,16 +263,41 @@ CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_eve
 CREATE INDEX IF NOT EXISTS idx_deployment_events_created ON deployment_events (created_at DESC);
 
 -- ==============================================
+-- GIT INTEGRATIONS
+-- ==============================================
+CREATE TABLE IF NOT EXISTS installations (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    -- 'github' is the only one for now, but good for future (gitlab, bitbucket)
+    provider VARCHAR(50) NOT NULL DEFAULT 'github',
+    -- The Crucial ID. This comes from the callback (installation_id).
+    -- It identifies the connection between Poddle and the User's GitHub account.
+    installation_id BIGINT NOT NULL,
+    -- Metadata for UI (e.g., "Connected to @octocat")
+    account_login VARCHAR(255),
+    account_id BIGINT,
+    account_type VARCHAR(50), -- 'User' or 'Organization'
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    -- Ensure a user doesn't link the same github installation twice
+    UNIQUE (user_id, installation_id)
+);
+
+CREATE TRIGGER set_git_integrations_timestamp BEFORE UPDATE ON git_integrations FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+
+CREATE INDEX IF NOT EXISTS idx_git_integrations_user_id ON git_integrations (user_id);
+
+-- ==============================================
 -- BUILD
 -- ==============================================
 
-CREATE TABLE IF NOT EXISTS build (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
-    repo_url TEXT NOT NULL,
-    pat VARCHAR(255),
-    status build_status NOT NULL DEFAULT 'queued',
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+-- CREATE TABLE IF NOT EXISTS build (
+--     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+--     repo_url TEXT NOT NULL,
+--     pat VARCHAR(255),
+--     status build_status NOT NULL DEFAULT 'queued',
+--     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+-- );
 
 -- ==============================================
 -- BILLINGS

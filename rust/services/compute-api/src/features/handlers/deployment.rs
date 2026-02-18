@@ -2,9 +2,8 @@ use crate::{
     config::Config,
     error::AppError,
     features::{
-        queries::{DeploymentMetricsQuery, DeploymentsMetricsQuery, LogQuery},
+        queries::DeploymentsMetricsQuery,
         repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
-        schemas::{LogResponse, LokiResponse},
     },
     services::cache_service::CacheService,
 };
@@ -15,9 +14,8 @@ use axum::{
     response::IntoResponse,
 };
 use compute_core::schemas::{
-    CreateDeploymentMessage, CreateDeploymentRequest, CreateProjectRequest,
-    DeleteDeploymentMessage, DeploymentResponse, DeploymentsResponse, UpdateDeploymentMessage,
-    UpdateDeploymentRequest, UpdateProjectRequest,
+    CreateDeploymentMessage, CreateDeploymentRequest, DeleteDeploymentMessage, DeploymentResponse,
+    DeploymentsResponse, UpdateDeploymentMessage, UpdateDeploymentRequest,
 };
 use factory::factories::{
     amqp::{Amqp, AmqpPropagator},
@@ -29,138 +27,10 @@ use http_contracts::{
 };
 use lapin::{BasicProperties, options::BasicPublishOptions, types::FieldTable};
 
-use reqwest::Client;
-use tracing::{Instrument, debug, error, info, info_span};
-use url::Url;
+use tracing::{Instrument, debug, info, info_span};
 use users_core::jwt::Claims;
 use uuid::Uuid;
 use validator::Validate;
-
-// ============================================
-// PROJECT HANDLERS
-// ============================================
-
-#[tracing::instrument(
-    name = "get_projects",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-    ),
-    err
-)]
-pub async fn get_projects(
-    claims: Claims,
-    Query(p): Query<Pagination>,
-    State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
-    let user_id: Uuid = claims.sub;
-
-    let (data, total) = ProjectRepository::get_many(&user_id, &p, &database.pool).await?;
-
-    Ok(Json(ListResponse { data, total }))
-}
-
-#[tracing::instrument(
-    name = "get_project_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id
-    ),
-    err
-)]
-pub async fn get_project_handler(
-    claims: Claims,
-    Path(project_id): Path<Uuid>,
-    State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
-    let user_id: Uuid = claims.sub;
-
-    let project = ProjectRepository::get_one_by_id(&user_id, &project_id, &database.pool).await?;
-
-    Ok(Json(project))
-}
-
-#[tracing::instrument(
-    name = "create_project_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-    ),
-    err
-)]
-pub async fn create_project_handler(
-    claims: Claims,
-    State(database): State<Database>,
-    Json(req): Json<CreateProjectRequest>,
-) -> Result<impl IntoResponse, AppError> {
-    req.validate()?;
-
-    let user_id: Uuid = claims.sub;
-
-    let project = ProjectRepository::create(&user_id, req, &database.pool).await?;
-
-    Ok((StatusCode::CREATED, Json(project)))
-}
-
-#[tracing::instrument(
-    name = "update_project_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id
-    ),
-    err
-)]
-pub async fn update_project_handler(
-    claims: Claims,
-    Path(project_id): Path<Uuid>,
-    State(database): State<Database>,
-    Json(req): Json<UpdateProjectRequest>,
-) -> Result<impl IntoResponse, AppError> {
-    req.validate()?;
-
-    let user_id: Uuid = claims.sub;
-
-    let project = ProjectRepository::update(
-        &user_id,
-        &project_id,
-        req.name.as_deref(),
-        req.description.as_deref(),
-        &database.pool,
-    )
-    .await?;
-
-    Ok(Json(project))
-}
-
-#[tracing::instrument(
-    name = "delete_project_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id
-    )
-    err
-)]
-pub async fn delete_project_handler(
-    claims: Claims,
-    Path(project_id): Path<Uuid>,
-    State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
-    let user_id: Uuid = claims.sub;
-
-    ProjectRepository::delete(&user_id, &project_id, &database.pool).await?;
-
-    Ok((
-        StatusCode::OK,
-        Json(MessageResponse::new("Project deleted successfully")),
-    ))
-}
-
-// ============================================
-// DEPLOYMENT HANDLERS
-// ============================================
 
 #[tracing::instrument(
     name = "get_deployment_handler",
@@ -184,35 +54,6 @@ pub async fn get_deployment_handler(
 
     let response: DeploymentResponse = deployment.into();
     Ok(Json(response))
-}
-
-#[tracing::instrument(
-    name = "get_pods_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id,
-        deployment_id = %deployment_id
-    ),
-    err
-)]
-pub async fn get_pods_handler(
-    claims: Claims,
-    Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
-    Query(p): Query<Pagination>,
-    Query(q): Query<DeploymentMetricsQuery>,
-    State(cfg): State<Config>,
-    // State(database): State<Database>,
-    State(mut redis): State<Redis>,
-) -> Result<impl IntoResponse, AppError> {
-    let count = q.snapshot_count(cfg.prometheus.scrape_interval_secs);
-
-    // TODO We may add project, deployment owner checking logic later
-
-    let (data, total) =
-        CacheService::get_pods(&deployment_id.to_string(), count, &p, &mut redis.con).await?;
-
-    Ok(Json(ListResponse { data, total }))
 }
 
 #[tracing::instrument(name = "get_deployments_handler", skip_all, fields(user_id = %claims.sub, project_id = %project_id), err)]
@@ -480,74 +321,4 @@ pub async fn delete_deployment_handler(
         StatusCode::ACCEPTED,
         Json(MessageResponse::new("Deployment deletion initiated")),
     ))
-}
-
-#[tracing::instrument(
-    name = "get_logs_handler",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-        project_id = %project_id,
-        deployment_id = %deployment_id,
-        pod_uid = %pod_uid,
-    ),
-    err
-)]
-pub async fn get_logs_handler(
-    claims: Claims,
-    Path((project_id, deployment_id, pod_uid)): Path<(Uuid, Uuid, String)>,
-    Query(q): Query<LogQuery>,
-    State(http): State<Client>,
-    State(cfg): State<Config>,
-    State(db): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
-    let preset_id =
-        DeploymentRepository::get_prest_id(&claims.sub, &deployment_id, &db.pool).await?;
-
-    // Parse Base URL
-    let mut url = Url::parse(&cfg.loki.url).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-    // Set Path
-    // This turns "https://loki.poddle.uz/" into "https://loki.poddle.uz/loki/api/v1/query_range"
-    url.set_path("/loki/api/v1/query_range");
-
-    let query = format!(
-        r#"{{project_id="{}", deployment_id="{}"}} | pod_uid = "{}""#,
-        project_id, deployment_id, pod_uid
-    );
-
-    // Convert to nanoseconds - validation happens inside
-    let (start_nanos, end_nanos) = q.resolve_nanos()?;
-
-    let query = [
-        ("query", query),
-        ("start", start_nanos),
-        ("end", end_nanos),
-        ("direction", "forward".to_string()),
-        ("limit", "5000".to_string()),
-    ];
-
-    info!(
-        "Sending request to Loki: {} with Tenant: {}",
-        &url, preset_id
-    );
-
-    let response = http
-        .get(url)
-        .header("X-Scope-OrgID", &preset_id.to_string())
-        .query(&query)
-        .send()
-        .await?;
-
-    // Check status before parsing
-    if !response.status().is_success() {
-        let error_text = response.text().await.unwrap_or_default();
-        error!("Loki Error: {}", error_text);
-        return Err(StatusCode::BAD_GATEWAY.into());
-    }
-
-    let loki_response = response.json::<LokiResponse>().await?;
-    let response: LogResponse = loki_response.into();
-
-    Ok(Json(response))
 }

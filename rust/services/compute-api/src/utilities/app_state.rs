@@ -2,6 +2,7 @@ use crate::config::Config;
 use crate::error::AppError;
 use axum::extract::FromRef;
 use axum_extra::extract::cookie::Key;
+use compute_core::github_app::GithubApp;
 use factory::factories::{amqp::Amqp, database::Database, kafka::Kafka, redis::Redis};
 
 use reqwest::Client;
@@ -18,6 +19,7 @@ pub struct AppState {
     pub config: Config,
     pub http_client: Client,
     pub key: Key,
+    pub github_app: GithubApp,
 }
 
 impl AppState {
@@ -29,6 +31,9 @@ impl AppState {
             .build()
             .unwrap_or_else(|e| panic!("Failed to construct http client: {}", e));
         let key = Key::from(cfg.cookie_key.as_bytes());
+        let github_app = GithubApp {
+            cfg: cfg.github_app.clone(),
+        };
 
         Ok(Self {
             rustls_config: None,
@@ -39,6 +44,7 @@ impl AppState {
             config: cfg.clone(),
             http_client,
             key,
+            github_app,
         })
     }
 }

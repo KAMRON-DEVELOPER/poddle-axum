@@ -2,8 +2,9 @@ use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use serde_json::json;
+use thiserror::Error;
 
-#[derive(thiserror::Error, Debug)]
+#[derive(Error, Debug)]
 pub enum JwtError {
     #[error("failed to generate authentication token")]
     Creation,
@@ -25,12 +26,15 @@ impl IntoResponse for JwtError {
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Failed to generate authentication token. Please try again.",
             ),
-            Self::Invalid => (StatusCode::UNAUTHORIZED, "Invalid authentication token provided"),
-            Self::Expired => (StatusCode::UNAUTHORIZED, "Authentication token has expired. Please login again."),
-            Self::WrongType => (
-                StatusCode::FORBIDDEN,
-                "Incorrect token type provided",
+            Self::Invalid => (
+                StatusCode::UNAUTHORIZED,
+                "Invalid authentication token provided",
             ),
+            Self::Expired => (
+                StatusCode::UNAUTHORIZED,
+                "Authentication token has expired. Please login again.",
+            ),
+            Self::WrongType => (StatusCode::FORBIDDEN, "Incorrect token type provided"),
         };
         (status, Json(json!({ "error": msg }))).into_response()
     }

@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, path::PathBuf};
 
-use compute_core::configs::PrometheusConfig;
+use compute_core::{configs::PrometheusConfig, github_app::GithubAppConfig};
 use config::{ConfigBuilder, ConfigError, Environment, File, builder::AsyncState};
 use factory::factories::{
     amqp::AmqpConfig, database::DatabaseConfig, observability::ObservabilityConfig,
@@ -22,6 +22,7 @@ pub struct TempoConfig {
 #[derive(Deserialize, Clone, Debug)]
 pub struct Config {
     pub server_address: SocketAddr,
+    pub frontend_endpoint: String,
     pub observability: ObservabilityConfig,
     pub database: DatabaseConfig,
     pub redis: RedisConfig,
@@ -31,6 +32,7 @@ pub struct Config {
     pub jwt: JwtConfig,
     pub loki: LokiConfig,
     pub tempo: TempoConfig,
+    pub github_app: GithubAppConfig,
 }
 
 impl Config {
