@@ -8,7 +8,7 @@ use crate::{
     models::{Deployment, Preset, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentSource,
-        DeploymentSourceRequest, DeploymentsResponse, MetricSnapshot, PodMeta, PodPhase,
+        DeploymentSourceMessage, DeploymentsResponse, MetricSnapshot, PodMeta, PodPhase,
         UpdateDeploymentMessage, UpdateDeploymentRequest,
     },
 };
@@ -76,27 +76,6 @@ impl ToRedisArgs for MetricSnapshot {
     }
 }
 
-impl Into<DeploymentSource> for DeploymentSourceRequest {
-    fn into(self) -> DeploymentSource {
-        match self {
-            DeploymentSourceRequest::Code { repo } => DeploymentSource::Code { repo: repo.clone() },
-            DeploymentSourceRequest::Dockerfile {
-                repo,
-                context_path,
-                dockerfile_path,
-                ..
-            } => DeploymentSource::Dockerfile {
-                repo: repo.clone(),
-                context_path: context_path.clone(),
-                dockerfile_path: dockerfile_path.clone(),
-            },
-            DeploymentSourceRequest::Image { url, .. } => {
-                DeploymentSource::Image { url: url.clone() }
-            }
-        }
-    }
-}
-
 impl FromRedisValue for MetricSnapshot {
     fn from_redis_value(v: &Value) -> RedisResult<Self> {
         match v {
@@ -120,6 +99,32 @@ impl FromRedisValue for MetricSnapshot {
                 ErrorKind::TypeError,
                 "Expected BulkString (binary JSON) for MetricSnapshot",
             ))),
+        }
+    }
+}
+
+impl Into<DeploymentSourceMessage> for DeploymentSource {
+    fn into(self) -> DeploymentSourceMessage {
+        match self {
+            DeploymentSource::Image {
+                url,
+                image_pull_secret,
+            } => DeploymentSourceMessage::Image {
+                clone_url: url,
+                image_pull_secret,
+            },
+            DeploymentSource::Dockerfile {
+                repo,
+                context_path,
+                dockerfile_path,
+            } => DeploymentSourceMessage::Dockerfile {
+                clone_url: repo.clone_url,
+                context_path,
+                dockerfile_path,
+            },
+            DeploymentSource::Code { repo } => DeploymentSourceMessage::Code {
+                clone_url: repo.clone_url,
+            },
         }
     }
 }
@@ -207,7 +212,7 @@ impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)> for CreateDeploym
             project_id,
             deployment_id,
             name: req.name,
-            source: req.source,
+            source: req.source.into(),
             port: req.port,
             desired_replicas: req.desired_replicas,
             preset_id: req.preset_id,
@@ -245,7 +250,7 @@ impl From<(Uuid, Uuid, Uuid, Option<Preset>, UpdateDeploymentRequest)> for Updat
             project_id,
             deployment_id,
             name: req.name,
-            source: req.source,
+            source: req.source.map(|s| s.into()),
             port: req.port,
             desired_replicas: req.desired_replicas,
             preset_id: req.preset_id,

@@ -1,5 +1,4 @@
 use chrono::{DateTime, Utc};
-use ghrepo::GHRepo;
 use once_cell::sync::Lazy;
 use redis_derive::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
@@ -8,7 +7,10 @@ use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
 
-use crate::models::{DeploymentStatus, ResourceSpec};
+use crate::{
+    github_app::schemas::Repository,
+    models::{DeploymentStatus, ResourceSpec},
+};
 
 // -----------------------------------------------
 // PROJECT SCHEMAS
@@ -39,38 +41,17 @@ pub struct UpdateProjectRequest {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DeploymentSource {
-    Code {
-        repo: GHRepo,
-    },
-
-    Dockerfile {
-        repo: GHRepo,
-        context_path: Option<String>,
-        dockerfile_path: Option<String>,
-    },
-
-    Image {
-        url: String,
-    },
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-#[serde(tag = "type", rename_all = "camelCase")]
-pub enum DeploymentSourceRequest {
-    Code {
-        repo: GHRepo,
-    },
-
-    Dockerfile {
-        repo: GHRepo,
-        pat: Option<String>,
-        context_path: Option<String>,
-        dockerfile_path: Option<String>,
-    },
-
     Image {
         url: String,
         image_pull_secret: Option<ImagePullSecret>,
+    },
+    Dockerfile {
+        repo: Repository,
+        context_path: Option<String>,
+        dockerfile_path: Option<String>,
+    },
+    Code {
+        repo: Repository,
     },
 }
 
@@ -87,7 +68,7 @@ pub struct ImagePullSecret {
 pub struct CreateDeploymentRequest {
     #[validate(length(min = 1, max = 128))]
     pub name: String,
-    pub source: DeploymentSourceRequest,
+    pub source: DeploymentSource,
     #[validate(range(min = 1, max = 65535))]
     pub port: i32,
     #[validate(range(min = 1, max = 25))]
@@ -114,7 +95,7 @@ static DOMAIN: Lazy<Regex> =
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDeploymentRequest {
     pub name: Option<String>,
-    pub source: Option<DeploymentSourceRequest>,
+    pub source: Option<DeploymentSource>,
     pub port: Option<i32>,
     #[validate(range(min = 0, max = 25))]
     pub desired_replicas: Option<i32>,
@@ -198,6 +179,25 @@ pub struct DeploymentEventResponse {
 // RABBITMQ MESSAGE TYPES
 // -----------------------------------------------
 
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum DeploymentSourceMessage {
+    Code {
+        clone_url: String,
+    },
+
+    Dockerfile {
+        clone_url: String,
+        context_path: Option<String>,
+        dockerfile_path: Option<String>,
+    },
+
+    Image {
+        clone_url: String,
+        image_pull_secret: Option<ImagePullSecret>,
+    },
+}
+
 /// Message sent to `compute.create` queue
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -206,7 +206,7 @@ pub struct CreateDeploymentMessage {
     pub project_id: Uuid,
     pub deployment_id: Uuid,
     pub name: String,
-    pub source: DeploymentSourceRequest,
+    pub source: DeploymentSourceMessage,
     pub port: i32,
     pub desired_replicas: i32,
     pub preset_id: Uuid,
@@ -226,7 +226,7 @@ pub struct UpdateDeploymentMessage {
     pub project_id: Uuid,
     pub deployment_id: Uuid,
     pub name: Option<String>,
-    pub source: Option<DeploymentSourceRequest>,
+    pub source: Option<DeploymentSourceMessage>,
     pub port: Option<i32>,
     pub desired_replicas: Option<i32>,
     pub preset_id: Option<Uuid>,

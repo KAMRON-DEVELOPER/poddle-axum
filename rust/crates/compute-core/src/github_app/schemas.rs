@@ -12,7 +12,7 @@ pub struct InstallationReposResponse {
     pub repositories: Vec<Repository>,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Repository {
     pub id: i64,
     pub name: String,

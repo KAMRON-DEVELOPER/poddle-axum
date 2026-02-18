@@ -13,9 +13,13 @@ use axum::{
     http::StatusCode,
     response::IntoResponse,
 };
-use compute_core::schemas::{
-    CreateDeploymentMessage, CreateDeploymentRequest, DeleteDeploymentMessage, DeploymentResponse,
-    DeploymentsResponse, UpdateDeploymentMessage, UpdateDeploymentRequest,
+use compute_core::{
+    github_app::GithubApp,
+    schemas::{
+        CreateDeploymentMessage, CreateDeploymentRequest, DeleteDeploymentMessage,
+        DeploymentResponse, DeploymentSource, DeploymentsResponse, UpdateDeploymentMessage,
+        UpdateDeploymentRequest,
+    },
 };
 use factory::factories::{
     amqp::{Amqp, AmqpPropagator},
@@ -27,7 +31,8 @@ use http_contracts::{
 };
 use lapin::{BasicProperties, options::BasicPublishOptions, types::FieldTable};
 
-use tracing::{Instrument, debug, info, info_span};
+use reqwest::Client;
+use tracing::{Instrument, info, info_span};
 use users_core::jwt::Claims;
 use uuid::Uuid;
 use validator::Validate;
@@ -104,30 +109,20 @@ pub async fn get_deployments_handler(
 pub async fn create_deployment_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
-    State(database): State<Database>,
+    State(http): State<Client>,
     State(amqp): State<Amqp>,
-    Json(req): Json<CreateDeploymentRequest>,
+    State(db): State<Database>,
+    State(github_app): State<GithubApp>,
+    Json(mut req): Json<CreateDeploymentRequest>,
 ) -> Result<impl IntoResponse, AppError> {
-    debug!("req is {:#?}", req);
+    let user_id = claims.sub;
     req.validate()?;
 
-    let user_id = claims.sub;
-
     // Verify project exists
-    ProjectRepository::get_one_by_id(&user_id, &project_id, &database.pool).await?;
-
-    // Start database transaction
-    let mut tx = database.pool.begin().await?;
-
-    // Create deployment record
-    let deployment =
-        DeploymentRepository::create(&user_id, &project_id, req.clone(), &mut tx).await?;
-
-    // Get RabbitMQ channel
-    let channel = amqp.channel().await;
+    ProjectRepository::get_one_by_id(&user_id, &project_id, &db.pool).await?;
 
     // Prepare message
-    let preset = DeploymentPresetRepository::get_by_id(&req.preset_id, &mut *tx).await?;
+    let preset = DeploymentPresetRepository::get_by_id(&req.preset_id, &db.pool).await?;
     if preset.max_addon_cpu_millicores < req.addon_cpu_millicores.unwrap_or_default()
         || preset.max_addon_memory_mb < req.addon_memory_mb.unwrap_or_default()
     {
@@ -137,10 +132,50 @@ pub async fn create_deployment_handler(
         )));
     }
 
+    match &mut req.source {
+        compute_core::schemas::DeploymentSource::Image { .. } => {}
+        DeploymentSource::Dockerfile { repo, .. } | DeploymentSource::Code { repo } => {
+            if repo.private {
+                let installation_id = sqlx::query_scalar!(
+                    "SELECT installation_id FROM installations WHERE user_id = $1",
+                    user_id
+                )
+                .fetch_optional(&db.pool)
+                .await?;
+
+                let installation_id = match installation_id {
+                    Some(id) => id,
+                    None => {
+                        return Err(AppError::NotFoundError("installation_id not found".into()));
+                    }
+                };
+
+                let access_token = github_app
+                    .create_installation_token(installation_id, &http)
+                    .await
+                    .map_err(|e| {
+                        AppError::InternalServerError(format!("github access token: {}", e))
+                    })?;
+
+                repo.clone_url = repo.clone_url.replace(
+                    "https://",
+                    &format!("https://x-access-token:{access_token}@"),
+                );
+            }
+        }
+    }
+
+    // Start database transaction
+    let mut tx = db.pool.begin().await?;
+
+    // Create deployment record
+    let deployment =
+        DeploymentRepository::create(&user_id, &project_id, req.clone(), &mut tx).await?;
+
+    // Get RabbitMQ channel
+    let channel = amqp.channel().await;
     let message: CreateDeploymentMessage = (user_id, project_id, deployment.id, preset, req).into();
-
     let payload = serde_json::to_vec(&message)?;
-
     let mut headers = FieldTable::default();
     AmqpPropagator::inject_context(&mut headers);
 
