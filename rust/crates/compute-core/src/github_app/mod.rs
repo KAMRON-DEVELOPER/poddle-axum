@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 pub mod error;
@@ -27,6 +26,5 @@ pub struct GithubAppClaims {
 
 #[derive(Clone, Debug)]
 pub struct GithubApp {
-    pub http: Client,
     pub cfg: GithubAppConfig,
 }

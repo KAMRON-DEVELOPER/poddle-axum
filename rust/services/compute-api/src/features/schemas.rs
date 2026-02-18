@@ -2,17 +2,11 @@ use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
 
-// ----------------------------------------------------------------
-//  PROJECT
-// ----------------------------------------------------------------
-
-// ----------------------------------------------------------------
-//  DEPLOYMENT
-// ----------------------------------------------------------------
-
-// ----------------------------------------------------------------
-//  LOG
-// ----------------------------------------------------------------
+#[derive(Deserialize)]
+pub struct CallbackParams {
+    pub installation_id: i64,
+    pub setup_action: Option<String>,
+}
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct LokiResponse {

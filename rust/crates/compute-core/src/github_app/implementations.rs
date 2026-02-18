@@ -1,4 +1,5 @@
 use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
+use reqwest::Client;
 use std::{
     fs::{self},
     io::Error,
@@ -42,12 +43,12 @@ impl GithubApp {
     pub async fn create_installation_token(
         &self,
         installation_id: i64,
+        http: &Client,
     ) -> Result<String, GithubAppError> {
         // POST /app/installations/{installation_id}/access_tokens
         let jwt = self.generate_jwt()?;
 
-        let res = self
-            .http
+        let res = http
             .post(format!(
                 "https://api.github.com/app/installations/{}/access_tokens",
                 installation_id
@@ -71,13 +72,13 @@ impl GithubApp {
 
     pub async fn list_installation_repos(
         &self,
-        installation_token: &str,
+        access_token: &str,
+        http: &Client,
     ) -> Result<Vec<GithubRepo>, GithubAppError> {
         // GET /installation/repositories
-        let res = self
-            .http
+        let res = http
             .get("https://api.github.com/installation/repositories")
-            .header("Authorization", format!("Bearer {}", installation_token))
+            .header("Authorization", format!("Bearer {}", access_token))
             .header("Accept", "application/vnd.github+json")
             .header("User-Agent", "poddle-compute")
             .send()
