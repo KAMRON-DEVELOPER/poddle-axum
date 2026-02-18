@@ -11,7 +11,7 @@ use chrono::Utc;
 use crate::github_app::{
     GithubApp, GithubAppClaims,
     error::GithubAppError,
-    schemas::{GithubRepo, InstallationReposResponse, InstallationTokenResponse},
+    schemas::{InstallationReposResponse, InstallationTokenResponse, Repository},
 };
 
 impl GithubApp {
@@ -74,7 +74,7 @@ impl GithubApp {
         &self,
         access_token: &str,
         http: &Client,
-    ) -> Result<(Vec<GithubRepo>, i64), GithubAppError> {
+    ) -> Result<(Vec<Repository>, i64), GithubAppError> {
         // GET /installation/repositories
         let res = http
             .get("https://api.github.com/installation/repositories")

@@ -9,11 +9,11 @@ pub struct InstallationTokenResponse {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct InstallationReposResponse {
     pub total_count: i64,
-    pub repositories: Vec<GithubRepo>,
+    pub repositories: Vec<Repository>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct GithubRepo {
+pub struct Repository {
     pub id: i64,
     pub name: String,
     pub full_name: String,
