@@ -110,7 +110,7 @@ impl Into<DeploymentSourceMessage> for DeploymentSource {
                 url,
                 image_pull_secret,
             } => DeploymentSourceMessage::Image {
-                clone_url: url,
+                url,
                 image_pull_secret,
             },
             DeploymentSource::Dockerfile {

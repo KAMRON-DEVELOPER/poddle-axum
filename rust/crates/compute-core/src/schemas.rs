@@ -193,7 +193,7 @@ pub enum DeploymentSourceMessage {
     },
 
     Image {
-        clone_url: String,
+        url: String,
         image_pull_secret: Option<ImagePullSecret>,
     },
 }

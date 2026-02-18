@@ -5,7 +5,7 @@ use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
 use compute_core::schemas::{
-    DeploymentSourceRequest, MetricSnapshot, Pod, PodMeta, PodPhase, UpdateDeploymentMessage,
+    DeploymentSourceMessage, MetricSnapshot, Pod, PodMeta, PodPhase, UpdateDeploymentMessage,
 };
 use factory::factories::amqp::{Amqp, AmqpPropagator};
 use futures::StreamExt;
@@ -549,7 +549,7 @@ async fn handle_job_event(
                     user_id,
                     project_id,
                     deployment_id,
-                    source: Some(DeploymentSourceRequest::Image {
+                    source: Some(DeploymentSourceMessage::Image {
                         url: image,
                         image_pull_secret: None,
                     }),

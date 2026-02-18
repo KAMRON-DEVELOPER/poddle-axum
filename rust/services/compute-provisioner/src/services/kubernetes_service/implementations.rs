@@ -4,12 +4,11 @@ use base64::Engine;
 use compute_core::event::ComputeEvent;
 use compute_core::formatters::{format_namespace, format_resource_name};
 use compute_core::models::{DeploymentStatus, ResourceSpec};
-use compute_core::schemas::{DeploymentSource, ImagePullSecret};
+use compute_core::schemas::{DeploymentSource, DeploymentSourceMessage, ImagePullSecret};
 use compute_core::{
     channel_names::ChannelNames,
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
 };
-use ghrepo::GHRepo;
 use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
@@ -153,7 +152,7 @@ impl KubernetesService {
             .await?;
 
         match msg.source.clone() {
-            DeploymentSource::Image {
+            DeploymentSourceMessage::Image {
                 url,
                 image_pull_secret,
             } => {
@@ -226,8 +225,8 @@ impl KubernetesService {
                 info!("✅ Created deployment {}", msg.deployment_id);
                 Ok(())
             }
-            DeploymentSource::Dockerfile {
-                repo,
+            DeploymentSourceMessage::Dockerfile {
+                clone_url,
                 context_path,
                 dockerfile_path,
             } => {
@@ -250,28 +249,19 @@ impl KubernetesService {
 
                 let build_id = Uuid::new_v4().to_string();
 
-                let mut clone_url = repo.clone_url();
-                if let Some(pat) = pat {
-                    clone_url = clone_url.replacen(
-                        "https://",
-                        &format!("https://x-access-token:{pat}@"),
-                        1,
-                    );
-                }
-
                 self.spawn_buildkit_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    repo,
+                    &clone_url,
                     context_path.as_deref(),
                     dockerfile_path.as_deref(),
                 )
                 .await?;
                 Ok(())
             }
-            DeploymentSource::Code { repo } => {
+            DeploymentSourceMessage::Code { clone_url } => {
                 self.notify_status(
                     &project_id,
                     &deployment_id,
@@ -296,7 +286,7 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    repo,
+                    &clone_url,
                 )
                 .await?;
                 Ok(())
@@ -379,7 +369,7 @@ impl KubernetesService {
             .vault_secret_path
             .map(|_| format!("{}-secrets", name));
 
-        let materialize = matches!(msg.source, Some(DeploymentSource::Image { .. }))
+        let materialize = matches!(msg.source, Some(DeploymentSourceMessage::Image { .. }))
             && matches!(
                 deployment.source.0,
                 DeploymentSource::Code { .. } | DeploymentSource::Dockerfile { .. }
@@ -398,7 +388,7 @@ impl KubernetesService {
         }
 
         match msg.source {
-            Some(DeploymentSource::Image {
+            Some(DeploymentSourceMessage::Image {
                 url,
                 image_pull_secret,
             }) => {
@@ -438,8 +428,8 @@ impl KubernetesService {
                 )
                 .await?;
             }
-            Some(DeploymentSource::Dockerfile {
-                repo,
+            Some(DeploymentSourceMessage::Dockerfile {
+                clone_url,
                 context_path,
                 dockerfile_path,
             }) => {
@@ -469,13 +459,13 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    repo,
+                    &clone_url,
                     context_path.as_deref(),
                     dockerfile_path.as_deref(),
                 )
                 .await?;
             }
-            Some(DeploymentSource::Code { repo }) => {
+            Some(DeploymentSourceMessage::Code { clone_url }) => {
                 info!("🏗️ Source changed to Code. Building...");
 
                 self.notify_status(
@@ -502,7 +492,7 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    repo,
+                    &clone_url,
                 )
                 .await?;
             }
@@ -1445,7 +1435,7 @@ impl KubernetesService {
         deployment_id: &str,
         _preset_id: &str,
         build_id: &str,
-        _repo: GHRepo,
+        _repo: &str,
     ) -> Result<(), AppError> {
         Ok(())
     }
