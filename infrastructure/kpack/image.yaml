@@ -1,0 +1,15 @@
+apiVersion: kpack.io/v1alpha2
+kind: Image
+metadata:
+  name: tutorial-image
+  namespace: kpack
+spec:
+  tag: gcr.io/poddle-mvp/kpack
+  serviceAccountName: tutorial-service-account
+  builder:
+    name: default
+    kind: Builder
+  source:
+    git:
+      url: https://github.com/spring-projects/spring-petclinic
+      revision: 3be289517d320a47bb8f359acc1d1daf0829ed0b

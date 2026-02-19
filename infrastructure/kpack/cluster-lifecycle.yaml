@@ -1,0 +1,6 @@
+apiVersion: kpack.io/v1alpha2
+kind: ClusterLifecycle
+metadata:
+  name: default
+spec:
+  image: buildpacksio/lifecycle
