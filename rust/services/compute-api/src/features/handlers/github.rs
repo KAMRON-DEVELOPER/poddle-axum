@@ -1,24 +1,30 @@
 use axum::{
     Json,
     extract::{Query, State},
-    response::{IntoResponse, Redirect},
+    response::IntoResponse,
 };
 use compute_core::github_app::GithubApp;
 use factory::factories::database::Database;
-use http_contracts::list::schema::ListResponse;
+use http_contracts::{list::schema::ListResponse, message::MessageResponse};
 use reqwest::Client;
+use tracing::debug;
 use users_core::jwt::Claims;
 
-use crate::{config::Config, error::AppError, features::schemas::CallbackParams};
+use crate::{error::AppError, features::schemas::CallbackParams};
 
-#[tracing::instrument(name = "github_callback_handler", skip_all, fields(user_id = %claims.sub), err)]
-pub async fn github_callback_handler(
+#[tracing::instrument(name = "github_setup_handler", skip_all, fields(user_id = %claims.sub), err)]
+pub async fn github_setup_handler(
     claims: Claims,
-    State(cfg): State<Config>,
     State(db): State<Database>,
     Query(params): Query<CallbackParams>,
 ) -> Result<impl IntoResponse, AppError> {
     let user_id = claims.sub;
+
+    debug!(
+        "installation_id: {}, setup_action: {:?}",
+        params.installation_id, params.setup_action
+    );
+
     sqlx::query!(
         r#"
         INSERT INTO installations 
@@ -32,11 +38,9 @@ pub async fn github_callback_handler(
     .execute(&db.pool)
     .await?;
 
-    let redirect = Redirect::to(&format!(
-        "{}/dashboard?github_connected=true",
-        cfg.frontend_endpoint
-    ));
-    Ok(redirect.into_response())
+    Ok(Json(MessageResponse {
+        message: "Github connected".into(),
+    }))
 }
 
 #[tracing::instrument(name = "get_repositories_handler", skip_all, fields(user_id = %claims.sub), err)]
