@@ -390,6 +390,8 @@ impl KubernetesService {
 
         match msg.source {
             Some(DeploymentSourceMessage::InternalBuildComplete { url }) => {
+                info!("🏗️ Build finished. Materializing deployment for the first time...");
+
                 let preset =
                     DeploymentRepository::get_preset_by_id(&deployment.preset_id, &pool).await?;
 
@@ -405,15 +407,21 @@ impl KubernetesService {
                 };
                 let environment_variables = deployment.environment_variables.map(|j| j.0).flatten();
 
+                let otel_service_name = deployment.name;
+                let otel_resource_attributes = format!(
+                    "project_id={},deployment_id={},managed_by=poddle",
+                    msg.project_id, msg.deployment_id
+                );
+
                 self.apply_deployment(
-                    msg.name.as_deref(),
-                    None,
+                    Some(&otel_service_name),
+                    Some(&otel_resource_attributes),
                     &ns,
                     &name,
                     Some(&url),
                     None,
-                    msg.port.or(Some(deployment.port)),
-                    msg.desired_replicas.or(Some(deployment.desired_replicas)),
+                    Some(deployment.port),
+                    Some(deployment.desired_replicas),
                     Some(&resource_spec),
                     secret_ref,
                     environment_variables,
