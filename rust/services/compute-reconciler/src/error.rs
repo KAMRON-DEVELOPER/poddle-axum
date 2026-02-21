@@ -97,6 +97,8 @@ pub enum AppError {
     InvalidImageFormatError(String),
     #[error("HTTP request error: {0}")]
     Request(#[from] reqwest::Error),
+    #[error("UuidError: {0}")]
+    UuidError(#[from] uuid::Error),
 }
 
 impl IntoResponse for AppError {
@@ -226,6 +228,7 @@ impl IntoResponse for AppError {
             Self::InvalidImageFormatError(e) => (StatusCode::UNPROCESSABLE_ENTITY, e),
 
             Self::Request(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
+            Self::UuidError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };
 
         let body = Json(json!({"error": error_message}));

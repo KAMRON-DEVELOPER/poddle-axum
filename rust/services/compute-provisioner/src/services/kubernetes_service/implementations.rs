@@ -4,7 +4,7 @@ use base64::Engine;
 use compute_core::event::ComputeEvent;
 use compute_core::formatters::{format_namespace, format_resource_name};
 use compute_core::models::{DeploymentStatus, ResourceSpec};
-use compute_core::schemas::{DeploymentSource, DeploymentSourceMessage, ImagePullSecret};
+use compute_core::schemas::{DeploymentSourceMessage, ImagePullSecret};
 use compute_core::{
     channel_names::ChannelNames,
     schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
@@ -55,6 +55,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::services::kubernetes_service::KubernetesService;
 use crate::services::repository::DeploymentRepository;
+use compute_core::crds::{BuilderReference, GitSource, Image, ImageSpec, SourceConfig};
 
 impl KubernetesService {
     pub async fn preflight(&self) -> Result<(), AppError> {
@@ -152,6 +153,7 @@ impl KubernetesService {
             .await?;
 
         match msg.source.clone() {
+            DeploymentSourceMessage::InternalBuildComplete { .. } => Ok(()),
             DeploymentSourceMessage::Image {
                 url,
                 image_pull_secret,
@@ -287,6 +289,7 @@ impl KubernetesService {
                     &preset_id.to_string(),
                     &build_id,
                     &clone_url,
+                    &ns,
                 )
                 .await?;
                 Ok(())
@@ -369,12 +372,10 @@ impl KubernetesService {
             .vault_secret_path
             .map(|_| format!("{}-secrets", name));
 
-        let materialize = matches!(msg.source, Some(DeploymentSourceMessage::Image { .. }))
-            && matches!(
-                deployment.source.0,
-                DeploymentSource::Code { .. } | DeploymentSource::Dockerfile { .. }
-            );
-
+        let materialize = matches!(
+            msg.source,
+            Some(DeploymentSourceMessage::InternalBuildComplete { .. })
+        );
         if msg.port.is_some() || msg.domain.is_some() || msg.subdomain.is_some() || materialize {
             let port = msg.port.unwrap_or(deployment.port);
 
@@ -388,6 +389,48 @@ impl KubernetesService {
         }
 
         match msg.source {
+            Some(DeploymentSourceMessage::InternalBuildComplete { url }) => {
+                let preset =
+                    DeploymentRepository::get_preset_by_id(&deployment.preset_id, &pool).await?;
+
+                let resource_spec = ResourceSpec {
+                    cpu_request_millicores: preset.cpu_millicores
+                        + deployment.addon_cpu_millicores.unwrap_or_default(),
+                    cpu_limit_millicores: preset.cpu_millicores
+                        + deployment.addon_cpu_millicores.unwrap_or_default(),
+                    memory_request_mb: preset.memory_mb
+                        + deployment.addon_memory_mb.unwrap_or_default(),
+                    memory_limit_mb: preset.memory_mb
+                        + deployment.addon_memory_mb.unwrap_or_default(),
+                };
+                let environment_variables = deployment.environment_variables.map(|j| j.0).flatten();
+
+                self.apply_deployment(
+                    msg.name.as_deref(),
+                    None,
+                    &ns,
+                    &name,
+                    Some(&url),
+                    None,
+                    msg.port.or(Some(deployment.port)),
+                    msg.desired_replicas.or(Some(deployment.desired_replicas)),
+                    Some(&resource_spec),
+                    secret_ref,
+                    environment_variables,
+                    Some(&labels),
+                    &selector,
+                )
+                .await?;
+
+                self.finalize_status(
+                    &msg.project_id,
+                    &deployment_id,
+                    DeploymentStatus::Running,
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+            }
             Some(DeploymentSourceMessage::Image {
                 url,
                 image_pull_secret,
@@ -493,6 +536,7 @@ impl KubernetesService {
                     &preset_id.to_string(),
                     &build_id,
                     &clone_url,
+                    &ns,
                 )
                 .await?;
             }
@@ -1279,8 +1323,14 @@ impl KubernetesService {
     ) -> Result<(), AppError> {
         let namespace = "poddle-builds";
         let job_name = format!("build-{}", build_id);
-        let image_name = format!("me-central1-docker.pkg.dev/poddle-mvp/poddle/{}", build_id);
-        let cache = format!("{}-cache", build_id);
+        let image_name = format!(
+            "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}",
+            build_id
+        );
+        let cache = format!(
+            "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}-cache",
+            build_id
+        );
 
         let context = context_path.unwrap_or(".");
         let dockerfile_path = dockerfile_path.unwrap_or("Dockerfile");
@@ -1344,7 +1394,7 @@ impl KubernetesService {
                     ..Default::default()
                 },
                 VolumeMount {
-                    name: "registery-secret-volume".into(),
+                    name: "registry-secret-volume".into(),
                     mount_path: "/home/user/.docker".into(),
                     ..Default::default()
                 },
@@ -1399,9 +1449,9 @@ impl KubernetesService {
                                 ..Default::default()
                             },
                             Volume {
-                                name: "registery-secret-volume".into(),
+                                name: "registry-secret-volume".into(),
                                 secret: Some(SecretVolumeSource {
-                                    secret_name: Some("registery-secret".into()),
+                                    secret_name: Some("registry-secret".into()),
                                     items: Some(vec![KeyToPath {
                                         key: ".dockerconfigjson".into(),
                                         path: "config.json".into(),
@@ -1431,12 +1481,54 @@ impl KubernetesService {
     #[tracing::instrument(name = "kubernetes_service.spawn_kpack_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
     pub async fn spawn_kpack_job(
         &self,
-        _project_id: &str,
+        project_id: &str,
         deployment_id: &str,
-        _preset_id: &str,
+        preset_id: &str,
         build_id: &str,
-        _repo: &str,
+        ns: &str,
+        clone_url: &str,
     ) -> Result<(), AppError> {
+        let spec = ImageSpec {
+            tag: "me-central1-docker.pkg.dev/poddle-mvp/kpack".to_string(),
+            service_account_name: "".to_string(),
+            builder: BuilderReference {
+                name: "default".into(),
+                kind: Some("Builder".into()),
+            },
+            source: SourceConfig {
+                git: Some(GitSource {
+                    url: clone_url.to_string(),
+                    revision: "master".into(),
+                }),
+            },
+            ..Default::default()
+        };
+
+        let mut image = Image::new(build_id, spec);
+        image.metadata.namespace = Some(ns.to_string());
+
+        let labels: BTreeMap<String, String> = BTreeMap::from([
+            ("poddle.io/managed-by".into(), "poddle".into()),
+            ("poddle.io/project-id".into(), project_id.into()),
+            ("poddle.io/deployment-id".into(), deployment_id.into()),
+            ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
+        ]);
+        image.metadata.labels = Some(labels);
+
+        let api: Api<Image> = Api::namespaced(self.client.clone(), ns);
+
+        api.patch(
+            build_id,
+            &PatchParams::apply("poddle-provisioner").force(),
+            &Patch::Apply(&image),
+        )
+        .await
+        .map_err(|e| {
+            error!(deployment_id=%deployment_id, build_id=%build_id, error = %e, "🚨 Image SSA failed");
+            AppError::InternalServerError(format!("🚨 Image SSA failed: {}", e))
+        })?;
+
         Ok(())
     }
 

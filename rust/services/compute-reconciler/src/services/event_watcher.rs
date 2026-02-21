@@ -1,6 +1,7 @@
 use chrono::Utc;
 use compute_core::cache_keys::CacheKeys;
 use compute_core::channel_names::ChannelNames;
+use compute_core::crds::Build;
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
@@ -20,7 +21,7 @@ use lapin::types::FieldTable;
 use redis::aio::MultiplexedConnection;
 use redis::{AsyncTypedCommands, pipe};
 use sqlx::PgPool;
-use tracing::{Instrument, error, info, info_span, warn};
+use tracing::{Instrument, debug, error, info, info_span, warn};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -37,11 +38,14 @@ pub async fn event_watcher(
 
     let deployment: Api<K8sDeployment> = Api::all(client.clone());
     let pod: Api<K8sPod> = Api::all(client.clone());
-    let job: Api<Job> = Api::all(client.clone());
+    let buildkit_job: Api<Job> = Api::all(client.clone());
+    let kpack_build: Api<Build> = Api::all(client.clone());
 
     let mut deployment_stream = kube::runtime::watcher(deployment, watcher_config.clone()).boxed();
     let mut pod_stream = kube::runtime::watcher(pod, watcher_config.clone()).boxed();
-    let mut job_stream = kube::runtime::watcher(job, watcher_config).boxed();
+    let mut buildkit_job_stream =
+        kube::runtime::watcher(buildkit_job, watcher_config.clone()).boxed();
+    let mut kpack_build_stream = kube::runtime::watcher(kpack_build, watcher_config).boxed();
 
     info!("🔍 Starting Kubernetes watchers");
     loop {
@@ -56,9 +60,14 @@ pub async fn event_watcher(
                     error!(error = %e, "❌ Failed to handle pod event");
                 }
             }
-            Some(event) = job_stream.next() => {
-                if let Err(e) = handle_job_event(event, &cfg, &pool, &mut redis, &amqp).await {
+            Some(event) = buildkit_job_stream.next() => {
+                if let Err(e) = handle_buildkit_job_event(event, &cfg, &pool, &mut redis, &amqp).await {
                     error!(error = %e, "❌ Failed to handle job event");
+                }
+            }
+            Some(event) = kpack_build_stream.next() => {
+                if let Err(e) = handle_kpack_build_event(event, &pool, &mut redis, &amqp).await {
+                    error!(error = %e, "❌ Failed to handle kpack build event");
                 }
             }
             else => {
@@ -497,8 +506,8 @@ async fn handle_pod_event(
     Ok(())
 }
 
-#[tracing::instrument("handle_job_event", skip_all, err)]
-async fn handle_job_event(
+#[tracing::instrument("handle_buildkit_job_event", skip_all, err)]
+async fn handle_buildkit_job_event(
     event: Result<Event<Job>, kube::runtime::watcher::Error>,
     _cfg: &Config,
     pool: &PgPool,
@@ -534,7 +543,10 @@ async fn handle_job_event(
                 info!("✅ Build Job {} Succeeded", name);
 
                 // Construct the new image string, this depends on build
-                let image = format!("me-central1-docker.pkg.dev/poddle-mvp/poddle/{}", build_id);
+                let image = format!(
+                    "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}",
+                    build_id
+                );
 
                 let user_id = sqlx::query_scalar!(
                     "SELECT user_id FROM deployments WHERE id = $1",
@@ -549,10 +561,7 @@ async fn handle_job_event(
                     user_id,
                     project_id,
                     deployment_id,
-                    source: Some(DeploymentSourceMessage::Image {
-                        url: image,
-                        image_pull_secret: None,
-                    }),
+                    source: Some(DeploymentSourceMessage::InternalBuildComplete { url: image }),
                     name: None,
                     port: None,
                     desired_replicas: None,
@@ -613,6 +622,140 @@ async fn handle_job_event(
         }
         _ => {}
     }
+    Ok(())
+}
+
+#[tracing::instrument("handle_kpack_build_event", skip_all, err)]
+async fn handle_kpack_build_event(
+    event: Result<Event<Build>, kube::runtime::watcher::Error>,
+    pool: &PgPool,
+    con: &mut MultiplexedConnection,
+    amqp: &Amqp,
+) -> Result<(), AppError> {
+    match event {
+        Ok(Event::Apply(build)) => {
+            let name = build.metadata.name.clone().unwrap_or_default();
+            let labels = build.metadata.labels.as_ref();
+
+            let deployment_id = labels
+                .and_then(|l| l.get("poddle.io/deployment-id"))
+                .and_then(|id| Uuid::parse_str(id).ok());
+            let project_id = labels
+                .and_then(|l| l.get("poddle.io/project-id"))
+                .and_then(|id| Uuid::parse_str(id).ok());
+            let build_id = labels.and_then(|l| l.get("poddle.io/build-id"));
+
+            if project_id.is_none() || deployment_id.is_none() || build_id.is_none() {
+                return Ok(());
+            }
+            let project_id = project_id.unwrap();
+            let deployment_id = deployment_id.unwrap();
+            // let build_id = build_id.unwrap();
+
+            // kpack updates the status block as the build progresses
+            if let Some(status) = build.status {
+                if let Some(conditions) = status.conditions {
+                    for cond in conditions {
+                        if cond.r#type == "Succeeded" {
+                            if cond.status == "True" {
+                                let image = status.latest_image.clone().unwrap_or_default();
+
+                                debug!(
+                                    "status.latest_image in handle_kpack_build_event: {}",
+                                    image
+                                );
+
+                                if image.is_empty() {
+                                    error!(
+                                        "❌ kpack build {} succeeded but no latest_image found in status",
+                                        name
+                                    );
+                                    return Ok(());
+                                }
+
+                                // Get user_id for the message
+                                let user_id = sqlx::query_scalar!(
+                                    "SELECT user_id FROM deployments WHERE id = $1",
+                                    deployment_id
+                                )
+                                .fetch_one(pool)
+                                .await?;
+
+                                // 3. Construct the Update message to trigger the final Deployment
+                                let message = UpdateDeploymentMessage {
+                                    user_id,
+                                    project_id,
+                                    deployment_id,
+                                    source: Some(DeploymentSourceMessage::InternalBuildComplete {
+                                        url: image,
+                                    }),
+                                    name: None,
+                                    port: None,
+                                    desired_replicas: None,
+                                    preset_id: None,
+                                    resource_spec: None,
+                                    secrets: None,
+                                    environment_variables: None,
+                                    labels: None,
+                                    domain: None,
+                                    subdomain: None,
+                                    timestamp: Utc::now().timestamp(),
+                                };
+
+                                let channel = amqp.channel().await;
+                                let payload = serde_json::to_vec(&message)?;
+                                let mut headers = FieldTable::default();
+                                AmqpPropagator::inject_context(&mut headers);
+
+                                // 4. Publish to Provisioner
+                                channel
+                                    .basic_publish(
+                                        "compute",
+                                        "compute.update",
+                                        BasicPublishOptions::default(),
+                                        &payload,
+                                        BasicProperties::default()
+                                            .with_delivery_mode(2)
+                                            .with_content_type("application/json".into())
+                                            .with_headers(headers),
+                                    )
+                                    .instrument(info_span!("basic_publish.compute.update"))
+                                    .await?
+                                    .await?;
+
+                                info!(
+                                    "📤 Published deployment update message for completed kpack build {}",
+                                    deployment_id
+                                );
+                            } else if cond.status == "False" {
+                                error!("❌ kpack build {} failed. Reason: {:?}", name, cond.reason);
+                                sqlx::query!(
+                                    "UPDATE deployments SET status = 'build_failed' WHERE id = $1",
+                                    deployment_id
+                                )
+                                .execute(pool)
+                                .await?;
+
+                                let channel =
+                                    ChannelNames::deployment_status(&deployment_id.to_string());
+                                let message = ComputeEvent::DeploymentStatusUpdate {
+                                    id: &deployment_id,
+                                    status: DeploymentStatus::BuildFailed,
+                                };
+                                con.publish(channel, message).await?;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(Event::Delete(build)) => {
+            let name = build.metadata.name.unwrap_or_default();
+            info!("🗑️ kpack build {} was deleted", name);
+        }
+        _ => {}
+    }
+
     Ok(())
 }
 

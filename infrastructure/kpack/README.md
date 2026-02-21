@@ -66,5 +66,5 @@ Replace `DOCKER-IMAGE-TAG` with a valid image tag that exists in the registry yo
 An image resource is the specification for an OCI image that kpack should build and manage.
 
 ```bash
-
+kubectl apply -f infrastructure/kpack/image.yaml
 ```

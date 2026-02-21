@@ -840,6 +840,8 @@ dependencies = [
  "chrono",
  "ghrepo",
  "jsonwebtoken",
+ "k8s-openapi",
+ "kube",
  "once_cell",
  "redis",
  "redis-derive",

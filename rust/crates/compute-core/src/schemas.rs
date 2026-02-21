@@ -182,19 +182,20 @@ pub struct DeploymentEventResponse {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DeploymentSourceMessage {
-    Code {
-        clone_url: String,
+    Image {
+        url: String,
+        image_pull_secret: Option<ImagePullSecret>,
     },
-
     Dockerfile {
         clone_url: String,
         context_path: Option<String>,
         dockerfile_path: Option<String>,
     },
-
-    Image {
+    Code {
+        clone_url: String,
+    },
+    InternalBuildComplete {
         url: String,
-        image_pull_secret: Option<ImagePullSecret>,
     },
 }
 

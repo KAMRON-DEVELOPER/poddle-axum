@@ -1,6 +1,7 @@
 pub mod cache_keys;
 pub mod channel_names;
 pub mod configs;
+pub mod crds;
 pub mod determiners;
 pub mod event;
 pub mod formatters;

@@ -1,15 +1,15 @@
 apiVersion: kpack.io/v1alpha2
 kind: Image
 metadata:
-  name: tutorial-image
+  name: kpack-image
   namespace: kpack
 spec:
-  tag: gcr.io/poddle-mvp/kpack
-  serviceAccountName: tutorial-service-account
+  tag: me-central1-docker.pkg.dev/poddle-mvp/kpack
+  serviceAccountName: kpack-sa
   builder:
     name: default
     kind: Builder
   source:
     git:
-      url: https://github.com/spring-projects/spring-petclinic
-      revision: 3be289517d320a47bb8f359acc1d1daf0829ed0b
+      url: https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
+      revision: master # # Specify the branch, tag, or commit SHA here

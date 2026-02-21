@@ -21,3 +21,5 @@ rustls-pemfile.workspace = true
 jsonwebtoken.workspace = true
 thiserror.workspace = true
 reqwest.workspace = true
+kube.workspace = true
+k8s-openapi.workspace = true
