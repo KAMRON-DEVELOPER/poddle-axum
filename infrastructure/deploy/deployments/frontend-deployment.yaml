@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: kamronbekdev/poddle-frontend:1.0.4
+          image: kamronbekdev/poddle-frontend:1.0.5
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000

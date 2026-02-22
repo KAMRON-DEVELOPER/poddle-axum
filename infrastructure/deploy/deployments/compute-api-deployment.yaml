@@ -24,7 +24,7 @@ spec:
                 path: config.json
       containers:
         - name: compute-api
-          image: kamronbekdev/poddle-compute-api:1.0.0
+          image: kamronbekdev/poddle-compute-api:1.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
