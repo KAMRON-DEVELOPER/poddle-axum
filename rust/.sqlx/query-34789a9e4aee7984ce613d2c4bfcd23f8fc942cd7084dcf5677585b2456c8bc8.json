@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            UPDATE deployments AS d\n            SET\n                name = COALESCE($3, d.name),\n                image = COALESCE($4, d.image),\n                port = COALESCE($5, d.port),\n                desired_replicas = COALESCE($6, d.desired_replicas),\n                preset_id = COALESCE($7, d.preset_id),\n                addon_cpu_millicores = COALESCE($8, d.addon_cpu_millicores),\n                addon_memory_mb = COALESCE($9, d.addon_memory_mb),\n                environment_variables = COALESCE($10, d.environment_variables),\n                labels = COALESCE($11, d.labels),\n                domain = COALESCE($12, d.domain),\n                subdomain = COALESCE($13, d.subdomain)\n            FROM projects p\n            JOIN deployments d2 ON d2.project_id = p.id\n            WHERE\n                d.id = d2.id\n                AND d.id = $2\n                AND p.owner_id = $1\n            RETURNING\n                d.id,\n                d.user_id,\n                d.project_id,\n                d.name,\n                d.image,\n                d.port,\n                d.desired_replicas,\n                d.ready_replicas,\n                d.available_replicas,\n                d.preset_id,\n                d.addon_cpu_millicores,\n                d.addon_memory_mb,\n                d.vault_secret_path,\n                d.secret_keys,\n                d.environment_variables AS \"environment_variables: Json<Option<HashMap<String, String>>>\",\n                d.labels AS \"labels: Json<Option<HashMap<String, String>>>\",\n                d.status AS \"status: DeploymentStatus\",\n                d.domain,\n                d.subdomain,\n                d.service,\n                d.created_at,\n                d.updated_at\n            ",
+  "query": "\n            SELECT\n                d.id,\n                d.user_id,\n                d.project_id,\n                d.name,\n                d.source AS \"source: Json<DeploymentSource>\",\n                d.port,\n                d.desired_replicas,\n                d.ready_replicas,\n                d.available_replicas,\n                d.preset_id,\n                d.addon_cpu_millicores,\n                d.addon_memory_mb,\n                d.vault_secret_path,\n                d.secret_keys,\n                d.environment_variables AS \"environment_variables: Json<Option<HashMap<String, String>>>\",\n                d.labels AS \"labels: Json<Option<HashMap<String, String>>>\",\n                d.status AS \"status: DeploymentStatus\",\n                d.domain,\n                d.subdomain,\n                d.service,\n                d.created_at,\n                d.updated_at\n            FROM deployments d\n            INNER JOIN projects p ON d.project_id = p.id\n            WHERE d.id = $1 AND p.owner_id = $2\n            ",
   "describe": {
     "columns": [
       {
@@ -25,8 +25,8 @@
       },
       {
         "ordinal": 4,
-        "name": "image",
-        "type_info": "Varchar"
+        "name": "source: Json<DeploymentSource>",
+        "type_info": "Jsonb"
       },
       {
         "ordinal": 5,
@@ -91,6 +91,7 @@
             "name": "deployment_status",
             "kind": {
               "Enum": [
+                "building",
                 "queued",
                 "provisioning",
                 "starting",
@@ -100,6 +101,7 @@
                 "updating",
                 "suspended",
                 "failed",
+                "build_failed",
                 "deleted",
                 "image_pull_error"
               ]
@@ -136,18 +138,7 @@
     "parameters": {
       "Left": [
         "Uuid",
-        "Uuid",
-        "Varchar",
-        "Varchar",
-        "Int4",
-        "Int4",
-        "Uuid",
-        "Int4",
-        "Int4",
-        "Jsonb",
-        "Jsonb",
-        "Varchar",
-        "Varchar"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -175,5 +166,5 @@
       false
     ]
   },
-  "hash": "4c86c1cf735ba27a4ee295d535881fe2e9401e272cec0efb4c02e5fe927c5da8"
+  "hash": "34789a9e4aee7984ce613d2c4bfcd23f8fc942cd7084dcf5677585b2456c8bc8"
 }

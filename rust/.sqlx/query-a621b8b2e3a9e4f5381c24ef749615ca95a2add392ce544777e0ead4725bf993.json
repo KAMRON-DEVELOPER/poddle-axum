@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO deployments (\n                id,\n                user_id,\n                project_id,\n                name,\n                image,\n                port,\n                desired_replicas,\n                preset_id,\n                addon_cpu_millicores,\n                addon_memory_mb,\n                environment_variables,\n                labels,\n                domain,\n                subdomain,\n                service\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n            RETURNING\n                id,\n                user_id,\n                project_id,\n                name,\n                image,\n                port,\n                desired_replicas,\n                ready_replicas,\n                available_replicas,\n                preset_id,\n                addon_cpu_millicores,\n                addon_memory_mb,\n                vault_secret_path,\n                secret_keys,\n                environment_variables AS \"environment_variables: Json<Option<HashMap<String, String>>>\",\n                labels AS \"labels: Json<Option<HashMap<String, String>>>\",\n                status AS \"status: DeploymentStatus\",\n                domain,\n                subdomain,\n                service,\n                created_at,\n                updated_at\n            ",
+  "query": "\n            INSERT INTO deployments (\n                id,\n                user_id,\n                project_id,\n                name,\n                source,\n                port,\n                desired_replicas,\n                preset_id,\n                addon_cpu_millicores,\n                addon_memory_mb,\n                environment_variables,\n                labels,\n                domain,\n                subdomain,\n                service\n            )\n            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)\n            RETURNING\n                id,\n                user_id,\n                project_id,\n                name,\n                source AS \"source: Json<DeploymentSource>\",\n                port,\n                desired_replicas,\n                ready_replicas,\n                available_replicas,\n                preset_id,\n                addon_cpu_millicores,\n                addon_memory_mb,\n                vault_secret_path,\n                secret_keys,\n                environment_variables AS \"environment_variables: Json<Option<HashMap<String, String>>>\",\n                labels AS \"labels: Json<Option<HashMap<String, String>>>\",\n                status AS \"status: DeploymentStatus\",\n                domain,\n                subdomain,\n                service,\n                created_at,\n                updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -25,8 +25,8 @@
       },
       {
         "ordinal": 4,
-        "name": "image",
-        "type_info": "Varchar"
+        "name": "source: Json<DeploymentSource>",
+        "type_info": "Jsonb"
       },
       {
         "ordinal": 5,
@@ -91,6 +91,7 @@
             "name": "deployment_status",
             "kind": {
               "Enum": [
+                "building",
                 "queued",
                 "provisioning",
                 "starting",
@@ -100,6 +101,7 @@
                 "updating",
                 "suspended",
                 "failed",
+                "build_failed",
                 "deleted",
                 "image_pull_error"
               ]
@@ -139,7 +141,7 @@
         "Uuid",
         "Uuid",
         "Varchar",
-        "Varchar",
+        "Jsonb",
         "Int4",
         "Int4",
         "Uuid",
@@ -177,5 +179,5 @@
       false
     ]
   },
-  "hash": "e6382f5f3626f9dae7908490aefd6d2509770d53960b56d33b216d38252dd5f3"
+  "hash": "a621b8b2e3a9e4f5381c24ef749615ca95a2add392ce544777e0ead4725bf993"
 }

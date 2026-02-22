@@ -21,6 +21,7 @@
             "name": "deployment_status",
             "kind": {
               "Enum": [
+                "building",
                 "queued",
                 "provisioning",
                 "starting",
@@ -30,6 +31,7 @@
                 "updating",
                 "suspended",
                 "failed",
+                "build_failed",
                 "deleted",
                 "image_pull_error"
               ]
