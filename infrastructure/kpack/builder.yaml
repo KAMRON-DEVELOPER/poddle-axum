@@ -5,13 +5,16 @@ metadata:
   namespace: kpack-build
 spec:
   serviceAccountName: kpack-sa
-  tag: me-central1-docker.pkg.dev/poddle-mvp/kpack
+  tag: me-central1-docker.pkg.dev/poddle-mvp/kpack/builder
   stack:
     name: base
     kind: ClusterStack
   store:
     name: default
     kind: ClusterStore
+  lifecycle:
+    name: default
+    kind: ClusterLifecycle
   order:
     - group:
         - id: paketo-buildpacks/python
