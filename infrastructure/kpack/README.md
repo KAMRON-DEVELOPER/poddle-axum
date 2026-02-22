@@ -2,6 +2,11 @@
 
 <https://github.com/buildpacks-community/kpack/blob/main/docs/tutorial.md>
 
+```bash
+kubectl create namespace kpack
+kubectl create namespace buildkit
+```
+
 1. Create a secret with push credentials
 
 ```bash
