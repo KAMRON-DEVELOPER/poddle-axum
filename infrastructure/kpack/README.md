@@ -43,7 +43,7 @@ kubectl apply -f infrastructure/kpack/cluster-store.yaml
 A stack resource is the specification for a [cloud native buildpacks stack](https://buildpacks.io/docs/concepts/components/stack/) used during build and in the resulting app image.
 
 ```bash
-kubectl apply -f infrastructure/kpack/cluster-store.yaml
+kubectl apply -f infrastructure/kpack/cluster-stack.yaml
 ```
 
 1. Apply a lifecycle resource

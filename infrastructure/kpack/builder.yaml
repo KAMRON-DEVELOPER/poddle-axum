@@ -14,6 +14,16 @@ spec:
     kind: ClusterStore
   order:
     - group:
-        - id: paketo-buildpacks/java
+        - id: paketo-buildpacks/python
     - group:
         - id: paketo-buildpacks/nodejs
+    - group:
+        - id: paketo-buildpacks/php
+    - group:
+        - id: paketo-buildpacks/ruby
+    - group:
+        - id: paketo-buildpacks/go
+    - group:
+        - id: paketo-buildpacks/java
+    - group:
+        - id: paketo-buildpacks/dotnet
