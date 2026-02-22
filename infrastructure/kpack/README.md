@@ -18,7 +18,7 @@ kubectl create secret docker-registry registry-secret \
 
 # jq -c makes the JSON a single line
 kubectl create secret docker-registry registry-secret \
-  --namespace=kpack-build \
+  --namespace=kpack \
   --docker-server="https://me-central1-docker.pkg.dev" \
   --docker-username="_json_key" \
   --docker-password="$(jq -c . < certs/poddle-artifact-registery-key.json)"
