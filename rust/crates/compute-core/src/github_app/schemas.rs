@@ -13,6 +13,7 @@ pub struct InstallationReposResponse {
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all(serialize = "camelCase"))]
 pub struct Repository {
     pub id: i64,
     pub name: String,
