@@ -14,7 +14,7 @@ kubectl create secret docker-registry registry-secret \
   --docker-username=my-dockerhub-username \
   --docker-password=my-dockerhub-password \
   --docker-server=https://index.docker.io/v1/ \
-  --namespace kpack
+  --namespace kpack-build
 
 # jq -c makes the JSON a single line
 kubectl create secret docker-registry registry-secret \
@@ -22,6 +22,14 @@ kubectl create secret docker-registry registry-secret \
   --docker-server="https://me-central1-docker.pkg.dev" \
   --docker-username="_json_key" \
   --docker-password="$(jq -c . < certs/poddle-artifact-registery-key.json)"
+
+# image pull/rate limit
+
+kubectl create secret docker-registry docker-hub-creds \
+  --docker-username=kamronbekdev \
+  --docker-password=<your-docker-pat> \
+  --docker-server=https://index.docker.io/v1/ \
+  -n kpack-build
 ```
 
 1. Create a service account
