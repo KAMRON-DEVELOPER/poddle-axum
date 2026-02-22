@@ -14,7 +14,7 @@ spec:
     - image: paketobuildpacks/php
     # - image: paketobuildpacks/php-dist
     - image: paketobuildpacks/ruby
-    - image: paketobuildpacks/rust
+    # - image: paketobuildpacks/rust
     - image: paketobuildpacks/go
     # - image: paketobuildpacks/go-dist
     # - image: paketobuildpacks/go-build
