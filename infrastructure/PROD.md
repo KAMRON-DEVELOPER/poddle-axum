@@ -300,8 +300,11 @@ Apply RBAC and restart provisioner
 ```bash
 kubectl apply -f infrastructure/deploy/rbacks/compute-provisioner-cr.yaml
 kubectl apply -f infrastructure/deploy/rbacks/compute-provisioner-crb.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-reconciler-cr.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-reconciler-crb.yaml
 
 kubectl rollout restart deployment/compute-provisioner -n poddle-system
+kubectl rollout restart deployment/compute-reconciler -n poddle-system
 ```
 
 Verify with `kubectl auth can-i`
