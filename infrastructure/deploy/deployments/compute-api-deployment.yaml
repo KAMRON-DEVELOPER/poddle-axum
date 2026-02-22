@@ -22,6 +22,9 @@ spec:
             items:
               - key: config.json
                 path: config.json
+        - name: github-key-volume
+          secret:
+            secretName: github-app-key
       containers:
         - name: compute-api
           image: kamronbekdev/poddle-compute-api:1.0.1
@@ -39,6 +42,9 @@ spec:
             - name: config-volume
               mountPath: /app/services/compute-api/config.json
               subPath: config.json
+              readOnly: true
+            - name: github-key-volume
+              mountPath: /etc/secrets/github
               readOnly: true
           readinessProbe:
             httpGet: { path: /health, port: 8000 }

@@ -277,3 +277,11 @@ kubectl create secret docker-registry registry-secret \
   --docker-username="_json_key" \
   --docker-password="$(jq -c . < certs/poddle-artifact-registery-key.json)"
 ```
+
+## GITHUB APP KEY(PEM)
+
+```bash
+kubectl create secret generic github-app-key \
+  --from-file=private-key.pem=certs/poddle-mvp.2026-02-17.private-key.pem \
+  -n poddle-system
+```
