@@ -19,5 +19,5 @@ spec:
     # - image: paketobuildpacks/go-dist
     # - image: paketobuildpacks/go-build
     - image: paketobuildpacks/java
-    - image: paketobuildpacks/dotnet
+    # - image: paketobuildpacks/dotnet
     # - image: paketobuildpacks/dotnet-core
