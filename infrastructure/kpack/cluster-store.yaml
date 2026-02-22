@@ -4,11 +4,11 @@ metadata:
   name: default
 spec:
   sources:
-    - image: ghcr.io/paketo-buildpacks/python
-    - image: ghcr.io/paketo-buildpacks/nodejs
-    - image: ghcr.io/paketo-buildpacks/php
-    - image: ghcr.io/paketo-buildpacks/ruby
-    - image: ghcr.io/paketo-buildpacks/rust
-    - image: ghcr.io/paketo-buildpacks/go
-    - image: ghcr.io/paketo-buildpacks/java
-    - image: ghcr.io/paketo-buildpacks/dotnet
+    - image: paketobuildpacks/python
+    - image: paketobuildpacks/nodejs
+    - image: paketobuildpacks/php
+    - image: paketobuildpacks/ruby
+    - image: paketobuildpacks/rust
+    - image: paketobuildpacks/go
+    - image: paketobuildpacks/java
+    - image: paketobuildpacks/dotnet

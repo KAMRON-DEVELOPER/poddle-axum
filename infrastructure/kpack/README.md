@@ -25,7 +25,7 @@ kubectl create secret docker-registry registry-secret \
 
 # image pull/rate limit
 
-kubectl create secret docker-registry docker-hub-creds \
+kubectl create secret docker-registry dockerhub-secret \
   --docker-username=kamronbekdev \
   --docker-password=<your-docker-pat> \
   --docker-server=https://index.docker.io/v1/ \
