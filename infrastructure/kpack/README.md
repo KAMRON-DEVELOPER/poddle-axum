@@ -81,3 +81,5 @@ An image resource is the specification for an OCI image that kpack should build 
 ```bash
 kubectl apply -f infrastructure/kpack/image.yaml
 ```
+
+## BUILDER
