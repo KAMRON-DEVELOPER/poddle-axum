@@ -36,3 +36,8 @@ rules:
   - apiGroups: [""]
     resources: ["services", "secrets"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+
+  # --- kpack ---
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
