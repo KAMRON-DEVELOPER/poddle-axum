@@ -4,7 +4,7 @@ metadata:
   name: fastapi-bookshop-image
   namespace: kpack-build
 spec:
-  tag: me-central1-docker.pkg.dev/poddle-mvp/kpack
+  tag: me-central1-docker.pkg.dev/poddle-mvp/kpack/fastapi-bookshop
   serviceAccountName: kpack-sa
   builder:
     name: default
