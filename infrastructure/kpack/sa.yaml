@@ -5,6 +5,7 @@ metadata:
   namespace: kpack-build
 secrets:
   - name: registry-secret
-  - name: dockerhub-secret
+  # - name: dockerhub-secret
 imagePullSecrets:
   - name: registry-secret
+  # - name: dockerhub-secret

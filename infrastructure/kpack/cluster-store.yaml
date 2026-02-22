@@ -3,12 +3,15 @@ kind: ClusterStore
 metadata:
   name: default
 spec:
+  serviceAccountRef:
+    name: kpack-sa
+    namespace: kpack-build
   sources:
     - image: paketobuildpacks/python
     - image: paketobuildpacks/nodejs
     - image: paketobuildpacks/php
     - image: paketobuildpacks/ruby
-    - image: paketobuildpacks/rust
+    # - image: paketobuildpacks/rust
     - image: paketobuildpacks/go
     - image: paketobuildpacks/java
-    - image: paketobuildpacks/dotnet
+    # - image: paketobuildpacks/dotnet
