@@ -4,28 +4,28 @@ metadata:
   name: default
   namespace: kpack-build
 spec:
-serviceAccountName: kpack-sa
-tag: me-central1-docker.pkg.dev/poddle-mvp/kpack
-stack:
-  name: base
-  kind: ClusterStack
-store:
-  name: default
-  kind: ClusterStore
-order:
-  - group:
-      - id: paketo-buildpacks/python
-  - group:
-      - id: paketo-buildpacks/nodejs
-  - group:
-      - id: paketo-buildpacks/php
-  - group:
-      - id: paketo-buildpacks/ruby
-  - group:
-      - id: paketo-buildpacks/go
-  # - group:
-  #     - id: paketo-buildpacks/rust
-  - group:
-      - id: paketo-buildpacks/java
-# - group:
-#     - id: paketo-buildpacks/dotnet
+  serviceAccountName: kpack-sa
+  tag: me-central1-docker.pkg.dev/poddle-mvp/kpack
+  stack:
+    name: base
+    kind: ClusterStack
+  store:
+    name: default
+    kind: ClusterStore
+  order:
+    - group:
+        - id: paketo-buildpacks/python
+    - group:
+        - id: paketo-buildpacks/nodejs
+    - group:
+        - id: paketo-buildpacks/php
+    - group:
+        - id: paketo-buildpacks/ruby
+    - group:
+        - id: paketo-buildpacks/go
+    # - group:
+    #     - id: paketo-buildpacks/rust
+    - group:
+        - id: paketo-buildpacks/java
+    # - group:
+    #     - id: paketo-buildpacks/dotnet
