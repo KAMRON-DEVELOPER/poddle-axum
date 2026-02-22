@@ -288,7 +288,6 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    &ns,
                     &clone_url,
                 )
                 .await?;
@@ -543,7 +542,6 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    &ns,
                     &clone_url,
                 )
                 .await?;
@@ -1493,7 +1491,6 @@ impl KubernetesService {
         deployment_id: &str,
         preset_id: &str,
         build_id: &str,
-        ns: &str,
         clone_url: &str,
     ) -> Result<(), AppError> {
         let spec = ImageSpec {
@@ -1516,7 +1513,7 @@ impl KubernetesService {
         };
 
         let mut image = Image::new(build_id, spec);
-        image.metadata.namespace = Some(ns.to_string());
+        image.metadata.namespace = Some("kpack-build".to_string());
 
         let labels: BTreeMap<String, String> = BTreeMap::from([
             ("poddle.io/managed-by".into(), "poddle".into()),
@@ -1527,7 +1524,7 @@ impl KubernetesService {
         ]);
         image.metadata.labels = Some(labels);
 
-        let api: Api<Image> = Api::namespaced(self.client.clone(), ns);
+        let api: Api<Image> = Api::namespaced(self.client.clone(), "kpack-build");
 
         api.patch(
             build_id,

@@ -1,7 +1,7 @@
 use chrono::Utc;
 use compute_core::cache_keys::CacheKeys;
 use compute_core::channel_names::ChannelNames;
-use compute_core::crds::Build;
+use compute_core::crds::{Build, Image};
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
@@ -13,6 +13,7 @@ use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod as K8sPod;
+use kube::api::DeleteParams;
 use kube::runtime::watcher::{Config as WatcherConfig, Event};
 use kube::{Api, Client};
 use lapin::BasicProperties;
@@ -66,7 +67,7 @@ pub async fn event_watcher(
                 }
             }
             Some(event) = kpack_build_stream.next() => {
-                if let Err(e) = handle_kpack_build_event(event, &pool, &mut redis, &amqp).await {
+                if let Err(e) = handle_kpack_build_event(event, &pool, &mut redis, &amqp, &client).await {
                     error!(error = %e, "❌ Failed to handle kpack build event");
                 }
             }
@@ -631,6 +632,7 @@ async fn handle_kpack_build_event(
     pool: &PgPool,
     con: &mut MultiplexedConnection,
     amqp: &Amqp,
+    client: &Client,
 ) -> Result<(), AppError> {
     match event {
         Ok(Event::Apply(build)) => {
@@ -650,7 +652,7 @@ async fn handle_kpack_build_event(
             }
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
-            // let build_id = build_id.unwrap();
+            let build_id = build_id.unwrap();
 
             // kpack updates the status block as the build progresses
             if let Some(status) = build.status {
@@ -670,6 +672,8 @@ async fn handle_kpack_build_event(
                                         "❌ kpack build {} succeeded but no latest_image found in status",
                                         name
                                     );
+                                    // Still clean up the Image so kpack stops watching.
+                                    delete_kpack_image(client, &build_id).await;
                                     return Ok(());
                                 }
 
@@ -727,6 +731,10 @@ async fn handle_kpack_build_event(
                                     "📤 Published deployment update message for completed kpack build {}",
                                     deployment_id
                                 );
+
+                                // Delete the Image so kpack stops watching the repo.
+                                // The GitHub App token in the clone URL is short-lived anyway.
+                                delete_kpack_image(client, &build_id).await;
                             } else if cond.status == "False" {
                                 error!("❌ kpack build {} failed. Reason: {:?}", name, cond.reason);
                                 sqlx::query!(
@@ -743,6 +751,9 @@ async fn handle_kpack_build_event(
                                     status: DeploymentStatus::BuildFailed,
                                 };
                                 con.publish(channel, message).await?;
+
+                                // Delete the Image so kpack stops retrying.
+                                delete_kpack_image(client, &build_id).await;
                             }
                         }
                     }
@@ -795,4 +806,28 @@ async fn send_deployments_message(
         .await?;
 
     Ok(())
+}
+
+/// Delete the kpack Image resource so kpack stops polling the repo.
+/// The clone URL contains a short-lived GitHub App token, so any retry would fail anyway.
+/// We silently ignore 404s (already gone) and log other errors without propagating them.
+async fn delete_kpack_image(client: &Client, image_name: &str) {
+    let api: Api<Image> = Api::namespaced(client.clone(), "kpack-build");
+    match api.delete(image_name, &DeleteParams::default()).await {
+        Ok(_) => info!(
+            "🗑️ Deleted kpack Image '{}' after build finished",
+            image_name
+        ),
+        Err(kube::Error::Api(ae)) if ae.code == 404 => {
+            debug!(
+                "kpack Image '{}' already gone, nothing to delete",
+                image_name
+            );
+        }
+        Err(e) => {
+            // Non-fatal: the Image will just sit there until manual cleanup.
+            // The build result has already been processed correctly.
+            error!("⚠️ Failed to delete kpack Image '{}': {}", image_name, e);
+        }
+    }
 }
