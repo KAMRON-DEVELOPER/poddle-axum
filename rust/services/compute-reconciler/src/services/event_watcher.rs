@@ -247,6 +247,14 @@ async fn handle_pod_event(
 ) -> Result<(), AppError> {
     match event {
         Ok(Event::Apply(pod)) => {
+            // Ignore pods in the kpack-build namespace beacuse if we initialize key for it
+            // that cause users deployment metrics won't scaped.
+            if let Some(namespace) = pod.metadata.namespace.as_deref() {
+                if namespace == "kpack-build" {
+                    return Ok(());
+                }
+            }
+
             let labels = pod.metadata.labels.as_ref();
             let ns = pod.metadata.namespace;
             let project_id = labels
