@@ -55,7 +55,7 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::services::kubernetes_service::KubernetesService;
 use crate::services::repository::DeploymentRepository;
-use compute_core::crds::{BuilderReference, GitSource, Image, ImageSpec, SourceConfig};
+use compute_core::crds::{GitSource, Image, ImageBuilderRef, ImageSpec, SourceConfig};
 
 impl KubernetesService {
     pub async fn preflight(&self) -> Result<(), AppError> {
@@ -1499,7 +1499,7 @@ impl KubernetesService {
                 deployment_id
             ),
             service_account_name: "kpack-sa".to_string(),
-            builder: BuilderReference {
+            builder: ImageBuilderRef {
                 name: "default".into(),
                 kind: Some("Builder".into()),
             },

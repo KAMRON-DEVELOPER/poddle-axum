@@ -16,19 +16,34 @@ use serde::{Deserialize, Serialize};
 )]
 #[serde(rename_all = "camelCase")]
 pub struct ImageSpec {
+    /// Destination registry tag (the "base" tag).
+    /// Example: me-central1-docker.pkg.dev/poddle-mvp/kpack/<deployment-id>
     pub tag: String,
     pub service_account_name: String,
-    pub builder: BuilderReference,
+    /// Logical Builder reference (Builder or ClusterBuilder).
+    pub builder: ImageBuilderRef,
     pub source: SourceConfig,
+}
 
-    #[serde(flatten)]
-    pub extra: std::collections::HashMap<String, serde_json::Value>,
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageBuilderRef {
+    /// Usually "Builder" (namespaced) or "ClusterBuilder" (cluster-scoped).
+    pub kind: Option<String>,
+    pub name: String,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ImageStatus {
     pub latest_image: Option<String>,
+    pub latest_build_ref: Option<String>,
+    pub latest_build_reason: Option<String>,
+    pub latest_stack: Option<String>,
+    pub observed_generation: Option<i64>,
+    pub build_counter: Option<i64>,
+    pub build_cache_name: Option<String>,
+    pub latest_build_image_generation: Option<i64>,
     pub conditions: Option<Vec<Condition>>,
 }
 
@@ -47,31 +62,30 @@ pub struct ImageStatus {
 )]
 #[serde(rename_all = "camelCase")]
 pub struct BuildSpec {
-    pub tags: Vec<String>,
-    pub builder: BuilderReference,
+    pub tags: Option<Vec<String>>,
+    pub builder: BuildBuilderRef,
     pub source: SourceConfig,
+}
 
-    #[serde(flatten)]
-    pub extra: std::collections::HashMap<String, serde_json::Value>,
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildBuilderRef {
+    pub image: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct BuildStatus {
     pub latest_image: Option<String>,
+    pub pod_name: Option<String>,
+    pub lifecycle_version: Option<String>,
+    pub observed_generation: Option<i64>,
     pub conditions: Option<Vec<Condition>>,
 }
 
 // -----------------------------------------------------------------------------
-// Shared Sub-Types
+// Shared sub-types
 // -----------------------------------------------------------------------------
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct BuilderReference {
-    // For your cluster-wide builds, you will set this to Some("ClusterBuilder".to_string())
-    pub kind: Option<String>,
-    pub name: String,
-}
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
 #[serde(rename_all = "camelCase")]
@@ -86,7 +100,7 @@ pub struct GitSource {
     pub revision: String,
 }
 
-// Standard Kubernetes condition format for checking if a build is "Ready" or "Succeeded"
+/// Standard Kubernetes condition (used in both Image and Build status).
 #[derive(Deserialize, Serialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Condition {

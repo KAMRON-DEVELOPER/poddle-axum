@@ -621,7 +621,13 @@ async fn handle_buildkit_job_event(
                 con.publish(channel, message).await?;
             }
         }
-        _ => {}
+        Ok(Event::Delete(job)) => {
+            info!("✅ buildkit build watcher delete: {:?}", job.metadata.name)
+        }
+        Ok(Event::Init) => info!("✅ buildkit build watcher init"),
+        Ok(Event::InitApply(_)) => {}
+        Ok(Event::InitDone) => info!("✅ buildkit build watcher ready"),
+        Err(e) => error!("❌ buildkit build watcher error: {}", e),
     }
     Ok(())
 }
@@ -764,7 +770,10 @@ async fn handle_kpack_build_event(
             let name = build.metadata.name.unwrap_or_default();
             info!("🗑️ kpack build {} was deleted", name);
         }
-        _ => {}
+        Ok(Event::Init) => info!("✅ kpack build watcher init"),
+        Ok(Event::InitApply(_)) => {}
+        Ok(Event::InitDone) => info!("✅ kpack build watcher ready"),
+        Err(e) => error!("❌ kpack build watcher error: {}", e),
     }
 
     Ok(())
