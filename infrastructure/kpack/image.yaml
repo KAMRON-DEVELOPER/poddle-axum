@@ -3,6 +3,12 @@ kind: Image
 metadata:
   name: fastapi-bookshop-image
   namespace: kpack-build
+  labels:
+    - "managed-by=poddle"
+    - "project-id=12"
+    - "deployment-id=34"
+    - "preset-id=56"
+    - "build-id=78"
 spec:
   tag: me-central1-docker.pkg.dev/poddle-mvp/kpack/fastapi-bookshop
   serviceAccountName: kpack-sa
