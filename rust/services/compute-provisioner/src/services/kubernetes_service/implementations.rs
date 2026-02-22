@@ -412,13 +412,21 @@ impl KubernetesService {
                     msg.project_id, msg.deployment_id
                 );
 
+                let secret = ImagePullSecret {
+                    server: "me-central1-docker.pkg.dev".into(),
+                    username: "_json_key".into(),
+                    secret: self.cfg.build_image_pull_secret.clone(),
+                };
+                let image_pull_secret_data =
+                    Some(self.apply_image_pull_secret(&ns, &name, &secret).await?);
+
                 self.apply_deployment(
                     Some(&otel_service_name),
                     Some(&otel_resource_attributes),
                     &ns,
                     &name,
                     Some(&url),
-                    None,
+                    image_pull_secret_data,
                     Some(deployment.port),
                     Some(deployment.desired_replicas),
                     Some(&resource_spec),

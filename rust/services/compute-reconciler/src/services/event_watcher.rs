@@ -536,6 +536,13 @@ async fn handle_buildkit_job_event(
             let deployment_id = deployment_id.unwrap();
             let build_id = build_id.unwrap();
 
+            info!(
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                build_id = %build_id,
+                "📥 Buildkit Job Event::Apply received",
+            );
+
             // Check Status
             let succeeded = job.status.as_ref().and_then(|s| s.succeeded).unwrap_or(0);
             let failed = job.status.as_ref().and_then(|s| s.failed).unwrap_or(0);
@@ -659,6 +666,13 @@ async fn handle_kpack_build_event(
             let project_id = project_id.unwrap();
             let deployment_id = deployment_id.unwrap();
             let build_id = build_id.unwrap();
+
+            info!(
+                project_id = %project_id,
+                deployment_id = %deployment_id,
+                build_id = %build_id,
+                "📥 Kpack Build Event::Apply received",
+            );
 
             // kpack updates the status block as the build progresses
             if let Some(status) = build.status {

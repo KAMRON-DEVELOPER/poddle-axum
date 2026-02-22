@@ -28,6 +28,7 @@ pub struct KubernetesServiceConfig {
     pub traefik: TraefikConfig,
     pub prometheus: PrometheusConfig,
     pub cert_manager: CertManagerConfig,
+    pub build_image_pull_secret: String,
 }
 
 #[derive(Clone)]
