@@ -5,10 +5,19 @@ metadata:
 spec:
   sources:
     - image: paketobuildpacks/python
+    # - image: paketobuildpacks/pip-install
+    # - image: paketobuildpacks/python-start
     - image: paketobuildpacks/nodejs
+    # - image: paketobuildpacks/node-engine
+    # - image: paketobuildpacks/npm-install
+    # - image: paketobuildpacks/node-start
     - image: paketobuildpacks/php
+    # - image: paketobuildpacks/php-dist
     - image: paketobuildpacks/ruby
     - image: paketobuildpacks/rust
     - image: paketobuildpacks/go
+    # - image: paketobuildpacks/go-dist
+    # - image: paketobuildpacks/go-build
     - image: paketobuildpacks/java
     - image: paketobuildpacks/dotnet
+    # - image: paketobuildpacks/dotnet-core
