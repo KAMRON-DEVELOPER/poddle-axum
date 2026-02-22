@@ -83,3 +83,19 @@ kubectl apply -f infrastructure/kpack/image.yaml
 ```
 
 ## BUILDER
+
+## Log in using a temporary config folder
+
+We will pipe artifact registry service account JSON key into docker login, but we will tell Docker to save the temporary session inside an isolated /tmp/gcp-docker folder:
+
+```bash
+cat certs/poddle-artifact-registery-key.json | docker --config /tmp/gcp-docker login -u _json_key --password-stdin <https://me-central1-docker.pkg.dev>
+```
+
+Pull your FastAPI image
+
+Now, use that exact same --config flag to pull the image. Since it is using the temporary folder, it knows you are authenticated for Google:
+
+```bash
+docker --config /tmp/gcp-docker pull me-central1-docker.pkg.dev/poddle-mvp/kpack/fastapi-bookshop
+```
