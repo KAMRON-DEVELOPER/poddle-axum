@@ -1,7 +1,7 @@
 apiVersion: kpack.io/v1alpha2
 kind: Image
 metadata:
-  name: kpack-image
+  name: fastapi-bookshop-image
   namespace: kpack-build
 spec:
   tag: me-central1-docker.pkg.dev/poddle-mvp/kpack
