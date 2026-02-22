@@ -24,11 +24,11 @@ spec:
         - id: paketo-buildpacks/php
     - group:
         - id: paketo-buildpacks/ruby
-    - group:
-        - id: paketo-buildpacks/rust
+    # - group:
+    #     - id: paketo-buildpacks/rust
     - group:
         - id: paketo-buildpacks/go
     - group:
         - id: paketo-buildpacks/java
-    - group:
-        - id: paketo-buildpacks/dotnet
+    # - group:
+    #     - id: paketo-buildpacks/dotnet
