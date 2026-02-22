@@ -3,7 +3,7 @@
 <https://github.com/buildpacks-community/kpack/blob/main/docs/tutorial.md>
 
 ```bash
-kubectl create namespace kpack
+kubectl create namespace kpack-build
 kubectl create namespace buildkit
 ```
 
