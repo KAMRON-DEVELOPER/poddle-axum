@@ -285,3 +285,38 @@ kubectl create secret generic github-app-key \
   --from-file=private-key.pem=certs/poddle-mvp.2026-02-17.private-key.pem \
   -n poddle-system
 ```
+
+Add this block to `infrastructure/deploy/rbacks/compute-provisioner-cr.yaml`
+
+```yaml
+  # --- kpack ---
+  - apiGroups: ["kpack.io"]
+    resources: ["images"]
+    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+```
+
+Apply RBAC and restart provisioner
+
+```bash
+kubectl apply -f infrastructure/deploy/rbacks/compute-provisioner-cr.yaml
+kubectl apply -f infrastructure/deploy/rbacks/compute-provisioner-crb.yaml
+
+kubectl rollout restart deployment/compute-provisioner -n poddle-system
+```
+
+Verify with `kubectl auth can-i`
+
+```bash
+kubectl auth can-i patch images.kpack.io -n kpack-build \
+  --as=system:serviceaccount:poddle-system:compute-provisioner
+
+kubectl auth can-i create images.kpack.io -n kpack-build \
+  --as=system:serviceaccount:poddle-system:compute-provisioner
+
+kubectl auth can-i get images.kpack.io -n kpack-build \
+  --as=system:serviceaccount:poddle-system:compute-provisioner
+
+# yes
+# yes
+# yes
+```
