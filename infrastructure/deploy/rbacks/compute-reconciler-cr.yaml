@@ -14,7 +14,12 @@ rules:
     resources: ["deployments"]
     verbs: ["get", "list", "watch"]
 
+  # --- buildkit jobs ---
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "list", "watch"]
+
   # --- kpack ---
   - apiGroups: ["kpack.io"]
-    resources: ["images"]
-    verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+    resources: ["builds"]
+    verbs: ["get", "list", "watch"]
