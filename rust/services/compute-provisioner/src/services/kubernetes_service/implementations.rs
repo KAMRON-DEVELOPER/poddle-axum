@@ -288,8 +288,8 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    &clone_url,
                     &ns,
+                    &clone_url,
                 )
                 .await?;
                 Ok(())
@@ -543,8 +543,8 @@ impl KubernetesService {
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
-                    &clone_url,
                     &ns,
+                    &clone_url,
                 )
                 .await?;
             }
@@ -1497,8 +1497,11 @@ impl KubernetesService {
         clone_url: &str,
     ) -> Result<(), AppError> {
         let spec = ImageSpec {
-            tag: "me-central1-docker.pkg.dev/poddle-mvp/kpack".to_string(),
-            service_account_name: "".to_string(),
+            tag: format!(
+                "me-central1-docker.pkg.dev/poddle-mvp/kpack/{}",
+                deployment_id
+            ),
+            service_account_name: "kpack-sa".to_string(),
             builder: BuilderReference {
                 name: "default".into(),
                 kind: Some("Builder".into()),
