@@ -1525,14 +1525,19 @@ impl KubernetesService {
 
         // --- Init container: railpack prepare ---
         // This container analyzes the app, and outputs the build plan
-        let prepare_script = format!(
-            "railpack prepare /workspace/{context} --plan-out /workspace/railpack-plan.json --info-out railpack-info.json"
-        );
-
+        let analyze_path = format!("/workspace/{context}");
         let railpack_prepare = Container {
             name: "railpack-prepare".into(),
-            image: Some("ghcr.io/railwayapp/railpack-frontend:v0.17.2".into()),
-            command: Some(vec!["/bin/sh".into(), "-c".into(), prepare_script]),
+            image: Some("kamronbekdev/railpack-cli:v0.17.2".into()),
+            // Since distroless has no shell, we pass arguments directly to the ENTRYPOINT
+            args: Some(vec![
+                "prepare".into(),
+                analyze_path,
+                "--plan-out".into(),
+                "/workspace/railpack-plan.json".into(),
+                "--info-out".into(),
+                "/workspace/railpack-info.json".into(),
+            ]),
             volume_mounts: Some(vec![VolumeMount {
                 name: "workspace".into(),
                 mount_path: "/workspace".into(),
@@ -1548,7 +1553,7 @@ impl KubernetesService {
         let build_script = format!(
             "buildctl --addr {buildkitd_address} build \
             --frontend=gateway.v0 \
-            --opt source=ghcr.io/railwayapp/railpack-frontend \
+            --opt source=ghcr.io/railwayapp/railpack-frontend:v0.17.2 \
             --local context=/workspace/{context} \
             --local dockerfile=/workspace \
             --opt filename=railpack-plan.json \

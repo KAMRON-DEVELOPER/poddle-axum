@@ -1,0 +1,80 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: debug-railpack-job
+  namespace: buildkit
+  labels:
+    poddle.io/managed-by: poddle
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        # Clone the repository
+        - name: git-clone
+          image: alpine/git:latest
+          args:
+            - clone
+            - https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
+            - /workspace
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+
+        # Analyze the code and generate the build plan
+        - name: railpack-prepare
+          image: kamronbekdev/railpack-cli:v0.17.2
+          args:
+            - prepare /workspace/. --plan-out /workspace/railpack-plan.json --info-out /workspace/railpack-info.json
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+
+      containers:
+        # Execute the BuildKit build using the frontend and the generated plan
+        - name: buildctl
+          image: moby/buildkit:rootless
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              buildctl --addr tcp://buildkit.buildkit.svc.cluster.local:1234 build \
+              --frontend=gateway.v0 \
+              --opt source=ghcr.io/railwayapp/railpack-frontend:v0.17.2 \
+              --local context=/workspace/. \
+              --local dockerfile=/workspace \
+              --opt filename=railpack-plan.json \
+              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack:latest,push=true \
+              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack-cache,mode=max \
+              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack-cache \
+              --progress=plain
+          env:
+            - name: BUILDKITD_FLAGS
+              value: "--oci-worker-no-process-sandbox"
+          workingDir: /workspace
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: registry-secret-volume
+              mountPath: /home/user/.docker
+      volumes:
+        - name: workspace
+          emptyDir: {}
+        - name: registry-secret-volume
+          secret:
+            secretName: registry-secret
+            items:
+              - key: .dockerconfigjson
+                path: config.json
