@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: debug-buildctl-job
+  namespace: buildkit
+spec:
+  ttlSecondsAfterFinished: 300
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+        runAsGroup: 1000
+      initContainers:
+        - name: git-clone
+          image: alpine/git:latest
+          args:
+            - clone
+            - https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
+            - /workspace
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+      containers:
+        - name: buildctl
+          image: moby/buildkit:rootless
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              buildctl --addr tcp://buildkitd.buildkit.svc.cluster.local:1234 build \
+              --frontend=dockerfile.v0 \
+              --local context=/workspace/. \
+              --local dockerfile=/workspace/. \
+              --opt filename=Dockerfile \
+              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-fastapi:latest,push=true \
+              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-fastapi-cache,mode=max \
+              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-fastapi-cache \
+              --progress=plain
+          env:
+            - name: BUILDKITD_FLAGS
+              value: "--oci-worker-no-process-sandbox"
+          workingDir: /workspace
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          volumeMounts:
+            - name: workspace
+              mountPath: /workspace
+            - name: registry-secret-volume
+              mountPath: /home/user/.docker
+      volumes:
+        - name: workspace
+          emptyDir: {}
+        - name: registry-secret-volume
+          secret:
+            secretName: registry-secret
+            items:
+              - key: .dockerconfigjson
+                path: config.json
