@@ -13,7 +13,7 @@ use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
     EmptyDirVolumeSource, EnvFromSource, KeyToPath, LocalObjectReference, SecretEnvSource,
-    SecretVolumeSource, SecurityContext, Volume, VolumeMount,
+    SecretVolumeSource, Volume, VolumeMount,
 };
 use k8s_openapi::{
     api::{
@@ -55,7 +55,9 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::services::kubernetes_service::KubernetesService;
 use crate::services::repository::DeploymentRepository;
-use compute_core::crds::{GitSource, Image, ImageBuilderRef, ImageSpec, SourceConfig};
+use compute_core::crds::{
+    BuildCacheConfig, GitSource, Image, ImageBuilderRef, ImageSpec, RegistryCache, SourceConfig,
+};
 
 impl KubernetesService {
     pub async fn preflight(&self) -> Result<(), AppError> {
@@ -251,7 +253,7 @@ impl KubernetesService {
 
                 let build_id = Uuid::new_v4().to_string();
 
-                self.spawn_buildkit_job(
+                self.spawn_buildctl_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
@@ -512,7 +514,7 @@ impl KubernetesService {
 
                 let build_id = Uuid::new_v4().to_string();
 
-                self.spawn_buildkit_job(
+                self.spawn_buildctl_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
@@ -1324,8 +1326,176 @@ impl KubernetesService {
     // BUILD
     // ============================================================================================
 
-    #[tracing::instrument(name = "kubernetes_service.spawn_buildkit_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
-    pub async fn spawn_buildkit_job(
+    // #[tracing::instrument(name = "kubernetes_service.spawn_buildkit_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    // pub async fn spawn_buildkit_job(
+    //     &self,
+    //     project_id: &str,
+    //     deployment_id: &str,
+    //     preset_id: &str,
+    //     build_id: &str,
+    //     clone_url: &str,
+    //     context_path: Option<&str>,
+    //     dockerfile_path: Option<&str>,
+    // ) -> Result<(), AppError> {
+    //     let namespace = "poddle-builds";
+    //     let job_name = format!("build-{}", build_id);
+    //     let image_name = format!(
+    //         "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}",
+    //         build_id
+    //     );
+    //     let cache = format!(
+    //         "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}-cache",
+    //         build_id
+    //     );
+
+    //     let context = context_path.unwrap_or(".");
+    //     let dockerfile_path = dockerfile_path.unwrap_or("Dockerfile");
+
+    //     // --- Init container: git clone ---
+    //     let init_containers = Some(vec![Container {
+    //         name: "git-clone".into(),
+    //         image: Some("alpine/git:latest".into()),
+    //         args: Some(vec![
+    //             "clone".into(),
+    //             clone_url.to_string(),
+    //             "/workspace".into(),
+    //         ]),
+    //         volume_mounts: Some(vec![VolumeMount {
+    //             name: "workspace".into(),
+    //             mount_path: "/workspace".into(),
+    //             ..Default::default()
+    //         }]),
+    //         ..Default::default()
+    //     }]);
+
+    //     // --- Build container ---
+    //     let mut requests = BTreeMap::new();
+    //     requests.insert("cpu".to_string(), Quantity("500m".to_string()));
+    //     requests.insert("memory".to_string(), Quantity("256Mi".to_string()));
+    //     let mut limits = BTreeMap::new();
+    //     limits.insert("cpu".to_string(), Quantity("1000m".to_string()));
+    //     limits.insert("memory".to_string(), Quantity("1Gi".to_string()));
+
+    //     let (dockerfile, filename) = match dockerfile_path.rsplit_once('/') {
+    //         Some((dir, file)) if !dir.is_empty() && !file.is_empty() => (dir, file),
+    //         _ => (".", dockerfile_path),
+    //     };
+
+    //     let build_script = format!(
+    //         "buildctl-daemonless.sh build \
+    //         --frontend=dockerfile.v0 \
+    //         --local context=/workspace/{context} \
+    //         --local dockerfile=/workspace/{dockerfile} \
+    //         --opt filename={filename} \
+    //         --output type=image,name={image_name},push=true \
+    //         --export-cache type=registry,ref={cache},mode=max \
+    //         --import-cache type=registry,ref={cache} \
+    //         --progress=plain",
+    //     );
+
+    //     let containers = vec![Container {
+    //         name: "buildkit".into(),
+    //         image: Some("moby/buildkit:rootless".into()),
+    //         command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
+    //         env: Some(vec![EnvVar {
+    //             name: "BUILDKITD_FLAGS".into(),
+    //             value: Some("--oci-worker-no-process-sandbox".into()),
+    //             ..Default::default()
+    //         }]),
+    //         working_dir: Some("/workspace".into()),
+    //         volume_mounts: Some(vec![
+    //             VolumeMount {
+    //                 name: "workspace".into(),
+    //                 mount_path: "/workspace".into(),
+    //                 ..Default::default()
+    //             },
+    //             VolumeMount {
+    //                 name: "registry-secret-volume".into(),
+    //                 mount_path: "/home/user/.docker".into(),
+    //                 ..Default::default()
+    //             },
+    //         ]),
+    //         security_context: Some(SecurityContext {
+    //             seccomp_profile: Some(k8s_openapi::api::core::v1::SeccompProfile {
+    //                 type_: "Unconfined".into(),
+    //                 ..Default::default()
+    //             }),
+    //             app_armor_profile: Some(k8s_openapi::api::core::v1::AppArmorProfile {
+    //                 type_: "Unconfined".into(),
+    //                 ..Default::default()
+    //             }),
+    //             ..Default::default()
+    //         }),
+    //         ..Default::default()
+    //     }];
+
+    //     let labels: BTreeMap<String, String> = BTreeMap::from([
+    //         ("poddle.io/managed-by".into(), "poddle".into()),
+    //         ("poddle.io/project-id".into(), project_id.into()),
+    //         ("poddle.io/deployment-id".into(), deployment_id.into()),
+    //         ("poddle.io/preset-id".into(), preset_id.into()),
+    //         ("poddle.io/build-id".into(), build_id.into()),
+    //     ]);
+
+    //     let job = Job {
+    //         metadata: ObjectMeta {
+    //             name: Some(job_name.clone()),
+    //             namespace: Some(namespace.to_string()),
+    //             labels: Some(labels),
+    //             ..Default::default()
+    //         },
+    //         spec: Some(JobSpec {
+    //             ttl_seconds_after_finished: Some(300),
+    //             backoff_limit: Some(0),
+    //             template: PodTemplateSpec {
+    //                 spec: Some(PodSpec {
+    //                     init_containers,
+    //                     containers,
+    //                     restart_policy: Some("Never".into()),
+    //                     security_context: Some(k8s_openapi::api::core::v1::PodSecurityContext {
+    //                         fs_group: Some(1000),
+    //                         run_as_user: Some(1000),
+    //                         run_as_group: Some(1000),
+    //                         ..Default::default()
+    //                     }),
+    //                     volumes: Some(vec![
+    //                         Volume {
+    //                             name: "workspace".into(),
+    //                             empty_dir: Some(EmptyDirVolumeSource::default()),
+    //                             ..Default::default()
+    //                         },
+    //                         Volume {
+    //                             name: "registry-secret-volume".into(),
+    //                             secret: Some(SecretVolumeSource {
+    //                                 secret_name: Some("registry-secret".into()),
+    //                                 items: Some(vec![KeyToPath {
+    //                                     key: ".dockerconfigjson".into(),
+    //                                     path: "config.json".into(),
+    //                                     ..Default::default()
+    //                                 }]),
+    //                                 ..Default::default()
+    //                             }),
+    //                             ..Default::default()
+    //                         },
+    //                     ]),
+    //                     ..Default::default()
+    //                 }),
+    //                 ..Default::default()
+    //             },
+    //             ..Default::default()
+    //         }),
+    //         ..Default::default()
+    //     };
+
+    //     let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
+    //     jobs.create(&PostParams::default(), &job).await?;
+
+    //     info!("🚀 Spawned BuildKit Job: {}", job_name);
+    //     Ok(())
+    // }
+
+    #[tracing::instrument(name = "kubernetes_service.spawn_buildctl_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    pub async fn spawn_buildctl_job(
         &self,
         project_id: &str,
         deployment_id: &str,
@@ -1335,16 +1505,12 @@ impl KubernetesService {
         context_path: Option<&str>,
         dockerfile_path: Option<&str>,
     ) -> Result<(), AppError> {
-        let namespace = "poddle-builds";
-        let job_name = format!("build-{}", build_id);
-        let image_name = format!(
-            "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}",
-            build_id
-        );
-        let cache = format!(
-            "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}-cache",
-            build_id
-        );
+        let namespace = "buildkit";
+        let job_name = format!("{}", build_id);
+
+        let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
+        let image_name = format!("{repo}/{}", build_id);
+        let cache = format!("{repo}/{}-cache", build_id);
 
         let context = context_path.unwrap_or(".");
         let dockerfile_path = dockerfile_path.unwrap_or("Dockerfile");
@@ -1367,20 +1533,14 @@ impl KubernetesService {
         }]);
 
         // --- Build container ---
-        let mut requests = BTreeMap::new();
-        requests.insert("cpu".to_string(), Quantity("500m".to_string()));
-        requests.insert("memory".to_string(), Quantity("256Mi".to_string()));
-        let mut limits = BTreeMap::new();
-        limits.insert("cpu".to_string(), Quantity("1000m".to_string()));
-        limits.insert("memory".to_string(), Quantity("1Gi".to_string()));
-
         let (dockerfile, filename) = match dockerfile_path.rsplit_once('/') {
             Some((dir, file)) if !dir.is_empty() && !file.is_empty() => (dir, file),
             _ => (".", dockerfile_path),
         };
 
+        let buildkitd_address = "tcp://buildkitd.buildkitd.svc.cluster.local:1234";
         let build_script = format!(
-            "buildctl-daemonless.sh build \
+            "buildctl --addr {buildkitd_address} build \
             --frontend=dockerfile.v0 \
             --local context=/workspace/{context} \
             --local dockerfile=/workspace/{dockerfile} \
@@ -1391,8 +1551,15 @@ impl KubernetesService {
             --progress=plain",
         );
 
+        let mut requests = BTreeMap::new();
+        requests.insert("cpu".to_string(), Quantity("100m".to_string()));
+        requests.insert("memory".to_string(), Quantity("128Mi".to_string()));
+        let mut limits = BTreeMap::new();
+        limits.insert("cpu".to_string(), Quantity("250m".to_string()));
+        limits.insert("memory".to_string(), Quantity("256MI".to_string()));
+
         let containers = vec![Container {
-            name: "buildkit".into(),
+            name: "buildctl".into(),
             image: Some("moby/buildkit:rootless".into()),
             command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
             env: Some(vec![EnvVar {
@@ -1409,19 +1576,13 @@ impl KubernetesService {
                 },
                 VolumeMount {
                     name: "registry-secret-volume".into(),
-                    mount_path: "/home/user/.docker".into(),
+                    mount_path: "/root/.docker".into(),
                     ..Default::default()
                 },
             ]),
-            security_context: Some(SecurityContext {
-                seccomp_profile: Some(k8s_openapi::api::core::v1::SeccompProfile {
-                    type_: "Unconfined".into(),
-                    ..Default::default()
-                }),
-                app_armor_profile: Some(k8s_openapi::api::core::v1::AppArmorProfile {
-                    type_: "Unconfined".into(),
-                    ..Default::default()
-                }),
+            resources: Some(ResourceRequirements {
+                requests: Some(requests),
+                limits: Some(limits),
                 ..Default::default()
             }),
             ..Default::default()
@@ -1488,7 +1649,181 @@ impl KubernetesService {
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
         jobs.create(&PostParams::default(), &job).await?;
 
-        info!("🚀 Spawned BuildKit Job: {}", job_name);
+        info!("🚀 Spawned buildctl Job: {}", job_name);
+        Ok(())
+    }
+
+    #[tracing::instrument(name = "kubernetes_service.spawn_railpack_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    pub async fn spawn_railpack_job(
+        &self,
+        project_id: &str,
+        deployment_id: &str,
+        preset_id: &str,
+        build_id: &str,
+        clone_url: &str,
+        context_path: Option<&str>,
+    ) -> Result<(), AppError> {
+        let namespace = "buildkit";
+        let job_name = format!("{}", build_id);
+
+        let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
+        let image_name = format!("{repo}/{}", build_id);
+        let cache = format!("{repo}/{}-cache", build_id);
+
+        let context = context_path.unwrap_or(".");
+
+        // --- Init container: git clone ---
+        let git_clone = Container {
+            name: "git-clone".into(),
+            image: Some("alpine/git:latest".into()),
+            args: Some(vec![
+                "clone".into(),
+                clone_url.to_string(),
+                "/workspace".into(),
+            ]),
+            volume_mounts: Some(vec![VolumeMount {
+                name: "workspace".into(),
+                mount_path: "/workspace".into(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+
+        // --- Init container: railpack prepare ---
+        // This container downloads the Railpack CLI, analyzes the app, and outputs the build plan
+        let prepare_script = format!(
+            "curl -sSL https://railpack.com/install.sh | sh -s -- --bin-dir /usr/local/bin && \
+            railpack prepare /workspace/{context} --plan-out /workspace/railpack-plan.json"
+        );
+
+        let railpack_prepare = Container {
+            name: "railpack-prepare".into(),
+            image: Some("debian:bullseye-slim".into()), // Needs standard glibc for the railpack binary
+            command: Some(vec!["/bin/sh".into(), "-c".into(), prepare_script]),
+            volume_mounts: Some(vec![VolumeMount {
+                name: "workspace".into(),
+                mount_path: "/workspace".into(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+
+        let init_containers = Some(vec![git_clone, railpack_prepare]);
+
+        // --- Build container ---
+        let buildkitd_address = "tcp://buildkitd.buildkitd.svc.cluster.local:1234";
+        let build_script = format!(
+            "buildctl --addr {buildkitd_address} build \
+            --frontend=gateway.v0 \
+            --opt source=ghcr.io/railwayapp/railpack-frontend \
+            --local context=/workspace/{context} \
+            --local dockerfile=/workspace \
+            --opt filename=railpack-plan.json \
+            --output type=image,name={image_name},push=true \
+            --export-cache type=registry,ref={cache},mode=max \
+            --import-cache type=registry,ref={cache} \
+            --progress=plain",
+        );
+
+        let mut requests = BTreeMap::new();
+        requests.insert("cpu".to_string(), Quantity("100m".to_string()));
+        requests.insert("memory".to_string(), Quantity("128Mi".to_string()));
+        let mut limits = BTreeMap::new();
+        limits.insert("cpu".to_string(), Quantity("250m".to_string()));
+        limits.insert("memory".to_string(), Quantity("256MI".to_string()));
+
+        let containers = vec![Container {
+            name: "buildctl".into(),
+            image: Some("moby/buildkit:rootless".into()),
+            command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
+            env: Some(vec![EnvVar {
+                name: "BUILDKITD_FLAGS".into(),
+                value: Some("--oci-worker-no-process-sandbox".into()),
+                ..Default::default()
+            }]),
+            working_dir: Some("/workspace".into()),
+            volume_mounts: Some(vec![
+                VolumeMount {
+                    name: "workspace".into(),
+                    mount_path: "/workspace".into(),
+                    ..Default::default()
+                },
+                VolumeMount {
+                    name: "registry-secret-volume".into(),
+                    mount_path: "/root/.docker".into(),
+                    ..Default::default()
+                },
+            ]),
+            resources: Some(ResourceRequirements {
+                requests: Some(requests),
+                limits: Some(limits),
+                ..Default::default()
+            }),
+            ..Default::default()
+        }];
+
+        let labels: BTreeMap<String, String> = BTreeMap::from([
+            ("poddle.io/managed-by".into(), "poddle".into()),
+            ("poddle.io/project-id".into(), project_id.into()),
+            ("poddle.io/deployment-id".into(), deployment_id.into()),
+            ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
+        ]);
+
+        let job = Job {
+            metadata: ObjectMeta {
+                name: Some(job_name.clone()),
+                namespace: Some(namespace.to_string()),
+                labels: Some(labels),
+                ..Default::default()
+            },
+            spec: Some(JobSpec {
+                ttl_seconds_after_finished: Some(300),
+                backoff_limit: Some(0),
+                template: PodTemplateSpec {
+                    spec: Some(PodSpec {
+                        init_containers,
+                        containers,
+                        restart_policy: Some("Never".into()),
+                        security_context: Some(k8s_openapi::api::core::v1::PodSecurityContext {
+                            fs_group: Some(1000),
+                            run_as_user: Some(1000),
+                            run_as_group: Some(1000),
+                            ..Default::default()
+                        }),
+                        volumes: Some(vec![
+                            Volume {
+                                name: "workspace".into(),
+                                empty_dir: Some(EmptyDirVolumeSource::default()),
+                                ..Default::default()
+                            },
+                            Volume {
+                                name: "registry-secret-volume".into(),
+                                secret: Some(SecretVolumeSource {
+                                    secret_name: Some("registry-secret".into()),
+                                    items: Some(vec![KeyToPath {
+                                        key: ".dockerconfigjson".into(),
+                                        path: "config.json".into(),
+                                        ..Default::default()
+                                    }]),
+                                    ..Default::default()
+                                }),
+                                ..Default::default()
+                            },
+                        ]),
+                        ..Default::default()
+                    }),
+                    ..Default::default()
+                },
+                ..Default::default()
+            }),
+            ..Default::default()
+        };
+
+        let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
+        jobs.create(&PostParams::default(), &job).await?;
+
+        info!("🚀 Spawned Railpack Job: {}", job_name);
         Ok(())
     }
 
@@ -1517,6 +1852,15 @@ impl KubernetesService {
                     revision: "master".into(),
                 }),
             },
+            cache: Some(BuildCacheConfig {
+                registry: Some(RegistryCache {
+                    tag: format!(
+                        "me-central1-docker.pkg.dev/poddle-mvp/kpack/cache/{}",
+                        deployment_id
+                    ),
+                }),
+                volume: None,
+            }),
             ..Default::default()
         };
 

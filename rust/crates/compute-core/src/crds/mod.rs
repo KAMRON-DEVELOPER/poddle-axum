@@ -23,14 +23,7 @@ pub struct ImageSpec {
     /// Logical Builder reference (Builder or ClusterBuilder).
     pub builder: ImageBuilderRef,
     pub source: SourceConfig,
-}
-
-#[derive(Deserialize, Serialize, Clone, Default, Debug)]
-#[serde(rename_all = "camelCase")]
-pub struct ImageBuilderRef {
-    /// Usually "Builder" (namespaced) or "ClusterBuilder" (cluster-scoped).
-    pub kind: Option<String>,
-    pub name: String,
+    pub cache: Option<BuildCacheConfig>,
 }
 
 #[derive(Deserialize, Serialize, Clone, Default, Debug)]
@@ -45,6 +38,34 @@ pub struct ImageStatus {
     pub build_cache_name: Option<String>,
     pub latest_build_image_generation: Option<i64>,
     pub conditions: Option<Vec<Condition>>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Default, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ImageBuilderRef {
+    /// Usually "Builder" (namespaced) or "ClusterBuilder" (cluster-scoped).
+    pub kind: Option<String>,
+    pub name: String,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct BuildCacheConfig {
+    pub volume: Option<VolumeCache>,
+    pub registry: Option<RegistryCache>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct VolumeCache {
+    pub size: String,
+    pub storage_class_name: Option<String>,
+}
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryCache {
+    pub tag: String,
 }
 
 // -----------------------------------------------------------------------------

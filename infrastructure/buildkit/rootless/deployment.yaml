@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: buildkitd
+  name: buildkitd
+  namespace: buildkit
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: buildkitd
+  template:
+    metadata:
+      labels:
+        app: buildkitd
+    spec:
+      volumes:
+        - name: registry-secret-volume
+          secret:
+            secretName: "registry-secret"
+            items:
+              - key: ".dockerconfigjson"
+                path: "config.json"
+      containers:
+        - name: buildkitd
+          image: moby/buildkit:rootless
+          args:
+            - --addr
+            - unix:///run/user/1000/buildkit/buildkitd.sock
+            - --addr
+            - tcp://0.0.0.0:1234
+            - --oci-worker-no-process-sandbox
+          securityContext:
+            seccompProfile:
+              type: Unconfined
+            appArmorProfile:
+              type: Unconfined
+            runAsUser: 1000
+            runAsGroup: 1000
+          ports:
+            - containerPort: 1234
+          volumeMounts:
+            - name: "registry-secret-volume"
+              mountPath: "/root/.docker"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          readinessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            initialDelaySeconds: 5
+            periodSeconds: 30
+          livenessProbe:
+            exec:
+              command:
+                - buildctl
+                - debug
+                - workers
+            initialDelaySeconds: 5
+            periodSeconds: 30
