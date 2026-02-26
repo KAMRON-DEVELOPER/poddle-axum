@@ -560,8 +560,8 @@ async fn handle_buildkit_job_event(
 
                 // Construct the new image string, this depends on build
                 let image = format!(
-                    "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}",
-                    build_id
+                    "me-central1-docker.pkg.dev/poddle-mvp/buildkit/{}:{}",
+                    deployment_id, build_id
                 );
 
                 let user_id = sqlx::query_scalar!(
