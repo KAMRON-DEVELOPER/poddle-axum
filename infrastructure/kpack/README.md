@@ -89,7 +89,7 @@ kubectl apply -f infrastructure/kpack/image.yaml
 We will pipe artifact registry service account JSON key into docker login, but we will tell Docker to save the temporary session inside an isolated /tmp/gcp-docker folder:
 
 ```bash
-cat certs/poddle-artifact-registery-key.json | docker --config /tmp/gcp-docker login -u _json_key --password-stdin <https://me-central1-docker.pkg.dev>
+cat certs/poddle-artifact-registery-key.json | docker --config /tmp/gcp-docker login -u _json_key --password-stdin https://me-central1-docker.pkg.dev
 ```
 
 Pull your FastAPI image
