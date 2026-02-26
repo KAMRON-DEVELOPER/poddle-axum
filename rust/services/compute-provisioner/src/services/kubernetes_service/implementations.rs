@@ -1524,15 +1524,14 @@ impl KubernetesService {
         };
 
         // --- Init container: railpack prepare ---
-        // This container downloads the Railpack CLI, analyzes the app, and outputs the build plan
+        // This container analyzes the app, and outputs the build plan
         let prepare_script = format!(
-            "curl -sSL https://railpack.com/install.sh | sh -s -- --bin-dir /usr/local/bin && \
-            railpack prepare /workspace/{context} --plan-out /workspace/railpack-plan.json"
+            "railpack prepare /workspace/{context} --plan-out /workspace/railpack-plan.json --info-out railpack-info.json"
         );
 
         let railpack_prepare = Container {
             name: "railpack-prepare".into(),
-            image: Some("debian:bullseye-slim".into()), // Needs standard glibc for the railpack binary
+            image: Some("ghcr.io/railwayapp/railpack-frontend:v0.17.2".into()),
             command: Some(vec!["/bin/sh".into(), "-c".into(), prepare_script]),
             volume_mounts: Some(vec![VolumeMount {
                 name: "workspace".into(),
