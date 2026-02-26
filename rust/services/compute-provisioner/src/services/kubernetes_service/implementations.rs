@@ -251,12 +251,13 @@ impl KubernetesService {
                 )
                 .await?;
 
-                // let build_id = Uuid::new_v4().to_string();
+                let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_buildctl_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
+                    &build_id,
                     &clone_url,
                     context_path.as_deref(),
                     dockerfile_path.as_deref(),
@@ -510,12 +511,13 @@ impl KubernetesService {
                 )
                 .await?;
 
-                // let build_id = Uuid::new_v4().to_string();
+                let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_buildctl_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
+                    &build_id,
                     &clone_url,
                     context_path.as_deref(),
                     dockerfile_path.as_deref(),
@@ -1328,6 +1330,7 @@ impl KubernetesService {
         project_id: &str,
         deployment_id: &str,
         preset_id: &str,
+        build_id: &str,
         clone_url: &str,
         context_path: Option<&str>,
         dockerfile_path: Option<&str>,
@@ -1336,7 +1339,8 @@ impl KubernetesService {
         let job_name = format!("{}", deployment_id);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
-        let image_name = format!("{repo}/{}", deployment_id);
+        // Tag the image uniquely for this specific build
+        let image_name = format!("{repo}/{}:{}", deployment_id, build_id);
         let cache = format!("{repo}/{}-cache", deployment_id);
 
         let context = context_path.unwrap_or(".");
@@ -1485,6 +1489,7 @@ impl KubernetesService {
         project_id: &str,
         deployment_id: &str,
         preset_id: &str,
+        build_id: &str,
         clone_url: &str,
         context_path: Option<&str>,
     ) -> Result<(), AppError> {
@@ -1492,7 +1497,8 @@ impl KubernetesService {
         let job_name = format!("{}", deployment_id);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
-        let image_name = format!("{repo}/{}", deployment_id);
+        // Tag the image uniquely for this specific build
+        let image_name = format!("{repo}/{}:{}", deployment_id, build_id);
         let cache = format!("{repo}/{}-cache", deployment_id);
 
         let context = context_path.unwrap_or(".");
