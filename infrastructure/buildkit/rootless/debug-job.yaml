@@ -29,7 +29,7 @@ spec:
           command: ["/bin/sh", "-c"]
           args:
             - |
-              buildctl --addr tcp://buildkitd.buildkit.svc.cluster.local:1234 build \
+              buildctl --addr tcp://buildkit.buildkit.svc.cluster.local:1234 build \
               --frontend=dockerfile.v0 \
               --local context=/workspace/. \
               --local dockerfile=/workspace/. \
