@@ -251,13 +251,12 @@ impl KubernetesService {
                 )
                 .await?;
 
-                let build_id = Uuid::new_v4().to_string();
+                // let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_buildctl_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
-                    &build_id,
                     &clone_url,
                     context_path.as_deref(),
                     dockerfile_path.as_deref(),
@@ -283,13 +282,12 @@ impl KubernetesService {
                 )
                 .await?;
 
-                let build_id = Uuid::new_v4().to_string();
+                // let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_kpack_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
-                    &build_id,
                     &clone_url,
                 )
                 .await?;
@@ -512,13 +510,12 @@ impl KubernetesService {
                 )
                 .await?;
 
-                let build_id = Uuid::new_v4().to_string();
+                // let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_buildctl_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
-                    &build_id,
                     &clone_url,
                     context_path.as_deref(),
                     dockerfile_path.as_deref(),
@@ -545,13 +542,12 @@ impl KubernetesService {
                 )
                 .await?;
 
-                let build_id = Uuid::new_v4().to_string();
+                // let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_kpack_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
-                    &build_id,
                     &clone_url,
                 )
                 .await?;
@@ -1326,23 +1322,22 @@ impl KubernetesService {
     // BUILD
     // ============================================================================================
 
-    #[tracing::instrument(name = "kubernetes_service.spawn_buildctl_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    #[tracing::instrument(name = "kubernetes_service.spawn_buildctl_job", skip_all, fields(deployment_id = %deployment_id), err)]
     pub async fn spawn_buildctl_job(
         &self,
         project_id: &str,
         deployment_id: &str,
         preset_id: &str,
-        build_id: &str,
         clone_url: &str,
         context_path: Option<&str>,
         dockerfile_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "buildkit";
-        let job_name = format!("{}", build_id);
+        let job_name = format!("{}", deployment_id);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
-        let image_name = format!("{repo}/{}", build_id);
-        let cache = format!("{repo}/{}-cache", build_id);
+        let image_name = format!("{repo}/{}", deployment_id);
+        let cache = format!("{repo}/{}-cache", deployment_id);
 
         let context = context_path.unwrap_or(".");
         let dockerfile_path = dockerfile_path.unwrap_or("Dockerfile");
@@ -1425,7 +1420,6 @@ impl KubernetesService {
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
-            ("poddle.io/build-id".into(), build_id.into()),
         ]);
 
         let job = Job {
@@ -1485,22 +1479,21 @@ impl KubernetesService {
         Ok(())
     }
 
-    #[tracing::instrument(name = "kubernetes_service.spawn_railpack_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    #[tracing::instrument(name = "kubernetes_service.spawn_railpack_job", skip_all, fields(deployment_id = %deployment_id), err)]
     pub async fn spawn_railpack_job(
         &self,
         project_id: &str,
         deployment_id: &str,
         preset_id: &str,
-        build_id: &str,
         clone_url: &str,
         context_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "buildkit";
-        let job_name = format!("{}", build_id);
+        let job_name = format!("{}", deployment_id);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
-        let image_name = format!("{repo}/{}", build_id);
-        let cache = format!("{repo}/{}-cache", build_id);
+        let image_name = format!("{repo}/{}", deployment_id);
+        let cache = format!("{repo}/{}-cache", deployment_id);
 
         let context = context_path.unwrap_or(".");
 
@@ -1599,7 +1592,6 @@ impl KubernetesService {
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
-            ("poddle.io/build-id".into(), build_id.into()),
         ]);
 
         let job = Job {
@@ -1659,13 +1651,12 @@ impl KubernetesService {
         Ok(())
     }
 
-    #[tracing::instrument(name = "kubernetes_service.spawn_kpack_job", skip_all, fields(deployment_id = %deployment_id, build_id = %build_id), err)]
+    #[tracing::instrument(name = "kubernetes_service.spawn_kpack_job", skip_all, fields(deployment_id = %deployment_id), err)]
     pub async fn spawn_kpack_job(
         &self,
         project_id: &str,
         deployment_id: &str,
         preset_id: &str,
-        build_id: &str,
         clone_url: &str,
     ) -> Result<(), AppError> {
         let spec = ImageSpec {
@@ -1696,7 +1687,8 @@ impl KubernetesService {
             ..Default::default()
         };
 
-        let mut image = Image::new(build_id, spec);
+        let image_name = format!("{}", deployment_id);
+        let mut image = Image::new(&image_name, spec);
         image.metadata.namespace = Some("kpack-build".to_string());
 
         let labels: BTreeMap<String, String> = BTreeMap::from([
@@ -1704,20 +1696,19 @@ impl KubernetesService {
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
-            ("poddle.io/build-id".into(), build_id.into()),
         ]);
         image.metadata.labels = Some(labels);
 
         let api: Api<Image> = Api::namespaced(self.client.clone(), "kpack-build");
 
         api.patch(
-            build_id,
+            &image_name,
             &PatchParams::apply("poddle-provisioner").force(),
             &Patch::Apply(&image),
         )
         .await
         .map_err(|e| {
-            error!(deployment_id=%deployment_id, build_id=%build_id, error = %e, "🚨 Image SSA failed");
+            error!(deployment_id=%deployment_id, error = %e, "🚨 Image SSA failed");
             AppError::InternalServerError(format!("🚨 Image SSA failed: {}", e))
         })?;
 
