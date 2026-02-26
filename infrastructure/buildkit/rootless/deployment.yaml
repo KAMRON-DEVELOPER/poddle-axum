@@ -2,18 +2,18 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   labels:
-    app: buildkitd
-  name: buildkitd
+    app: buildkit
+  name: buildkit
   namespace: buildkit
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: buildkitd
+      app: buildkit
   template:
     metadata:
       labels:
-        app: buildkitd
+        app: buildkit
     spec:
       volumes:
         - name: registry-secret-volume
