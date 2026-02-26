@@ -1370,7 +1370,7 @@ impl KubernetesService {
             _ => (".", dockerfile_path),
         };
 
-        let buildkitd_address = "tcp://buildkitd.buildkit.svc.cluster.local:1234";
+        let buildkitd_address = "tcp://buildkit.buildkit.svc.cluster.local:1234";
         let build_script = format!(
             "buildctl --addr {buildkitd_address} build \
             --frontend=dockerfile.v0 \
@@ -1543,7 +1543,7 @@ impl KubernetesService {
         let init_containers = Some(vec![git_clone, railpack_prepare]);
 
         // --- Build container ---
-        let buildkitd_address = "tcp://buildkitd.buildkit.svc.cluster.local:1234";
+        let buildkitd_address = "tcp://buildkit.buildkit.svc.cluster.local:1234";
         let build_script = format!(
             "buildctl --addr {buildkitd_address} build \
             --frontend=gateway.v0 \
