@@ -283,12 +283,13 @@ impl KubernetesService {
                 )
                 .await?;
 
-                // let build_id = Uuid::new_v4().to_string();
+                let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_kpack_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
+                    &build_id,
                     &clone_url,
                 )
                 .await?;
@@ -544,12 +545,13 @@ impl KubernetesService {
                 )
                 .await?;
 
-                // let build_id = Uuid::new_v4().to_string();
+                let build_id = Uuid::new_v4().to_string();
 
                 self.spawn_kpack_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
+                    &build_id,
                     &clone_url,
                 )
                 .await?;
@@ -1424,6 +1426,7 @@ impl KubernetesService {
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
         ]);
 
         let job = Job {
@@ -1598,6 +1601,7 @@ impl KubernetesService {
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
         ]);
 
         let job = Job {
@@ -1663,12 +1667,13 @@ impl KubernetesService {
         project_id: &str,
         deployment_id: &str,
         preset_id: &str,
+        build_id: &str,
         clone_url: &str,
     ) -> Result<(), AppError> {
         let spec = ImageSpec {
             tag: format!(
-                "me-central1-docker.pkg.dev/poddle-mvp/kpack/{}",
-                deployment_id
+                "me-central1-docker.pkg.dev/poddle-mvp/kpack/{}:{}",
+                deployment_id, build_id
             ),
             service_account_name: "kpack-sa".to_string(),
             builder: ImageBuilderRef {
@@ -1702,6 +1707,7 @@ impl KubernetesService {
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
+            ("poddle.io/build-id".into(), build_id.into()),
         ]);
         image.metadata.labels = Some(labels);
 
