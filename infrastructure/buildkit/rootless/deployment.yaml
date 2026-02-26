@@ -42,7 +42,7 @@ spec:
             - containerPort: 1234
           volumeMounts:
             - name: "registry-secret-volume"
-              mountPath: "/root/.docker"
+              mountPath: "/home/user/.docker"
           resources:
             requests:
               cpu: "100m"
