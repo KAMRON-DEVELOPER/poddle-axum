@@ -34,9 +34,9 @@ spec:
               --local context=/workspace/. \
               --local dockerfile=/workspace/. \
               --opt filename=Dockerfile \
-              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-fastapi:latest,push=true \
-              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-fastapi-cache,mode=max \
-              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-fastapi-cache \
+              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-dockerfile:latest,push=true \
+              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-dockerfile-cache,mode=max \
+              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-dockerfile-cache \
               --progress=plain
           env:
             - name: BUILDKITD_FLAGS
