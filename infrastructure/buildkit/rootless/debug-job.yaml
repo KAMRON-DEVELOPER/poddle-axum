@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: debug-buildctl-job
+  name: debug-dockerfile-job
   namespace: buildkit
 spec:
   ttlSecondsAfterFinished: 300
