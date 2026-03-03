@@ -18,5 +18,9 @@ RUN set -eux; \
 # dynamic linker/loader required to run the binary.
 # FROM gcr.io/distroless/cc-debian13:nonroot
 FROM debian:trixie-slim
+# Install ca-certificates so Railpack can download mise/uv over HTTPS
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
 COPY --from=fetch /railpack /usr/local/bin/railpack
+RUN useradd -m -u 1000 railpack
+USER 1000
 ENTRYPOINT ["/usr/local/bin/railpack"]
