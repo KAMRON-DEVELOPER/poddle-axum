@@ -12,8 +12,8 @@ use compute_core::{
 use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
-    EmptyDirVolumeSource, EnvFromSource, KeyToPath, LocalObjectReference, SecretEnvSource,
-    SecretVolumeSource, Volume, VolumeMount,
+    EmptyDirVolumeSource, EnvFromSource, KeyToPath, LocalObjectReference, PodSecurityContext,
+    SecretEnvSource, SecretVolumeSource, Volume, VolumeMount,
 };
 use k8s_openapi::{
     api::{
@@ -1454,7 +1454,7 @@ impl KubernetesService {
                         init_containers,
                         containers,
                         restart_policy: Some("Never".into()),
-                        security_context: Some(k8s_openapi::api::core::v1::PodSecurityContext {
+                        security_context: Some(PodSecurityContext {
                             fs_group: Some(1000),
                             run_as_user: Some(1000),
                             run_as_group: Some(1000),
@@ -1540,7 +1540,7 @@ impl KubernetesService {
         let railpack_prepare = Container {
             name: "railpack-prepare".into(),
             image: Some("kamronbekdev/railpack-cli:v0.17.2".into()),
-            image_pull_policy: Some("IfNotPresent".into()),
+            image_pull_policy: Some("Always".into()),
             // Since distroless has no shell, we pass arguments directly to the ENTRYPOINT
             args: Some(vec![
                 "prepare".into(),
@@ -1576,11 +1576,11 @@ impl KubernetesService {
         );
 
         let mut requests = BTreeMap::new();
-        requests.insert("cpu".to_string(), Quantity("100m".to_string()));
-        requests.insert("memory".to_string(), Quantity("128Mi".to_string()));
+        requests.insert("cpu".to_string(), Quantity("256m".to_string()));
+        requests.insert("memory".to_string(), Quantity("256Mi".to_string()));
         let mut limits = BTreeMap::new();
-        limits.insert("cpu".to_string(), Quantity("250m".to_string()));
-        limits.insert("memory".to_string(), Quantity("256Mi".to_string()));
+        limits.insert("cpu".to_string(), Quantity("1000m".to_string()));
+        limits.insert("memory".to_string(), Quantity("1Gi".to_string()));
 
         let containers = vec![Container {
             name: "buildctl".into(),
@@ -1636,7 +1636,7 @@ impl KubernetesService {
                         init_containers,
                         containers,
                         restart_policy: Some("Never".into()),
-                        security_context: Some(k8s_openapi::api::core::v1::PodSecurityContext {
+                        security_context: Some(PodSecurityContext {
                             fs_group: Some(1000),
                             run_as_user: Some(1000),
                             run_as_group: Some(1000),
