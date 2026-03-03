@@ -16,7 +16,7 @@ RUN set -eux; \
 # If the mise binary downloaded by Railpack is dynamically linked (which most are), the
 # Linux kernel will throw a "no such file or directory" error because it cannot find the
 # dynamic linker/loader required to run the binary.
-FROM gcr.io/distroless/cc-debian13:nonroot
+# FROM gcr.io/distroless/cc-debian13:nonroot
+FROM debian:trixie-slim
 COPY --from=fetch /railpack /usr/local/bin/railpack
-USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/railpack"]
