@@ -1346,7 +1346,8 @@ impl KubernetesService {
         dockerfile_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "buildkit";
-        let job_name = format!("{}-{}", deployment_id, build_id);
+        // Safely truncate the UUIDs to stay well under the 63-character limit
+        let job_name = format!("{}-{}", &deployment_id[..8], &build_id[..8]);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
         // Tag the image uniquely for this specific build
@@ -1431,19 +1432,19 @@ impl KubernetesService {
             ..Default::default()
         }];
 
-        let labels: BTreeMap<String, String> = BTreeMap::from([
+        let labels = Some(BTreeMap::from([
             ("poddle.io/managed-by".into(), "poddle".into()),
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
             ("poddle.io/build-id".into(), build_id.into()),
-        ]);
+        ]));
 
         let job = Job {
             metadata: ObjectMeta {
                 name: Some(job_name.clone()),
                 namespace: Some(namespace.to_string()),
-                labels: Some(labels),
+                labels,
                 ..Default::default()
             },
             spec: Some(JobSpec {
@@ -1512,7 +1513,8 @@ impl KubernetesService {
         context_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "buildkit";
-        let job_name = format!("{}-{}", deployment_id, build_id);
+        // Safely truncate the UUIDs to stay well under the 63-character limit
+        let job_name = format!("{}-{}", &deployment_id[..8], &build_id[..8]);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
         // Tag the image uniquely for this specific build
@@ -1618,19 +1620,19 @@ impl KubernetesService {
             ..Default::default()
         }];
 
-        let labels: BTreeMap<String, String> = BTreeMap::from([
+        let labels = Some(BTreeMap::from([
             ("poddle.io/managed-by".into(), "poddle".into()),
             ("poddle.io/project-id".into(), project_id.into()),
             ("poddle.io/deployment-id".into(), deployment_id.into()),
             ("poddle.io/preset-id".into(), preset_id.into()),
             ("poddle.io/build-id".into(), build_id.into()),
-        ]);
+        ]));
 
         let job = Job {
             metadata: ObjectMeta {
                 name: Some(job_name.clone()),
                 namespace: Some(namespace.to_string()),
-                labels: Some(labels),
+                labels,
                 ..Default::default()
             },
             spec: Some(JobSpec {
