@@ -12,7 +12,11 @@ RUN set -eux; \
     chmod +x "$(find /tmp -maxdepth 3 -type f -name railpack | head -n 1)"; \
     cp "$(find /tmp -maxdepth 3 -type f -name railpack | head -n 1)" /railpack
 
-FROM gcr.io/distroless/static:nonroot
+# Railpack tries to initialize mise in /tmp
+# If the mise binary downloaded by Railpack is dynamically linked (which most are), the
+# Linux kernel will throw a "no such file or directory" error because it cannot find the
+# dynamic linker/loader required to run the binary.
+FROM gcr.io/distroless/cc-debian13:nonroot
 COPY --from=fetch /railpack /usr/local/bin/railpack
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/railpack"]

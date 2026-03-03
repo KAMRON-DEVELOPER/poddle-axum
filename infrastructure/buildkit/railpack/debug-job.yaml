@@ -30,8 +30,14 @@ spec:
         # Analyze the code and generate the build plan
         - name: railpack-prepare
           image: kamronbekdev/railpack-cli:v0.17.2
+          imagePullPolicy: Always
           args:
-            - prepare /workspace/. --plan-out /workspace/railpack-plan.json --info-out /workspace/railpack-info.json
+            - prepare
+            - /workspace/.
+            - --plan-out
+            - /workspace/railpack-plan.json
+            - --info-out
+            - /workspace/railpack-info.json
           volumeMounts:
             - name: workspace
               mountPath: /workspace
