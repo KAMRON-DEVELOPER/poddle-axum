@@ -18,17 +18,11 @@ spec:
       initContainers:
         # Clone the repository
         - name: git-clone
-          image:
-            alpine/git:latest
-            # Delete Procfile so Railpack ignores it
+          image: alpine/git:latest
           args:
-            - |
-              git clone https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop /workspace
-              rm -f /workspace/Procfile
-          # args:
-          #   - clone
-          #   - https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
-          #   - /workspace
+            - clone
+            - https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
+            - /workspace
           volumeMounts:
             - name: workspace
               mountPath: /workspace
