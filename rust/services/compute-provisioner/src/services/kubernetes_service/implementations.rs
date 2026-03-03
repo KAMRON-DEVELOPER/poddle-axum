@@ -1490,7 +1490,12 @@ impl KubernetesService {
         };
 
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
-        jobs.create(&PostParams::default(), &job).await?;
+        jobs.create(&PostParams::default(), &job)
+            .await
+            .map_err(|e| {
+                error!(error=%e, "🚨 Failed to create buildctl Job");
+                AppError::InternalServerError(format!("🚨 Failed to create buildctl Job: {}", e))
+            })?;
 
         info!("🚀 Spawned buildctl Job: {}", job_name);
         Ok(())
@@ -1672,7 +1677,12 @@ impl KubernetesService {
         };
 
         let jobs: Api<Job> = Api::namespaced(self.client.clone(), namespace);
-        jobs.create(&PostParams::default(), &job).await?;
+        jobs.create(&PostParams::default(), &job)
+            .await
+            .map_err(|e| {
+                error!(error=%e, "🚨 Failed to create railpack Job");
+                AppError::InternalServerError(format!("🚨 Failed to create railpack Job: {}", e))
+            })?;
 
         info!("🚀 Spawned Railpack Job: {}", job_name);
         Ok(())
