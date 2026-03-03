@@ -30,7 +30,7 @@ spec:
         # Analyze the code and generate the build plan
         - name: railpack-prepare
           image: kamronbekdev/railpack-cli:v0.17.2
-          imagePullPolicy: Always
+          imagePullPolicy: IfNotPresent
           args:
             - prepare
             - /workspace/.
