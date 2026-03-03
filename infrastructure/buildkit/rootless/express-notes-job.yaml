@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: debug-dockerfile-job
+  name: dockerfile-express-notes-job
   namespace: buildkit
 spec:
   ttlSecondsAfterFinished: 300
@@ -18,7 +18,7 @@ spec:
           image: alpine/git:latest
           args:
             - clone
-            - https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
+            - https://github.com/KAMRON-DEVELOPER/pack-express-notes
             - /workspace
           volumeMounts:
             - name: workspace
@@ -34,9 +34,9 @@ spec:
               --local context=/workspace/. \
               --local dockerfile=/workspace/. \
               --opt filename=Dockerfile \
-              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-dockerfile:latest,push=true \
-              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-dockerfile-cache,mode=max \
-              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-dockerfile-cache \
+              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/dockerfile-express-notes:latest,push=true \
+              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/dockerfile-express-notes-cache,mode=max \
+              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/dockerfile-express-notes-cache \
               --progress=plain
           env:
             - name: BUILDKITD_FLAGS
@@ -47,8 +47,8 @@ spec:
               cpu: "100m"
               memory: "128Mi"
             limits:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "500m"
+              memory: "512Mi"
           volumeMounts:
             - name: workspace
               mountPath: /workspace

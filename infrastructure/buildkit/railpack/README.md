@@ -1,29 +1,56 @@
 # Railpack
 
+## Local build
+
+Docker build
+
 ```bash
-~/Documents/Coding/rust/backend/poddle-axum master ❯ cat certs/poddle-artifact-registery-key.json | docker --config /tmp/gcp-docker login -u _json_key --password-stdin https://me-central1-docker.pkg.dev && docker --config /tmp/gcp-docker pull me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack:latest
-Login Succeeded
-latest: Pulling from poddle-mvp/buildkit/debug-railpack
-1adabd6b0d6b: Pull complete
-9b7bf8e626ed: Pull complete
-e9efee35afce: Pull complete
-b6ab26ac98c1: Pull complete
-f497b7d97281: Pull complete
-de24d7c29da9: Pull complete
-ac0b5e4f74f1: Pull complete
-312a967b27d4: Pull complete
-056aa6e18654: Pull complete
-Digest: sha256:7a4ed435f41b7fb0ce0bf6cb61d11cc968b90283607ee9bde0803c97988bd707
-Status: Downloaded newer image for me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack:latest
-me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack:latest
-~/Documents/Coding/rust/backend/poddle-axum master ❯ docker run --rm --name debug-railpack -p 8000:8000 me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack:latest
-INFO:     Started server process [1]
-INFO:     Waiting for application startup.
-INFO:     Application startup complete.
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
-^CINFO:     Shutting down
-INFO:     Waiting for application shutdown.
-INFO:     Application shutdown complete.
-INFO:     Finished server process [1]
-~/Documents/Coding/rust/backend/poddle-axum master ❯
+docker build -t kamronbekdev/pack-fastapi-bookshop:0.0.1 .
+docker build -t kamronbekdev/pack-express-notes:0.0.1 .
+docker build -t kamronbekdev/pack-react-bookshop:0.0.1 .
+docker build -t kamronbekdev/pack-react-notes:0.0.1 .
+```
+
+Docker push
+
+```bash
+docker push kamronbekdev/pack-fastapi-bookshop:0.0.1
+docker push kamronbekdev/pack-express-notes:0.0.1
+docker push kamronbekdev/pack-react-bookshop:0.0.1
+docker push kamronbekdev/pack-react-notes:0.0.1
+```
+
+## Railpack build
+
+```bash
+kubectl apply -f infrastructure/buildkit/railpack/fastapi-bookshop-job.yaml
+kubectl apply -f infrastructure/buildkit/railpack/express-notes-job.yaml
+kubectl apply -f infrastructure/buildkit/railpack/react-bookshop-job.yaml
+kubectl apply -f infrastructure/buildkit/railpack/react-notes-job.yaml
+```
+
+## GCP
+
+GCP login
+
+```bash
+cat certs/poddle-artifact-registery-key.json | docker --config /tmp/gcp-docker login -u _json_key --password-stdin https://me-central1-docker.pkg.dev
+```
+
+Image pull
+
+```bash
+docker --config /tmp/gcp-docker pull me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-fastapi-bookshop:latest
+docker --config /tmp/gcp-docker pull me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-express-notes:latest
+docker --config /tmp/gcp-docker pull me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-react-bookshop:latest
+docker --config /tmp/gcp-docker pull me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-react-notes:latest
+```
+
+Run the container
+
+```bash
+docker run --rm --name railpack-fastapi-bookshop -p 8000:8000 me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-fastapi-bookshop:latest
+docker run --rm --name railpack-express-notes -p 8000:8000 me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-express-notes:latest
+docker run --rm --name railpack-react-bookshop -p 8000:8000 me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-react-bookshop:latest
+docker run --rm --name railpack-react-notes -p 8000:8000 me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-react-notes:latest
 ```

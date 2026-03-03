@@ -1,7 +1,7 @@
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: debug-railpack-job
+  name: railpack-react-notes-job
   namespace: buildkit
   labels:
     poddle.io/managed-by: poddle
@@ -21,7 +21,7 @@ spec:
           image: alpine/git:latest
           args:
             - clone
-            - https://github.com/KAMRON-DEVELOPER/kpack-fastapi-bookshop
+            - https://github.com/KAMRON-DEVELOPER/pack-react-notes
             - /workspace
           volumeMounts:
             - name: workspace
@@ -55,9 +55,9 @@ spec:
               --local context=/workspace/. \
               --local dockerfile=/workspace \
               --opt filename=railpack-plan.json \
-              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack:latest,push=true \
-              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack-cache,mode=max \
-              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debug-railpack-cache \
+              --output type=image,name=me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-react-notes:latest,push=true \
+              --export-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/railpack-react-notes-cache,mode=max \
+              --import-cache type=registry,ref=me-central1-docker.pkg.dev/poddle-mvp/buildkit/debugrailpack-react-notes-cache \
               --progress=plain
           env:
             - name: BUILDKITD_FLAGS
@@ -68,8 +68,8 @@ spec:
               cpu: "100m"
               memory: "128Mi"
             limits:
-              cpu: "250m"
-              memory: "256Mi"
+              cpu: "500m"
+              memory: "512Mi"
           volumeMounts:
             - name: workspace
               mountPath: /workspace
