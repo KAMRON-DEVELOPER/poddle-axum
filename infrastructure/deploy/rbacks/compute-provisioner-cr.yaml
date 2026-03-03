@@ -41,3 +41,8 @@ rules:
   - apiGroups: ["kpack.io"]
     resources: ["images"]
     verbs: ["get", "list", "watch", "create", "patch", "update", "delete"]
+
+  # --- job ---
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]

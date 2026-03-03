@@ -9,6 +9,10 @@ rules:
     resources: ["pods"]
     verbs: ["get", "list", "watch"]
 
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+
   # Allow watching Deployments (Apps API group)
   - apiGroups: ["apps"]
     resources: ["deployments"]
