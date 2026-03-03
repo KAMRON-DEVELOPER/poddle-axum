@@ -52,6 +52,7 @@ pub enum DeploymentSource {
     },
     Code {
         repo: Repository,
+        context_path: Option<String>,
     },
 }
 
@@ -193,6 +194,7 @@ pub enum DeploymentSourceMessage {
     },
     Code {
         clone_url: String,
+        context_path: Option<String>,
     },
     InternalBuildComplete {
         url: String,

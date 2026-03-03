@@ -1,7 +1,6 @@
 use chrono::Utc;
 use compute_core::cache_keys::CacheKeys;
 use compute_core::channel_names::ChannelNames;
-use compute_core::crds::{Build, Image};
 use compute_core::determiners::determine_deployment_status;
 use compute_core::event::{ComputeEvent, EventLevel};
 use compute_core::models::DeploymentStatus;
@@ -13,7 +12,6 @@ use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
 use k8s_openapi::api::batch::v1::Job;
 use k8s_openapi::api::core::v1::Pod as K8sPod;
-use kube::api::DeleteParams;
 use kube::runtime::watcher::{Config as WatcherConfig, Event};
 use kube::{Api, Client};
 use lapin::BasicProperties;
@@ -22,7 +20,7 @@ use lapin::types::FieldTable;
 use redis::aio::MultiplexedConnection;
 use redis::{AsyncTypedCommands, pipe};
 use sqlx::PgPool;
-use tracing::{Instrument, debug, error, info, info_span, warn};
+use tracing::{Instrument, error, info, info_span, warn};
 use uuid::Uuid;
 
 use crate::config::Config;
@@ -40,13 +38,13 @@ pub async fn event_watcher(
     let deployment: Api<K8sDeployment> = Api::all(client.clone());
     let pod: Api<K8sPod> = Api::all(client.clone());
     let buildkit_job: Api<Job> = Api::all(client.clone());
-    let kpack_build: Api<Build> = Api::all(client.clone());
+    // let kpack_build: Api<Build> = Api::all(client.clone());
 
     let mut deployment_stream = kube::runtime::watcher(deployment, watcher_config.clone()).boxed();
     let mut pod_stream = kube::runtime::watcher(pod, watcher_config.clone()).boxed();
     let mut buildkit_job_stream =
         kube::runtime::watcher(buildkit_job, watcher_config.clone()).boxed();
-    let mut kpack_build_stream = kube::runtime::watcher(kpack_build, watcher_config).boxed();
+    // let mut kpack_build_stream = kube::runtime::watcher(kpack_build, watcher_config).boxed();
 
     info!("🔍 Starting Kubernetes watchers");
     loop {
@@ -66,11 +64,11 @@ pub async fn event_watcher(
                     error!(error = %e, "❌ Failed to handle job event");
                 }
             }
-            Some(event) = kpack_build_stream.next() => {
-                if let Err(e) = handle_kpack_build_event(event, &pool, &mut redis, &amqp, &client).await {
-                    error!(error = %e, "❌ Failed to handle kpack build event");
-                }
-            }
+            // Some(event) = kpack_build_stream.next() => {
+            //     if let Err(e) = handle_kpack_build_event(event, &pool, &mut redis, &amqp, &client).await {
+            //         error!(error = %e, "❌ Failed to handle kpack build event");
+            //     }
+            // }
             else => {
                 warn!("❌ Both watcher streams ended unexpectedly");
                 break;
@@ -647,159 +645,159 @@ async fn handle_buildkit_job_event(
     Ok(())
 }
 
-#[tracing::instrument("handle_kpack_build_event", skip_all, err)]
-async fn handle_kpack_build_event(
-    event: Result<Event<Build>, kube::runtime::watcher::Error>,
-    pool: &PgPool,
-    con: &mut MultiplexedConnection,
-    amqp: &Amqp,
-    client: &Client,
-) -> Result<(), AppError> {
-    match event {
-        Ok(Event::Apply(build)) => {
-            let name = build.metadata.name.clone().unwrap_or_default();
-            let labels = build.metadata.labels.as_ref();
+// #[tracing::instrument("handle_kpack_build_event", skip_all, err)]
+// async fn handle_kpack_build_event(
+//     event: Result<Event<Build>, kube::runtime::watcher::Error>,
+//     pool: &PgPool,
+//     con: &mut MultiplexedConnection,
+//     amqp: &Amqp,
+//     client: &Client,
+// ) -> Result<(), AppError> {
+//     match event {
+//         Ok(Event::Apply(build)) => {
+//             let name = build.metadata.name.clone().unwrap_or_default();
+//             let labels = build.metadata.labels.as_ref();
 
-            let deployment_id = labels
-                .and_then(|l| l.get("poddle.io/deployment-id"))
-                .and_then(|id| Uuid::parse_str(id).ok());
-            let project_id = labels
-                .and_then(|l| l.get("poddle.io/project-id"))
-                .and_then(|id| Uuid::parse_str(id).ok());
-            let build_id = labels.and_then(|l| l.get("poddle.io/build-id"));
+//             let deployment_id = labels
+//                 .and_then(|l| l.get("poddle.io/deployment-id"))
+//                 .and_then(|id| Uuid::parse_str(id).ok());
+//             let project_id = labels
+//                 .and_then(|l| l.get("poddle.io/project-id"))
+//                 .and_then(|id| Uuid::parse_str(id).ok());
+//             let build_id = labels.and_then(|l| l.get("poddle.io/build-id"));
 
-            if project_id.is_none() || deployment_id.is_none() || build_id.is_none() {
-                return Ok(());
-            }
-            let project_id = project_id.unwrap();
-            let deployment_id = deployment_id.unwrap();
-            let build_id = build_id.unwrap();
+//             if project_id.is_none() || deployment_id.is_none() || build_id.is_none() {
+//                 return Ok(());
+//             }
+//             let project_id = project_id.unwrap();
+//             let deployment_id = deployment_id.unwrap();
+//             let build_id = build_id.unwrap();
 
-            info!(
-                project_id = %project_id,
-                deployment_id = %deployment_id,
-                build_id = %build_id,
-                "📥 Kpack Build Event::Apply received",
-            );
+//             info!(
+//                 project_id = %project_id,
+//                 deployment_id = %deployment_id,
+//                 build_id = %build_id,
+//                 "📥 Kpack Build Event::Apply received",
+//             );
 
-            // kpack updates the status block as the build progresses
-            if let Some(status) = build.status {
-                if let Some(conditions) = status.conditions {
-                    for cond in conditions {
-                        if cond.r#type == "Succeeded" {
-                            if cond.status == "True" {
-                                let image = status.latest_image.clone().unwrap_or_default();
+//             // kpack updates the status block as the build progresses
+//             if let Some(status) = build.status {
+//                 if let Some(conditions) = status.conditions {
+//                     for cond in conditions {
+//                         if cond.r#type == "Succeeded" {
+//                             if cond.status == "True" {
+//                                 let image = status.latest_image.clone().unwrap_or_default();
 
-                                debug!(
-                                    "status.latest_image in handle_kpack_build_event: {}",
-                                    image
-                                );
+//                                 debug!(
+//                                     "status.latest_image in handle_kpack_build_event: {}",
+//                                     image
+//                                 );
 
-                                if image.is_empty() {
-                                    error!(
-                                        "❌ kpack build {} succeeded but no latest_image found in status",
-                                        name
-                                    );
-                                    // Still clean up the Image so kpack stops watching.
-                                    delete_kpack_image(client, &build_id).await;
-                                    return Ok(());
-                                }
+//                                 if image.is_empty() {
+//                                     error!(
+//                                         "❌ kpack build {} succeeded but no latest_image found in status",
+//                                         name
+//                                     );
+//                                     // Still clean up the Image so kpack stops watching.
+//                                     delete_kpack_image(client, &build_id).await;
+//                                     return Ok(());
+//                                 }
 
-                                // Get user_id for the message
-                                let user_id = sqlx::query_scalar!(
-                                    "SELECT user_id FROM deployments WHERE id = $1",
-                                    deployment_id
-                                )
-                                .fetch_one(pool)
-                                .await?;
+//                                 // Get user_id for the message
+//                                 let user_id = sqlx::query_scalar!(
+//                                     "SELECT user_id FROM deployments WHERE id = $1",
+//                                     deployment_id
+//                                 )
+//                                 .fetch_one(pool)
+//                                 .await?;
 
-                                // 3. Construct the Update message to trigger the final Deployment
-                                let message = UpdateDeploymentMessage {
-                                    user_id,
-                                    project_id,
-                                    deployment_id,
-                                    source: Some(DeploymentSourceMessage::InternalBuildComplete {
-                                        url: image,
-                                    }),
-                                    name: None,
-                                    port: None,
-                                    desired_replicas: None,
-                                    preset_id: None,
-                                    resource_spec: None,
-                                    secrets: None,
-                                    environment_variables: None,
-                                    labels: None,
-                                    domain: None,
-                                    subdomain: None,
-                                    timestamp: Utc::now().timestamp(),
-                                };
+//                                 // 3. Construct the Update message to trigger the final Deployment
+//                                 let message = UpdateDeploymentMessage {
+//                                     user_id,
+//                                     project_id,
+//                                     deployment_id,
+//                                     source: Some(DeploymentSourceMessage::InternalBuildComplete {
+//                                         url: image,
+//                                     }),
+//                                     name: None,
+//                                     port: None,
+//                                     desired_replicas: None,
+//                                     preset_id: None,
+//                                     resource_spec: None,
+//                                     secrets: None,
+//                                     environment_variables: None,
+//                                     labels: None,
+//                                     domain: None,
+//                                     subdomain: None,
+//                                     timestamp: Utc::now().timestamp(),
+//                                 };
 
-                                let channel = amqp.channel().await;
-                                let payload = serde_json::to_vec(&message)?;
-                                let mut headers = FieldTable::default();
-                                AmqpPropagator::inject_context(&mut headers);
+//                                 let channel = amqp.channel().await;
+//                                 let payload = serde_json::to_vec(&message)?;
+//                                 let mut headers = FieldTable::default();
+//                                 AmqpPropagator::inject_context(&mut headers);
 
-                                // 4. Publish to Provisioner
-                                channel
-                                    .basic_publish(
-                                        "compute",
-                                        "compute.update",
-                                        BasicPublishOptions::default(),
-                                        &payload,
-                                        BasicProperties::default()
-                                            .with_delivery_mode(2)
-                                            .with_content_type("application/json".into())
-                                            .with_headers(headers),
-                                    )
-                                    .instrument(info_span!("basic_publish.compute.update"))
-                                    .await?
-                                    .await?;
+//                                 // 4. Publish to Provisioner
+//                                 channel
+//                                     .basic_publish(
+//                                         "compute",
+//                                         "compute.update",
+//                                         BasicPublishOptions::default(),
+//                                         &payload,
+//                                         BasicProperties::default()
+//                                             .with_delivery_mode(2)
+//                                             .with_content_type("application/json".into())
+//                                             .with_headers(headers),
+//                                     )
+//                                     .instrument(info_span!("basic_publish.compute.update"))
+//                                     .await?
+//                                     .await?;
 
-                                info!(
-                                    "📤 Published deployment update message for completed kpack build {}",
-                                    deployment_id
-                                );
+//                                 info!(
+//                                     "📤 Published deployment update message for completed kpack build {}",
+//                                     deployment_id
+//                                 );
 
-                                // Delete the Image so kpack stops watching the repo.
-                                // The GitHub App token in the clone URL is short-lived anyway.
-                                delete_kpack_image(client, &build_id).await;
-                            } else if cond.status == "False" {
-                                error!("❌ kpack build {} failed. Reason: {:?}", name, cond.reason);
-                                sqlx::query!(
-                                    "UPDATE deployments SET status = 'build_failed' WHERE id = $1",
-                                    deployment_id
-                                )
-                                .execute(pool)
-                                .await?;
+//                                 // Delete the Image so kpack stops watching the repo.
+//                                 // The GitHub App token in the clone URL is short-lived anyway.
+//                                 delete_kpack_image(client, &build_id).await;
+//                             } else if cond.status == "False" {
+//                                 error!("❌ kpack build {} failed. Reason: {:?}", name, cond.reason);
+//                                 sqlx::query!(
+//                                     "UPDATE deployments SET status = 'build_failed' WHERE id = $1",
+//                                     deployment_id
+//                                 )
+//                                 .execute(pool)
+//                                 .await?;
 
-                                let channel =
-                                    ChannelNames::deployment_status(&deployment_id.to_string());
-                                let message = ComputeEvent::DeploymentStatusUpdate {
-                                    id: &deployment_id,
-                                    status: DeploymentStatus::BuildFailed,
-                                };
-                                con.publish(channel, message).await?;
+//                                 let channel =
+//                                     ChannelNames::deployment_status(&deployment_id.to_string());
+//                                 let message = ComputeEvent::DeploymentStatusUpdate {
+//                                     id: &deployment_id,
+//                                     status: DeploymentStatus::BuildFailed,
+//                                 };
+//                                 con.publish(channel, message).await?;
 
-                                // Delete the Image so kpack stops retrying.
-                                delete_kpack_image(client, &build_id).await;
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        Ok(Event::Delete(build)) => {
-            let name = build.metadata.name.unwrap_or_default();
-            info!("🗑️ kpack build {} was deleted", name);
-        }
-        Ok(Event::Init) => info!("✅ kpack build watcher init"),
-        Ok(Event::InitApply(_)) => {}
-        Ok(Event::InitDone) => info!("✅ kpack build watcher ready"),
-        Err(e) => error!("❌ kpack build watcher error: {}", e),
-    }
+//                                 // Delete the Image so kpack stops retrying.
+//                                 delete_kpack_image(client, &build_id).await;
+//                             }
+//                         }
+//                     }
+//                 }
+//             }
+//         }
+//         Ok(Event::Delete(build)) => {
+//             let name = build.metadata.name.unwrap_or_default();
+//             info!("🗑️ kpack build {} was deleted", name);
+//         }
+//         Ok(Event::Init) => info!("✅ kpack build watcher init"),
+//         Ok(Event::InitApply(_)) => {}
+//         Ok(Event::InitDone) => info!("✅ kpack build watcher ready"),
+//         Err(e) => error!("❌ kpack build watcher error: {}", e),
+//     }
 
-    Ok(())
-}
+//     Ok(())
+// }
 
 async fn when_affacted_rows_zero(
     project_id: &Uuid,
@@ -839,26 +837,26 @@ async fn send_deployments_message(
     Ok(())
 }
 
-/// Delete the kpack Image resource so kpack stops polling the repo.
-/// The clone URL contains a short-lived GitHub App token, so any retry would fail anyway.
-/// We silently ignore 404s (already gone) and log other errors without propagating them.
-async fn delete_kpack_image(client: &Client, image_name: &str) {
-    let api: Api<Image> = Api::namespaced(client.clone(), "kpack-build");
-    match api.delete(image_name, &DeleteParams::default()).await {
-        Ok(_) => info!(
-            "🗑️ Deleted kpack Image '{}' after build finished",
-            image_name
-        ),
-        Err(kube::Error::Api(ae)) if ae.code == 404 => {
-            debug!(
-                "kpack Image '{}' already gone, nothing to delete",
-                image_name
-            );
-        }
-        Err(e) => {
-            // Non-fatal: the Image will just sit there until manual cleanup.
-            // The build result has already been processed correctly.
-            error!("⚠️ Failed to delete kpack Image '{}': {}", image_name, e);
-        }
-    }
-}
+// Delete the kpack Image resource so kpack stops polling the repo.
+// The clone URL contains a short-lived GitHub App token, so any retry would fail anyway.
+// We silently ignore 404s (already gone) and log other errors without propagating them.
+// async fn delete_kpack_image(client: &Client, image_name: &str) {
+//     let api: Api<Image> = Api::namespaced(client.clone(), "kpack-build");
+//     match api.delete(image_name, &DeleteParams::default()).await {
+//         Ok(_) => info!(
+//             "🗑️ Deleted kpack Image '{}' after build finished",
+//             image_name
+//         ),
+//         Err(kube::Error::Api(ae)) if ae.code == 404 => {
+//             debug!(
+//                 "kpack Image '{}' already gone, nothing to delete",
+//                 image_name
+//             );
+//         }
+//         Err(e) => {
+//             // Non-fatal: the Image will just sit there until manual cleanup.
+//             // The build result has already been processed correctly.
+//             error!("⚠️ Failed to delete kpack Image '{}': {}", image_name, e);
+//         }
+//     }
+// }

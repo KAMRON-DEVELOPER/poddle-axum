@@ -265,7 +265,10 @@ impl KubernetesService {
                 .await?;
                 Ok(())
             }
-            DeploymentSourceMessage::Code { clone_url } => {
+            DeploymentSourceMessage::Code {
+                clone_url,
+                context_path,
+            } => {
                 self.notify_status(
                     &project_id,
                     &deployment_id,
@@ -285,12 +288,13 @@ impl KubernetesService {
 
                 let build_id = Uuid::new_v4().to_string();
 
-                self.spawn_kpack_job(
+                self.spawn_railpack_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
                     &clone_url,
+                    context_path.as_deref(),
                 )
                 .await?;
                 Ok(())
@@ -525,7 +529,10 @@ impl KubernetesService {
                 )
                 .await?;
             }
-            Some(DeploymentSourceMessage::Code { clone_url }) => {
+            Some(DeploymentSourceMessage::Code {
+                clone_url,
+                context_path,
+            }) => {
                 info!("🏗️ Source changed to Code. Building...");
 
                 self.notify_status(
@@ -547,12 +554,13 @@ impl KubernetesService {
 
                 let build_id = Uuid::new_v4().to_string();
 
-                self.spawn_kpack_job(
+                self.spawn_railpack_job(
                     &project_id.to_string(),
                     &deployment_id.to_string(),
                     &preset_id.to_string(),
                     &build_id,
                     &clone_url,
+                    context_path.as_deref(),
                 )
                 .await?;
             }
@@ -1338,7 +1346,7 @@ impl KubernetesService {
         dockerfile_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "buildkit";
-        let job_name = format!("{}", deployment_id);
+        let job_name = format!("{}-{}", deployment_id, build_id);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
         // Tag the image uniquely for this specific build
@@ -1352,6 +1360,7 @@ impl KubernetesService {
         let init_containers = Some(vec![Container {
             name: "git-clone".into(),
             image: Some("alpine/git:latest".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
             args: Some(vec![
                 "clone".into(),
                 clone_url.to_string(),
@@ -1394,6 +1403,7 @@ impl KubernetesService {
         let containers = vec![Container {
             name: "buildctl".into(),
             image: Some("moby/buildkit:rootless".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
             command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
             env: Some(vec![EnvVar {
                 name: "BUILDKITD_FLAGS".into(),
@@ -1497,7 +1507,7 @@ impl KubernetesService {
         context_path: Option<&str>,
     ) -> Result<(), AppError> {
         let namespace = "buildkit";
-        let job_name = format!("{}", deployment_id);
+        let job_name = format!("{}-{}", deployment_id, build_id);
 
         let repo = "me-central1-docker.pkg.dev/poddle-mvp/buildkit";
         // Tag the image uniquely for this specific build
@@ -1510,6 +1520,7 @@ impl KubernetesService {
         let git_clone = Container {
             name: "git-clone".into(),
             image: Some("alpine/git:latest".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
             args: Some(vec![
                 "clone".into(),
                 clone_url.to_string(),
@@ -1529,6 +1540,7 @@ impl KubernetesService {
         let railpack_prepare = Container {
             name: "railpack-prepare".into(),
             image: Some("kamronbekdev/railpack-cli:v0.17.2".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
             // Since distroless has no shell, we pass arguments directly to the ENTRYPOINT
             args: Some(vec![
                 "prepare".into(),
@@ -1573,6 +1585,7 @@ impl KubernetesService {
         let containers = vec![Container {
             name: "buildctl".into(),
             image: Some("moby/buildkit:rootless".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
             command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
             env: Some(vec![EnvVar {
                 name: "BUILDKITD_FLAGS".into(),
@@ -1666,7 +1679,7 @@ impl KubernetesService {
     }
 
     #[tracing::instrument(name = "kubernetes_service.spawn_kpack_job", skip_all, fields(deployment_id = %deployment_id), err)]
-    pub async fn spawn_kpack_job(
+    async fn _spawn_kpack_job(
         &self,
         project_id: &str,
         deployment_id: &str,

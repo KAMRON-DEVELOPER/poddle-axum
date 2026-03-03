@@ -122,8 +122,9 @@ impl Into<DeploymentSourceMessage> for DeploymentSource {
                 context_path,
                 dockerfile_path,
             },
-            DeploymentSource::Code { repo } => DeploymentSourceMessage::Code {
+            DeploymentSource::Code { repo, context_path } => DeploymentSourceMessage::Code {
                 clone_url: repo.clone_url,
+                context_path,
             },
         }
     }

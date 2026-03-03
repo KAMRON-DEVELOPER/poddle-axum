@@ -134,7 +134,7 @@ pub async fn create_deployment_handler(
 
     match &mut req.source {
         compute_core::schemas::DeploymentSource::Image { .. } => {}
-        DeploymentSource::Dockerfile { repo, .. } | DeploymentSource::Code { repo } => {
+        DeploymentSource::Dockerfile { repo, .. } | DeploymentSource::Code { repo, .. } => {
             if repo.private {
                 let installation_id = sqlx::query_scalar!(
                     "SELECT installation_id FROM installations WHERE user_id = $1",
