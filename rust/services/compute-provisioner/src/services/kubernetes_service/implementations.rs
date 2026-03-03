@@ -1540,7 +1540,7 @@ impl KubernetesService {
         let railpack_prepare = Container {
             name: "railpack-prepare".into(),
             image: Some("kamronbekdev/railpack-cli:v0.17.2".into()),
-            image_pull_policy: Some("Always".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
             // Since distroless has no shell, we pass arguments directly to the ENTRYPOINT
             args: Some(vec![
                 "prepare".into(),
