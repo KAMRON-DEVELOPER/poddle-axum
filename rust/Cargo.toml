@@ -120,7 +120,7 @@ kube = { version = "3.0.1", features = [
     "kube-client",
 ] }
 k8s-openapi = { version = "0.27.0", features = ["v1_33"] }
-schemars = { version = "1.2.1", features = [
+schemars = { version = "0.9.0", features = [
     "uuid1",
     "chrono04",
     "bigdecimal04",
