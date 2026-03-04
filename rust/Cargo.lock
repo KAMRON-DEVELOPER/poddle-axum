@@ -580,7 +580,7 @@ dependencies = [
  "redis",
  "reqwest",
  "rustls",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_json",
  "sqlx",
@@ -838,7 +838,7 @@ dependencies = [
  "redis",
  "reqwest",
  "rustls",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -939,7 +939,7 @@ dependencies = [
  "redis",
  "reqwest",
  "rustls",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_json",
  "sha256",
@@ -979,7 +979,7 @@ dependencies = [
  "redis",
  "reqwest",
  "rustls",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_json",
  "sqlx",
@@ -2135,7 +2135,7 @@ name = "http-contracts"
 version = "0.1.0"
 dependencies = [
  "axum",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_with",
  "thiserror 2.0.17",
@@ -4356,12 +4356,15 @@ version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4cd191f9397d57d581cddd31014772520aa448f65ef991055d7f61582c65165f"
 dependencies = [
+ "bigdecimal",
+ "chrono",
  "dyn-clone",
  "indexmap 2.12.0",
  "ref-cast",
  "schemars_derive 0.9.0",
  "serde",
  "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -4370,14 +4373,11 @@ version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
 dependencies = [
- "bigdecimal",
- "chrono",
  "dyn-clone",
  "ref-cast",
  "schemars_derive 1.2.1",
  "serde",
  "serde_json",
- "uuid",
 ]
 
 [[package]]
@@ -5688,7 +5688,7 @@ dependencies = [
  "redis",
  "reqwest",
  "rustls",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_json",
  "sqlx",
@@ -5713,7 +5713,7 @@ dependencies = [
  "axum-extra",
  "chrono",
  "jsonwebtoken",
- "schemars 1.2.1",
+ "schemars 0.9.0",
  "serde",
  "serde_json",
  "thiserror 2.0.17",

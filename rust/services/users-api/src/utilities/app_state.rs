@@ -60,29 +60,29 @@ impl AppState {
     }
 }
 
-// Option B: State can produce a JwtConfig via FromRef
-impl FromRef<AppState> for Box<dyn JwtCapability> {
-    fn from_ref(state: &AppState) -> Self {
-        Box::new(state.config.clone()) // assuming Config implements JwtConfig
+// Option A: State itself implements JwtConfig
+impl JwtCapability for AppState {
+    fn jwt_secret(&self) -> &str {
+        self.config.jwt.secret_key.as_str()
+    }
+
+    fn access_token_expire_in_minute(&self) -> i64 {
+        self.config.jwt.access_token_expire_in_minute
+    }
+
+    fn refresh_token_expire_in_days(&self) -> i64 {
+        self.config.jwt.refresh_token_expire_in_days
+    }
+
+    fn email_verification_token_expire_in_hours(&self) -> i64 {
+        self.config.jwt.email_verification_token_expire_in_hours
     }
 }
 
-// Option A: State itself implements JwtConfig
-// impl JwtConfig for AppState {
-//     fn jwt_secret(&self) -> &str {
-//         self.config.jwt_secret_key.as_str()
-//     }
-
-//     fn access_token_expire_in_minute(&self) -> i64 {
-//         self.config.access_token_expire_in_minute
-//     }
-
-//     fn refresh_token_expire_in_days(&self) -> i64 {
-//         self.config.refresh_token_expire_in_days
-//     }
-
-//     fn email_verification_token_expire_in_hours(&self) -> i64 {
-//         self.config.email_verification_token_expire_in_hours
+// Option B: State can produce a JwtConfig via FromRef
+// impl FromRef<AppState> for Box<dyn JwtCapability> {
+//     fn from_ref(state: &AppState) -> Self {
+//         Box::new(state.config.clone()) // assuming Config implements JwtConfig
 //     }
 // }
 
