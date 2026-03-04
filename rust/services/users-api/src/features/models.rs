@@ -1,4 +1,5 @@
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
 use uuid::Uuid;
@@ -7,7 +8,7 @@ use uuid::Uuid;
 // ENUMS
 // ============================================
 
-#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, JsonSchema, Debug)]
 #[sqlx(type_name = "user_role", rename_all = "snake_case")]
 pub enum UserRole {
     Admin,
@@ -15,7 +16,7 @@ pub enum UserRole {
     Regular,
 }
 
-#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, Debug)]
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Default, JsonSchema, Debug)]
 #[sqlx(type_name = "user_status", rename_all = "snake_case")]
 pub enum UserStatus {
     Active,
@@ -24,7 +25,7 @@ pub enum UserStatus {
     PendingVerification,
 }
 
-#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, JsonSchema, Debug)]
 #[sqlx(type_name = "provider", rename_all = "snake_case")]
 pub enum Provider {
     Google,
@@ -36,7 +37,7 @@ pub enum Provider {
 // MODELS
 // ============================================
 
-#[derive(FromRow, Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(FromRow, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Feedback {
     pub id: Uuid,
@@ -46,7 +47,7 @@ pub struct Feedback {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, PartialEq, Eq, Debug)]
+#[derive(FromRow, Serialize, Deserialize, PartialEq, Eq, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct OAuthUser {
     pub id: String,
@@ -59,7 +60,7 @@ pub struct OAuthUser {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct User {
     pub id: Uuid,
@@ -75,7 +76,7 @@ pub struct User {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UserSession {
     pub id: Uuid,

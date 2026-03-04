@@ -11,6 +11,7 @@ use crate::{
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
 };
+use aide::axum::IntoApiResponse;
 use bcrypt::{hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
 use http_contracts::{
@@ -53,7 +54,7 @@ pub async fn google_oauth_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
     State(google_oauth_client): State<GoogleOAuthClient>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, _csrf_token) = google_oauth_client
@@ -97,7 +98,7 @@ pub async fn google_oauth_callback_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Query(query): Query<OAuthCallback>,
     State(google_oauth_client): State<GoogleOAuthClient>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let pkce_verifier = jar
         .get("pkce_verifier")
         .map(|cookie| PkceCodeVerifier::new(cookie.value().to_string()))
@@ -213,7 +214,7 @@ pub async fn github_oauth_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
     State(github_oauth_client): State<GithubOAuthClient>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let (pkce_code_challenge, pkce_code_verifier) = PkceCodeChallenge::new_random_sha256();
 
     let (auth_url, _csrf_token) = github_oauth_client
@@ -252,7 +253,7 @@ pub async fn github_oauth_callback_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Query(query): Query<OAuthCallback>,
     State(github_oauth_client): State<GithubOAuthClient>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let pkce_verifier = jar
         .get("pkce_verifier")
         .map(|cookie| PkceCodeVerifier::new(cookie.value().to_string()))
@@ -373,7 +374,7 @@ pub async fn continue_with_email_handler(
     TypedHeader(user_agent): TypedHeader<UserAgent>,
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(auth_in): Json<AuthIn>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     debug!("auth_in is {:#?}", auth_in);
 
     let maybe_user = UsersRepository::find_user_by_email(&auth_in.email, &database.pool).await?;
@@ -541,7 +542,7 @@ pub async fn verify_handler(
     State(config): State<Config>,
     State(database): State<Database>,
     Query(verify_query): Query<VerifyQuery>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     debug!("verify_query is '{}'", verify_query.token.clone());
     let verification_token_claims = verify_token(&config, &verify_query.token)?;
 
@@ -580,7 +581,7 @@ pub async fn verify_handler(
 pub async fn get_user_handler(
     claims: Claims,
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user = UsersRepository::get_user_by_id(&claims.sub, &database.pool).await?;
     Ok(Json(user))
 }
@@ -594,7 +595,7 @@ pub async fn update_user_handler(
     State(s3): State<AmazonS3>,
     State(_database): State<Database>,
     mut multipart: Multipart,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let mut oauth_user_schema = UserIn {
         username: None,
         email: None,
@@ -644,7 +645,7 @@ pub async fn update_user_handler(
 pub async fn delete_user_handler(
     claims: Claims,
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     debug!("claims: {:#?}", claims);
 
     let query_result = sqlx::query!("DELETE FROM users WHERE id = $1", claims.sub)
@@ -665,7 +666,7 @@ pub async fn refresh_handler(
     State(config): State<Config>,
     jar: PrivateCookieJar,
     auth_header: Option<TypedHeader<Authorization<Bearer>>>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let (token, is_web) = if let Some(cookie) = jar.get("refresh_token") {
         (cookie.value().to_string(), true)
     } else if let Some(TypedHeader(Authorization(bearer))) = auth_header {
@@ -717,7 +718,7 @@ pub async fn refresh_handler(
 // -- LOGOUT
 // -- =====================
 #[tracing::instrument(name = "logout_handler", skip(jar))]
-pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
+pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoApiResponse {
     let mut jar = jar;
 
     // collect cookies into owned values first
@@ -770,7 +771,7 @@ pub async fn logout_handler(jar: PrivateCookieJar) -> impl IntoResponse {
 #[tracing::instrument(name = "get_stats_handler", skip_all)]
 pub async fn get_stats_handler(
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let users_total = sqlx::query_scalar!("SELECT COUNT(*) from users")
         .fetch_one(&database.pool)
         .await?;
@@ -788,7 +789,7 @@ pub async fn get_stats_handler(
 pub async fn get_feedbacks_handler(
     Query(p): Query<Pagination>,
     State(db): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let (data, total) = UsersRepository::get_feedbacks(&p, &db.pool).await?;
 
     Ok(Json(ListResponse { data, total }))
@@ -799,7 +800,7 @@ pub async fn create_feedback_handler(
     State(cfg): State<Config>,
     State(db): State<Database>,
     Json(req): Json<CreateFeedbackRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let query_result = UsersRepository::create_feedback(&req, &db.pool).await?;
 
     if query_result.rows_affected() == 0 {

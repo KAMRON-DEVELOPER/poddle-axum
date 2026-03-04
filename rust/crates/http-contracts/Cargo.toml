@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 axum.workspace = true
+schemars.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 serde_with.workspace = true

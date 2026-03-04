@@ -5,15 +5,16 @@ use uuid::Uuid;
 
 use crate::error::JwtError;
 
-#[derive(Serialize, Deserialize, PartialEq, Debug)]
+#[derive(Serialize, Deserialize, PartialEq, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 pub enum TokenType {
     Access,
     Refresh,
     EmailVerification,
 }
+use schemars::JsonSchema;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, JsonSchema, Debug)]
 pub struct Claims {
     pub sub: Uuid,
     pub typ: TokenType,

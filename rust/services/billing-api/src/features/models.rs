@@ -1,5 +1,6 @@
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type};
 use uuid::Uuid;
@@ -8,7 +9,7 @@ use uuid::Uuid;
 // ENUMS
 // ============================================
 
-#[derive(Type, Serialize, Deserialize, Clone, Debug, Copy, PartialEq, Eq)]
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, JsonSchema, Debug)]
 #[sqlx(type_name = "transaction_type", rename_all = "snake_case")]
 pub enum TransactionType {
     FreeCredit,
@@ -20,7 +21,7 @@ pub enum TransactionType {
 // MODELS
 // ============================================
 
-#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Balance {
     pub id: Uuid,
@@ -31,7 +32,7 @@ pub struct Balance {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Preset {
     pub id: Uuid,
@@ -52,7 +53,7 @@ pub struct Preset {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct AddonPrice {
     pub id: Uuid,
@@ -67,7 +68,7 @@ pub struct AddonPrice {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Transaction {
     pub id: Uuid,
@@ -81,7 +82,7 @@ pub struct Transaction {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Billing {
     // Identity
@@ -109,7 +110,7 @@ pub struct Billing {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Clone, Debug)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct SystemConfig {
     pub id: bool,

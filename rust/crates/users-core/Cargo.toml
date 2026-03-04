@@ -6,6 +6,8 @@ edition = "2024"
 [dependencies]
 axum.workspace = true
 axum-extra.workspace = true
+aide.workspace = true
+schemars.workspace = true
 thiserror.workspace = true
 jsonwebtoken.workspace = true
 chrono.workspace = true
