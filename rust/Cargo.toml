@@ -50,11 +50,15 @@ aide = { version = "0.16.0-alpha.2", features = [
     "axum-extra-cookie-private",
     "axum-extra-form",
     "axum-extra-headers",
-    "axum-json",
+    "axum-extra-query",
     "axum-form",
+    "axum-json",
     "axum-multipart",
+    "axum-query",
     "axum-tokio",
     "axum-ws",
+    "redoc",
+    "scalar",
     "swagger",
 ] }
 chrono = { version = "0.4.42", features = ["serde"] }

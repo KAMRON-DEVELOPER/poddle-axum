@@ -1,7 +1,16 @@
+use std::sync::Arc;
+
 use super::config::Config;
 use crate::error::AppError;
-use aide::axum::ApiRouter;
+use aide::{
+    axum::{ApiRouter, IntoApiResponse, routing::get},
+    openapi::{Info, OpenApi},
+    redoc::Redoc,
+    scalar::Scalar,
+    swagger::Swagger,
+};
 use axum::{
+    Extension, Json, Router,
     extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, Method, header},
 };
@@ -17,7 +26,7 @@ pub async fn app(
     cargo_pkg_name: &'static str,
     cargo_pkg_version: &'static str,
     cfg: &Config,
-) -> Result<ApiRouter, AppError> {
+) -> Result<Router, AppError> {
     let app_state = AppState::init(&cfg).await?;
 
     let cors = CorsLayer::new()
@@ -48,13 +57,33 @@ pub async fn app(
         .on_response(CustomOnResponse)
         .on_request(());
 
+    let mut api = OpenApi {
+        info: Info {
+            title: cargo_pkg_name.to_string(),
+            version: cargo_pkg_version.to_string(),
+            description: Some(format!("{} API", cargo_pkg_name)),
+            ..Info::default()
+        },
+        ..OpenApi::default()
+    };
+
     let app = ApiRouter::new()
         .merge(features::get_routes())
         .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
+        .route("/docs/scalar", Scalar::new("/api.json").axum_route())
+        .route("/docs/redoc", Redoc::new("/api.json").axum_route())
+        .route("/docs/swagger", Swagger::new("/api.json").axum_route())
+        .route("/api.json", get(serve_api))
+        .finish_api(&mut api)
+        .layer(Extension(Arc::new(api)))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
         .with_state(app_state)
         .layer(tracer_layer)
         .layer(cors);
 
     Ok(app)
+}
+
+async fn serve_api(Extension(api): Extension<Arc<OpenApi>>) -> impl IntoApiResponse {
+    Json((*api).clone())
 }
