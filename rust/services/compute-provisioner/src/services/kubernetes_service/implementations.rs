@@ -1543,10 +1543,14 @@ impl KubernetesService {
 
         // --- Init container: railpack prepare ---
         // This container analyzes the app, and outputs the build plan
+        // Generates /workspace/railpack-plan.json and /workspace/railpack-info.json
+
+        let railpack_cli = "kamronbekdev/railpack-cli:v0.17.2";
         let analyze_path = format!("/workspace/{context}");
+
         let railpack_prepare = Container {
             name: "railpack-prepare".into(),
-            image: Some("kamronbekdev/railpack-cli:v0.17.2".into()),
+            image: Some(railpack_cli.to_string()),
             image_pull_policy: Some("IfNotPresent".into()),
             // Since distroless has no shell, we pass arguments directly to the ENTRYPOINT
             args: Some(vec![
@@ -1565,14 +1569,47 @@ impl KubernetesService {
             ..Default::default()
         };
 
-        let init_containers = Some(vec![git_clone, railpack_prepare]);
+        // --- Init container: pin/mirror Railpack images ---
+        // PROBLEM: railpack-prepare hardcodes "ghcr.io/railwayapp/railpack-*:latest" into the plan.
+        // BuildKit must resolve ":latest" over the network on every build. Network routing to GHCR
+        // can hang, causing 15+ minute delays, or fail entirely due to rate limits.
+        // SOLUTION: Mutate the JSON plan to point to our mirrored registry with pinned tags.
+
+        let railpack_frontend = "docker.io/kamronbekdev/railpack-frontend:v0.17.2";
+        let railpack_builder = "docker.io/kamronbekdev/railpack-builder:v0.17.2";
+        let railpack_runtime = "docker.io/kamronbekdev/railpack-runtime:v0.17.2";
+
+        // Use strict bash mode and '|' as the sed delimiter to keep URL replacements clean.
+        let sed_command = format!(
+            "set -euo pipefail\n\
+            echo '🪞 Rewriting Railpack base images to mirrored registry...' && \
+            sed -i 's|\"ghcr.io/railwayapp/railpack-builder:latest\"|\"{railpack_builder}\"|g' /workspace/railpack-plan.json && \
+            sed -i 's|\"ghcr.io/railwayapp/railpack-runtime:latest\"|\"{railpack_runtime}\"|g' /workspace/railpack-plan.json && \
+            echo '✅ Image replacement successful.'"
+        );
+
+        let pin_images = Container {
+            name: "pin-railpack-images".into(),
+            image: Some("alpine:latest".into()),
+            image_pull_policy: Some("IfNotPresent".into()),
+            command: Some(vec!["/bin/sh".into(), "-c".into()]),
+            args: Some(vec![sed_command]),
+            volume_mounts: Some(vec![VolumeMount {
+                name: "workspace".into(),
+                mount_path: "/workspace".into(),
+                ..Default::default()
+            }]),
+            ..Default::default()
+        };
+
+        let init_containers = Some(vec![git_clone, railpack_prepare, pin_images]);
 
         // --- Build container ---
         let buildkitd_address = "tcp://buildkit.buildkit.svc.cluster.local:1234";
         let build_script = format!(
             "buildctl --addr {buildkitd_address} build \
             --frontend=gateway.v0 \
-            --opt source=ghcr.io/railwayapp/railpack-frontend:v0.17.2 \
+            --opt source={railpack_frontend} \
             --local context=/workspace/{context} \
             --local dockerfile=/workspace \
             --opt filename=railpack-plan.json \
