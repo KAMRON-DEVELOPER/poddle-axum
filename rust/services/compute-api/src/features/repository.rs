@@ -1,6 +1,6 @@
 use compute_core::{
     formatters::format_resource_name,
-    models::{Deployment, DeploymentEvent, DeploymentStatus, Preset, Project},
+    models::{DeploymentEventRow, DeploymentRow, DeploymentStatus, PresetRow, ProjectRow},
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentSource, UpdateDeploymentRequest,
     },
@@ -27,7 +27,7 @@ impl ProjectRepository {
         user_id: &Uuid,
         pagination: &Pagination,
         pool: &PgPool,
-    ) -> Result<(Vec<Project>, i64), sqlx::Error> {
+    ) -> Result<(Vec<ProjectRow>, i64), sqlx::Error> {
         let rows = sqlx::query!(
             r#"
             SELECT
@@ -50,7 +50,7 @@ impl ProjectRepository {
 
         let projects = rows
             .into_iter()
-            .map(|r| Project {
+            .map(|r| ProjectRow {
                 id: r.id,
                 owner_id: r.owner_id,
                 name: r.name,
@@ -68,9 +68,9 @@ impl ProjectRepository {
         user_id: &Uuid,
         project_id: &Uuid,
         pool: &PgPool,
-    ) -> Result<Project, sqlx::Error> {
+    ) -> Result<ProjectRow, sqlx::Error> {
         sqlx::query_as!(
-            Project,
+            ProjectRow,
             r#"
             SELECT id, owner_id, name, description, created_at, updated_at
             FROM projects
@@ -88,9 +88,9 @@ impl ProjectRepository {
         user_id: &Uuid,
         req: CreateProjectRequest,
         pool: &PgPool,
-    ) -> Result<Project, sqlx::Error> {
+    ) -> Result<ProjectRow, sqlx::Error> {
         sqlx::query_as!(
-            Project,
+            ProjectRow,
             r#"
             INSERT INTO projects (owner_id, name, description)
             VALUES ($1, $2, $3)
@@ -111,9 +111,9 @@ impl ProjectRepository {
         name: Option<&str>,
         description: Option<&str>,
         pool: &PgPool,
-    ) -> Result<Project, sqlx::Error> {
+    ) -> Result<ProjectRow, sqlx::Error> {
         sqlx::query_as!(
-            Project,
+            ProjectRow,
             r#"
             UPDATE projects
             SET name = COALESCE($3, name),
@@ -158,12 +158,12 @@ pub struct DeploymentPresetRepository;
 
 impl DeploymentPresetRepository {
     #[tracing::instrument(name = "deployment_preset_repository.get_by_id", skip(executor), err)]
-    pub async fn get_by_id<'e, E>(preset_id: &Uuid, executor: E) -> Result<Preset, sqlx::Error>
+    pub async fn get_by_id<'e, E>(preset_id: &Uuid, executor: E) -> Result<PresetRow, sqlx::Error>
     where
         E: Executor<'e, Database = Postgres>,
     {
         sqlx::query_as!(
-            Preset,
+            PresetRow,
             r#"
             SELECT *
             FROM presets
@@ -193,7 +193,7 @@ impl DeploymentRepository {
         project_id: &Uuid,
         pagination: &Pagination,
         pool: &PgPool,
-    ) -> Result<(Vec<Deployment>, i64), sqlx::Error> {
+    ) -> Result<(Vec<DeploymentRow>, i64), sqlx::Error> {
         // In standard SQL, if you use COUNT(*), the database "collapses" all your rows into a single number.
         // You lose your individual deployment data.
         // OVER() turns the count into a Window Function.
@@ -247,7 +247,7 @@ impl DeploymentRepository {
 
         let deployments = rows
             .into_iter()
-            .map(|r| Deployment {
+            .map(|r| DeploymentRow {
                 id: r.id,
                 user_id: r.user_id,
                 project_id: r.project_id,
@@ -281,9 +281,9 @@ impl DeploymentRepository {
         user_id: &Uuid,
         deployment_id: &Uuid,
         pool: &PgPool,
-    ) -> Result<Deployment, sqlx::Error> {
+    ) -> Result<DeploymentRow, sqlx::Error> {
         sqlx::query_as!(
-            Deployment,
+            DeploymentRow,
             r#"
             SELECT
                 d.id,
@@ -325,7 +325,7 @@ impl DeploymentRepository {
         project_id: &Uuid,
         req: CreateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
-    ) -> Result<Deployment, sqlx::Error> {
+    ) -> Result<DeploymentRow, sqlx::Error> {
         let environment_variables =
             serde_json::to_value(&req.environment_variables).unwrap_or(serde_json::json!({}));
         let labels = req
@@ -339,7 +339,7 @@ impl DeploymentRepository {
         let name = format_resource_name(&id);
 
         sqlx::query_as!(
-            Deployment,
+            DeploymentRow,
             r#"
             INSERT INTO deployments (
                 id,
@@ -430,7 +430,7 @@ impl DeploymentRepository {
         deployment_id: &Uuid,
         req: UpdateDeploymentRequest,
         tx: &mut Transaction<'_, Postgres>,
-    ) -> Result<Deployment, sqlx::Error> {
+    ) -> Result<DeploymentRow, sqlx::Error> {
         let environment_variables = req
             .environment_variables
             .as_ref()
@@ -446,7 +446,7 @@ impl DeploymentRepository {
             .map(|s| serde_json::to_value(s).unwrap());
 
         sqlx::query_as!(
-            Deployment,
+            DeploymentRow,
             r#"
             UPDATE deployments AS d
             SET
@@ -560,9 +560,9 @@ impl DeploymentEventRepository {
         event_type: &str,
         message: Option<&str>,
         pool: &PgPool,
-    ) -> Result<DeploymentEvent, sqlx::Error> {
+    ) -> Result<DeploymentEventRow, sqlx::Error> {
         sqlx::query_as!(
-            DeploymentEvent,
+            DeploymentEventRow,
             r#"
             INSERT INTO deployment_events (deployment_id, type, message)
             VALUES ($1, $2, $3)
@@ -591,9 +591,9 @@ impl DeploymentEventRepository {
         deployment_id: &Uuid,
         limit: i64,
         pool: &PgPool,
-    ) -> Result<Vec<DeploymentEvent>, sqlx::Error> {
+    ) -> Result<Vec<DeploymentEventRow>, sqlx::Error> {
         sqlx::query_as!(
-            DeploymentEvent,
+            DeploymentEventRow,
             r#"
             SELECT
                 id,

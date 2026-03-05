@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     event::ComputeEvent,
-    models::{Deployment, Preset, ResourceSpec},
+    models::{DeploymentRow, PresetRow, ResourceSpec},
     schemas::{
         CreateDeploymentMessage, CreateDeploymentRequest, DeploymentResponse, DeploymentSource,
         DeploymentSourceMessage, DeploymentsResponse, MetricSnapshot, PodMeta, PodPhase,
@@ -130,8 +130,8 @@ impl Into<DeploymentSourceMessage> for DeploymentSource {
     }
 }
 
-impl From<(Deployment, Vec<MetricSnapshot>)> for DeploymentsResponse {
-    fn from((d, metrics): (Deployment, Vec<MetricSnapshot>)) -> Self {
+impl From<(DeploymentRow, Vec<MetricSnapshot>)> for DeploymentsResponse {
+    fn from((d, metrics): (DeploymentRow, Vec<MetricSnapshot>)) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -160,8 +160,8 @@ impl From<(Deployment, Vec<MetricSnapshot>)> for DeploymentsResponse {
     }
 }
 
-impl From<Deployment> for DeploymentResponse {
-    fn from(d: Deployment) -> Self {
+impl From<DeploymentRow> for DeploymentResponse {
+    fn from(d: DeploymentRow) -> Self {
         Self {
             id: d.id,
             user_id: d.user_id,
@@ -189,13 +189,13 @@ impl From<Deployment> for DeploymentResponse {
     }
 }
 
-impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)> for CreateDeploymentMessage {
+impl From<(Uuid, Uuid, Uuid, PresetRow, CreateDeploymentRequest)> for CreateDeploymentMessage {
     fn from(
         (user_id, project_id, deployment_id, preset, req): (
             Uuid,
             Uuid,
             Uuid,
-            Preset,
+            PresetRow,
             CreateDeploymentRequest,
         ),
     ) -> Self {
@@ -227,13 +227,15 @@ impl From<(Uuid, Uuid, Uuid, Preset, CreateDeploymentRequest)> for CreateDeploym
     }
 }
 
-impl From<(Uuid, Uuid, Uuid, Option<Preset>, UpdateDeploymentRequest)> for UpdateDeploymentMessage {
+impl From<(Uuid, Uuid, Uuid, Option<PresetRow>, UpdateDeploymentRequest)>
+    for UpdateDeploymentMessage
+{
     fn from(
         (user_id, project_id, deployment_id, preset, req): (
             Uuid,
             Uuid,
             Uuid,
-            Option<Preset>,
+            Option<PresetRow>,
             UpdateDeploymentRequest,
         ),
     ) -> Self {

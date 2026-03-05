@@ -2,6 +2,7 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use redis_derive::{FromRedisValue, ToRedisArgs};
 use regex::Regex;
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -16,7 +17,7 @@ use crate::{
 // PROJECT SCHEMAS
 // -----------------------------------------------
 
-#[derive(Deserialize, Validate, Debug)]
+#[derive(Deserialize, Validate, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateProjectRequest {
     #[validate(length(min = 1, max = 36))]
@@ -25,7 +26,7 @@ pub struct CreateProjectRequest {
     pub description: Option<String>,
 }
 
-#[derive(Deserialize, Validate, Debug)]
+#[derive(Deserialize, Validate, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateProjectRequest {
     #[validate(length(min = 1, max = 20))]
@@ -38,7 +39,7 @@ pub struct UpdateProjectRequest {
 // DEPLOYMENT SCHEMAS
 // -----------------------------------------------
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DeploymentSource {
     Image {
@@ -56,7 +57,7 @@ pub enum DeploymentSource {
     },
 }
 
-#[derive(Clone, Deserialize, Serialize, Validate, Debug)]
+#[derive(Clone, Deserialize, Serialize, Validate, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ImagePullSecret {
     pub server: String,
@@ -64,7 +65,7 @@ pub struct ImagePullSecret {
     pub secret: String,
 }
 
-#[derive(Clone, Deserialize, Validate, Debug)]
+#[derive(Clone, Deserialize, Validate, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDeploymentRequest {
     #[validate(length(min = 1, max = 128))]
@@ -92,7 +93,7 @@ static SUBDOMAIN: Lazy<Regex> =
 static DOMAIN: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"^([a-z0-9]+(-[a-z0-9]+)*\.)+[a-z]{2,}$").unwrap());
 
-#[derive(Deserialize, Validate, Clone, Debug)]
+#[derive(Deserialize, Validate, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateDeploymentRequest {
     pub name: Option<String>,
@@ -111,7 +112,7 @@ pub struct UpdateDeploymentRequest {
     pub subdomain: Option<String>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentResponse {
     pub id: Uuid,
@@ -138,7 +139,7 @@ pub struct DeploymentResponse {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentsResponse {
     pub id: Uuid,
@@ -265,7 +266,7 @@ pub enum PodPhase {
     Unknown,
 }
 
-#[derive(Serialize, Deserialize, Default, Clone, Debug)]
+#[derive(Serialize, Deserialize, Default, Clone, JsonSchema, Debug)]
 pub struct MetricSnapshot {
     pub ts: i64,
     pub cpu: f64,

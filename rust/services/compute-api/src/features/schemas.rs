@@ -1,7 +1,10 @@
 use std::collections::HashMap;
 
+use chrono::{DateTime, Utc};
+use compute_core::{models::DeploymentStatus, schemas::DeploymentSource};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Deserialize, JsonSchema)]
 #[serde(rename_all = "camelCase")]
@@ -47,18 +50,29 @@ pub struct LogResponse {
     pub entries: Vec<LogEntry>,
 }
 
-// #[derive(Deserialize, Serialize, JsonSchema, Debug)]
-// pub struct LokiStreamResult {
-//     pub stream: LokiStream,
-//     pub values: Vec<[String; 2]>,
-// }
-
-// #[derive(Deserialize, Serialize, JsonSchema, Debug)]
-// pub struct LokiStream {
-//     pub stream: String,
-//     pub detected_level: String,
-//     pub namespace: String,
-//     pub preset_id: Uuid,
-//     pub project_id: Uuid,
-//     pub deployment_id: Uuid,
-// }
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct DeploymentOut {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub project_id: Uuid,
+    pub preset_id: Uuid,
+    pub name: String,
+    pub source: DeploymentSource,
+    pub port: i32,
+    pub desired_replicas: i32,
+    pub ready_replicas: i32,
+    pub available_replicas: i32,
+    pub addon_cpu_millicores: Option<i32>,
+    pub addon_memory_mb: Option<i32>,
+    pub vault_secret_path: Option<String>,
+    pub secret_keys: Option<Vec<String>>,
+    pub environment_variables: Option<HashMap<String, String>>,
+    pub labels: Option<HashMap<String, String>>,
+    pub status: DeploymentStatus,
+    pub domain: Option<String>,
+    pub subdomain: Option<String>,
+    pub service: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}

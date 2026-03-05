@@ -1,6 +1,6 @@
 use crate::error::AppError;
 use compute_core::{
-    models::{Deployment, DeploymentStatus, Preset},
+    models::{DeploymentRow, DeploymentStatus, PresetRow},
     schemas::DeploymentSource,
 };
 use sqlx::{PgPool, postgres::PgQueryResult, types::Json};
@@ -49,9 +49,9 @@ impl DeploymentRepository {
     }
 
     #[instrument("deployment_repository.get_one_by_id", skip_all, fields(deployment_id = %id), err)]
-    pub async fn get_by_id(id: &Uuid, pool: &PgPool) -> Result<Deployment, sqlx::Error> {
+    pub async fn get_by_id(id: &Uuid, pool: &PgPool) -> Result<DeploymentRow, sqlx::Error> {
         sqlx::query_as!(
-            Deployment,
+            DeploymentRow,
             r#"
             SELECT
                 id,
@@ -86,9 +86,9 @@ impl DeploymentRepository {
     }
 
     #[instrument("deployment_repository.get_preset_by_id", skip_all, fields(preset_id = %id), err)]
-    pub async fn get_preset_by_id(id: &Uuid, pool: &PgPool) -> Result<Preset, sqlx::Error> {
+    pub async fn get_preset_by_id(id: &Uuid, pool: &PgPool) -> Result<PresetRow, sqlx::Error> {
         sqlx::query_as!(
-            Preset,
+            PresetRow,
             r#"
             SELECT * FROM presets
             WHERE id = $1

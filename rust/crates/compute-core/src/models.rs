@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use bigdecimal::BigDecimal;
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::{FromRow, Type, types::Json};
 use uuid::Uuid;
@@ -12,7 +13,7 @@ use crate::schemas::DeploymentSource;
 // ENUMS
 // ---------------------------------------------
 
-#[derive(Type, Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
 #[sqlx(type_name = "deployment_status", rename_all = "snake_case")]
 pub enum DeploymentStatus {
@@ -55,9 +56,9 @@ impl std::fmt::Display for DeploymentStatus {
 // MODELS
 // ---------------------------------------------
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Project {
+pub struct ProjectRow {
     pub id: Uuid,
     pub owner_id: Uuid,
     pub name: String,
@@ -66,9 +67,9 @@ pub struct Project {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Preset {
+pub struct PresetRow {
     pub id: Uuid,
     pub name: String,
     pub description: Option<String>,
@@ -84,9 +85,9 @@ pub struct Preset {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct AddonPrices {
+pub struct AddonPricesRow {
     pub id: Uuid,
     pub cpu_monthly_unit_price: BigDecimal,
     pub cpu_hourly_unit_price: BigDecimal,
@@ -97,14 +98,15 @@ pub struct AddonPrices {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Deployment {
+pub struct DeploymentRow {
     pub id: Uuid,
     pub user_id: Uuid,
     pub project_id: Uuid,
     pub preset_id: Uuid,
     pub name: String,
+    #[schemars(with = "DeploymentSource")]
     pub source: Json<DeploymentSource>,
     pub port: i32,
     pub desired_replicas: i32,
@@ -114,7 +116,9 @@ pub struct Deployment {
     pub addon_memory_mb: Option<i32>,
     pub vault_secret_path: Option<String>,
     pub secret_keys: Option<Vec<String>>,
+    #[schemars(with = "Option<HashMap<String, String>>")]
     pub environment_variables: Option<Json<Option<HashMap<String, String>>>>,
+    #[schemars(with = "Option<HashMap<String, String>>")]
     pub labels: Option<Json<Option<HashMap<String, String>>>>,
     pub status: DeploymentStatus,
     pub domain: Option<String>,
@@ -124,9 +128,9 @@ pub struct Deployment {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentEvent {
+pub struct DeploymentEventRow {
     pub id: Uuid,
     pub deployment_id: Uuid,
     #[serde(rename = "type")]
@@ -136,9 +140,9 @@ pub struct DeploymentEvent {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct Installations {
+pub struct InstallationRow {
     pub id: Uuid,
     pub user_id: Uuid,
     pub installation_id: i64,
@@ -151,7 +155,7 @@ pub struct Installations {
 // ---------------------------------------------
 
 /// Resource specification stored in the `resources` JSONB field
-#[derive(FromRow, Serialize, Deserialize, Debug, Clone)]
+#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceSpec {
     pub cpu_request_millicores: i32,

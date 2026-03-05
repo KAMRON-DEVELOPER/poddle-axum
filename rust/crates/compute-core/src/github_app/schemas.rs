@@ -1,3 +1,4 @@
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -23,7 +24,7 @@ pub struct GithubRepository {
     pub clone_url: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct Repository {
     pub id: i64,

@@ -7,11 +7,11 @@ use crate::{
     },
     services::cache_service::CacheService,
 };
+use aide::axum::IntoApiResponse;
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
 };
 use compute_core::{
     github_app::GithubApp,
@@ -51,7 +51,7 @@ pub async fn get_deployment_handler(
     claims: Claims,
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
     let deployment =
@@ -70,7 +70,7 @@ pub async fn get_deployments_handler(
     State(cfg): State<Config>,
     State(database): State<Database>,
     State(mut redis): State<Redis>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id: Uuid = claims.sub;
     let count = q.snapshot_count(cfg.prometheus.scrape_interval_secs);
 
@@ -114,7 +114,7 @@ pub async fn create_deployment_handler(
     State(db): State<Database>,
     State(github_app): State<GithubApp>,
     Json(mut req): Json<CreateDeploymentRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id = claims.sub;
     req.validate()?;
 
@@ -224,7 +224,7 @@ pub async fn update_deployment_handler(
     State(amqp): State<Amqp>,
     State(database): State<Database>,
     Json(req): Json<UpdateDeploymentRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     req.validate()?;
 
     let user_id: Uuid = claims.sub;
@@ -303,7 +303,7 @@ pub async fn delete_deployment_handler(
     Path((project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(database): State<Database>,
     State(amqp): State<Amqp>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id = claims.sub;
 
     // Start database transaction

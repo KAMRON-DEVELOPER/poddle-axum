@@ -13,7 +13,6 @@ anyhow.workspace = true
 thiserror.workspace = true
 rustls.workspace = true
 axum.workspace = true
-axum-core.workspace = true
 axum-extra.workspace = true
 aide.workspace = true
 schemars.workspace = true
