@@ -205,8 +205,8 @@ To build a specific service:
 
 ```bash
 docker build --build-arg SERVICE_NAME=users-api -t kamronbekdev/poddle-users-api:1.0.0 .
-docker build --build-arg SERVICE_NAME=compute-api -t kamronbekdev/poddle-compute-api:1.0.0 .
 docker build --build-arg SERVICE_NAME=billing-api -t kamronbekdev/poddle-billing-api:1.0.0 .
+docker build --build-arg SERVICE_NAME=compute-api -t kamronbekdev/poddle-compute-api:1.0.0 .
 ```
 
 ## Performance Metrics
