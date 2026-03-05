@@ -1,7 +1,7 @@
 use super::config::Config;
 use crate::error::AppError;
+use aide::axum::ApiRouter;
 use axum::{
-    Router,
     extract::DefaultBodyLimit,
     http::{HeaderName, HeaderValue, Method, header},
 };
@@ -17,7 +17,7 @@ pub async fn app(
     cargo_pkg_name: &'static str,
     cargo_pkg_version: &'static str,
     cfg: &Config,
-) -> Result<Router, AppError> {
+) -> Result<ApiRouter, AppError> {
     let app_state = AppState::init(&cfg).await?;
 
     let cors = CorsLayer::new()
@@ -48,7 +48,7 @@ pub async fn app(
         .on_response(CustomOnResponse)
         .on_request(());
 
-    let app = axum::Router::new()
+    let app = ApiRouter::new()
         .merge(features::get_routes())
         .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))

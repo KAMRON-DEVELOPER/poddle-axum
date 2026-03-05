@@ -57,3 +57,27 @@ pub async fn get_transactions(
 
     Ok(Json(ListResponse { data, total }))
 }
+
+#[tracing::instrument(name = "create_fund", skip_all, fields(user_id = %claims.sub), err)]
+pub async fn create_fund(
+    claims: Claims,
+    State(_database): State<Database>,
+) -> Result<impl IntoApiResponse, AppError> {
+    // let user_id = claims.sub;
+
+    let data = vec![String::from("value")];
+
+    Ok(Json(ListResponse { data, total: 0 }))
+}
+
+#[tracing::instrument(name = "get_usage", skip_all, fields(user_id = %claims.sub), err)]
+pub async fn get_usage(
+    claims: Claims,
+    State(_database): State<Database>,
+) -> Result<impl IntoApiResponse, AppError> {
+    // let user_id = claims.sub;
+
+    let data = vec![String::from("value")];
+
+    Ok(Json(ListResponse { data, total: 0 }))
+}

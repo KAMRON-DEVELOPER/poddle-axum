@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use http_contracts::error::schema::ErrorResponse;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -220,7 +220,7 @@ impl IntoResponse for AppError {
             Self::Request(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };
 
-        let body = Json(json!({"error": msg}));
+        let body = Json(ErrorResponse { error: msg });
 
         (status, body).into_response()
     }

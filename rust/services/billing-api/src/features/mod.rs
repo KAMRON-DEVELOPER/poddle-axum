@@ -6,7 +6,15 @@ pub mod schemas;
 
 use crate::utilities::app_state::AppState;
 
-use aide::axum::{ApiRouter, routing::get};
+use aide::{
+    axum::{ApiRouter, IntoApiResponse, routing::get},
+    openapi::OpenApi,
+};
+use axum::{Extension, Json};
+
+async fn serve_api(Extension(api): Extension<OpenApi>) -> impl IntoApiResponse {
+    Json(api)
+}
 
 pub fn get_routes() -> ApiRouter<AppState> {
     ApiRouter::new()
@@ -24,6 +32,7 @@ pub fn get_routes() -> ApiRouter<AppState> {
             "/api/v1/billing/transactions",
             get(handlers::get_transactions),
         )
-        .api_route("/api/v1/billing/fund", get(handlers::get_transactions))
-        .api_route("/api/v1/billing/usage", get(handlers::get_transactions))
+        .api_route("/api/v1/billing/fund", get(handlers::create_fund))
+        .api_route("/api/v1/billing/usage", get(handlers::get_usage))
+        .route("/api.json", get(serve_api))
 }

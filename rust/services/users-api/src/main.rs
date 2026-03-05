@@ -10,6 +10,8 @@ use std::path::PathBuf;
 use std::result::Result::Ok;
 use std::{env, net::SocketAddr};
 
+use aide::openapi::{Info, OpenApi};
+use axum::Extension;
 use config::Config;
 use factory::factories::observability::Observability;
 
@@ -47,8 +49,15 @@ async fn main() -> anyhow::Result<()> {
     .await;
 
     let app = app::app(cargo_pkg_name, cargo_pkg_version, &cfg).await?;
-
     let listener = tokio::net::TcpListener::bind(cfg.server_address).await?;
+
+    let mut api = OpenApi {
+        info: Info {
+            description: Some(format!("{} API", cargo_pkg_name)),
+            ..Info::default()
+        },
+        ..OpenApi::default()
+    };
 
     info!(
         "🚀 {} service running at {:#?}",
@@ -56,7 +65,9 @@ async fn main() -> anyhow::Result<()> {
     );
     axum::serve(
         listener,
-        app.into_make_service_with_connect_info::<SocketAddr>(),
+        app.finish_api(&mut api)
+            .layer(Extension(api))
+            .into_make_service_with_connect_info::<SocketAddr>(),
     )
     .with_graceful_shutdown(shutdown_signal())
     .await?;

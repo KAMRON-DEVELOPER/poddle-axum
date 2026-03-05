@@ -1,4 +1,11 @@
+use aide::{
+    OperationOutput,
+    generate::GenContext,
+    openapi::{Operation, ReferenceOr, Response, StatusCode},
+};
+use axum::Json;
 use factory::factories::{mailtrap::error::MailtrapError, zepto::error::ZeptoError};
+use http_contracts::error::schema::ErrorResponse;
 use users_core::jwt::JwtCapability;
 
 use crate::config::Config;
@@ -10,6 +17,58 @@ use crate::error::AppError;
 // -------------------------------------------------------------------------------
 // ---------------------------- Error implementations ----------------------------
 // -------------------------------------------------------------------------------
+
+impl OperationOutput for AppError {
+    type Inner = ErrorResponse;
+
+    fn operation_response(ctx: &mut GenContext, operation: &mut Operation) -> Option<Response> {
+        let base = Json::<ErrorResponse>::operation_response(ctx, operation).unwrap_or_default();
+
+        // Add descriptions to common status codes
+        let responses = operation.responses.get_or_insert_with(Default::default);
+
+        responses.responses.insert(
+            StatusCode::Code(400),
+            ReferenceOr::Item(Response {
+                description: "Bad request / validation error".into(),
+                ..base.clone()
+            }),
+        );
+        responses.responses.insert(
+            StatusCode::Code(401),
+            ReferenceOr::Item(Response {
+                description: "Unauthorized — missing or invalid token".into(),
+                ..base.clone()
+            }),
+        );
+        responses.responses.insert(
+            StatusCode::Code(403),
+            ReferenceOr::Item(Response {
+                description: "Forbidden".into(),
+                ..base.clone()
+            }),
+        );
+        responses.responses.insert(
+            StatusCode::Code(404),
+            ReferenceOr::Item(Response {
+                description: "Not found".into(),
+                ..base.clone()
+            }),
+        );
+        responses.responses.insert(
+            StatusCode::Code(500),
+            ReferenceOr::Item(Response {
+                description: "Internal server error".into(),
+                ..base.clone()
+            }),
+        );
+
+        Some(Response {
+            description: "Error".into(),
+            ..base
+        })
+    }
+}
 
 impl From<JwtError> for AppError {
     fn from(e: JwtError) -> Self {

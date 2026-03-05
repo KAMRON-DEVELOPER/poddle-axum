@@ -1,7 +1,8 @@
+use schemars::JsonSchema;
 use serde::Serialize;
 
 /// Serializable error for API responses
-#[derive(Serialize, Debug)]
+#[derive(Serialize, JsonSchema, Debug)]
 pub struct ErrorResponse {
     pub error: String,
 }

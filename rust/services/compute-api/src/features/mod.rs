@@ -10,8 +10,10 @@ pub mod websocket;
 
 use crate::utilities::app_state::AppState;
 
-use aide::axum::ApiRouter;
-use axum::routing::{get, post};
+use aide::axum::{
+    ApiRouter,
+    routing::{get, post},
+};
 
 pub fn get_routes() -> ApiRouter<AppState> {
     ApiRouter::new()
