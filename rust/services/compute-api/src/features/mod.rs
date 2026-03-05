@@ -53,16 +53,16 @@ pub fn get_routes() -> ApiRouter<AppState> {
             axum_get(websocket::stream_logs_ws_handler),
         )
         .route(
-            "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs/see",
-            axum_get(see::stream_logs_see_handler),
+            "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs/sse",
+            axum_get(see::stream_logs_sse_handler),
         )
         .route(
-            "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/metrics/see",
-            axum_get(see::stream_deployment_metrics_see_handler),
+            "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/metrics/sse",
+            axum_get(see::stream_deployment_metrics_sse_handler),
         )
         .route(
-            "/api/v1/compute/projects/{project_id}/metrics/see",
-            axum_get(see::stream_deployments_metrics_see_handler),
+            "/api/v1/compute/projects/{project_id}/metrics/sse",
+            axum_get(see::stream_deployments_metrics_sse_handler),
         )
         .api_route("/api/v1/compute/github/repositories", get(handlers::github::get_repositories_handler))
         .api_route("/api/v1/compute/github/setup", post(handlers::github::github_setup_handler))

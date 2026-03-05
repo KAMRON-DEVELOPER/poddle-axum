@@ -39,7 +39,7 @@ use crate::{
     ),
     err
 )]
-pub async fn stream_deployment_metrics_see_handler(
+pub async fn stream_deployment_metrics_sse_handler(
     claims: Claims,
     Path((_project_id, deployment_id)): Path<(Uuid, Uuid)>,
     State(redis): State<Redis>,
@@ -78,7 +78,7 @@ pub async fn stream_deployment_metrics_see_handler(
     ),
     err
 )]
-pub async fn stream_deployments_metrics_see_handler(
+pub async fn stream_deployments_metrics_sse_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
@@ -119,7 +119,7 @@ pub async fn stream_deployments_metrics_see_handler(
     ),
     err
 )]
-pub async fn stream_logs_see_handler(
+pub async fn stream_logs_sse_handler(
     claims: Claims,
     Path((project_id, deployment_id, pod_uid)): Path<(Uuid, Uuid, String)>,
     Query(q): Query<TailQuery>,
