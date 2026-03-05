@@ -6,7 +6,10 @@ pub mod schemas;
 
 use crate::utilities::app_state::AppState;
 
-use aide::axum::{ApiRouter, routing::get};
+use aide::axum::{
+    ApiRouter,
+    routing::{get, post},
+};
 
 pub fn get_routes() -> ApiRouter<AppState> {
     ApiRouter::new()
@@ -24,6 +27,6 @@ pub fn get_routes() -> ApiRouter<AppState> {
             "/api/v1/billing/transactions",
             get(handlers::get_transactions),
         )
-        .api_route("/api/v1/billing/fund", get(handlers::create_fund))
+        .api_route("/api/v1/billing/fund", post(handlers::create_fund))
         .api_route("/api/v1/billing/usage", get(handlers::get_usage))
 }
