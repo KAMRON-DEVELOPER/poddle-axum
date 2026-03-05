@@ -28,7 +28,7 @@ spec:
             secretName: vault-root-ca-bundle
       containers:
         - name: compute-provisioner
-          image: kamronbekdev/poddle-compute-provisioner:1.0.2
+          image: kamronbekdev/poddle-compute-provisioner:1.0.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

@@ -109,13 +109,13 @@ skopeo copy \
 # Mirror Builder
 skopeo copy \
   --all \
-  docker://ghcr.io/railwayapp/railpack-builder:latest \
-  docker://docker.io/kamronbekdev/railpack-builder:v0.17.2
+  docker://ghcr.io/railwayapp/railpack-builder:mise-2026.3.0 \
+  docker://docker.io/kamronbekdev/railpack-builder:mise-2026.3.0
 
 # Mirror Runtime
 skopeo copy --all \
-  docker://ghcr.io/railwayapp/railpack-runtime:latest \
-  docker://docker.io/kamronbekdev/railpack-runtime:v0.17.2
+  docker://ghcr.io/railwayapp/railpack-runtime:mise-2026.3.0 \
+  docker://docker.io/kamronbekdev/railpack-runtime:mise-2026.3.0
 ```
 
 *(Note: Ensure you update the Rust configuration variables in spawn_railpack_job to match the newly mirrored version tags).*

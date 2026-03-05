@@ -1576,8 +1576,8 @@ impl KubernetesService {
         // SOLUTION: Mutate the JSON plan to point to our mirrored registry with pinned tags.
 
         let railpack_frontend = "docker.io/kamronbekdev/railpack-frontend:v0.17.2";
-        let railpack_builder = "docker.io/kamronbekdev/railpack-builder:v0.17.2";
-        let railpack_runtime = "docker.io/kamronbekdev/railpack-runtime:v0.17.2";
+        let railpack_builder = "docker.io/kamronbekdev/railpack-builder:mise-2026.3.0";
+        let railpack_runtime = "docker.io/kamronbekdev/railpack-runtime:mise-2026.3.0";
 
         // Use strict bash mode and '|' as the sed delimiter to keep URL replacements clean.
         let sed_command = format!(
