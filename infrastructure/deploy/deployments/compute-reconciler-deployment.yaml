@@ -25,7 +25,7 @@ spec:
                 path: config.json
       containers:
         - name: compute-reconciler
-          image: kamronbekdev/poddle-compute-reconciler:1.0.1
+          image: kamronbekdev/poddle-compute-reconciler:1.0.2
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
