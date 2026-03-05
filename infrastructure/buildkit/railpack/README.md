@@ -104,7 +104,7 @@ Use `skopeo copy --all` to preserve multi-architecture manifests while moving th
 skopeo copy \
   --all \
   docker://ghcr.io/railwayapp/railpack-frontend:v0.17.2 \
-  docker://docker.io/kamronbekdev/railpack-builder:v0.17.2
+  docker://docker.io/kamronbekdev/railpack-frontend:v0.17.2
 
 # Mirror Builder
 skopeo copy \
