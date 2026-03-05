@@ -14,6 +14,7 @@ use aide::axum::{
     ApiRouter,
     routing::{get, post},
 };
+use axum::routing::get as axum_get;
 
 pub fn get_routes() -> ApiRouter<AppState> {
     ApiRouter::new()
@@ -47,21 +48,21 @@ pub fn get_routes() -> ApiRouter<AppState> {
             "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs",
             get(handlers::pod::get_logs_handler),
         )
-        .api_route(
+        .route(
             "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs/ws",
-            get(websocket::stream_logs_ws_handler),
+            axum_get(websocket::stream_logs_ws_handler),
         )
-        .api_route(
+        .route(
             "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/pods/{pod_uid}/logs/see",
-            get(see::stream_logs_see_handler),
+            axum_get(see::stream_logs_see_handler),
         )
-        .api_route(
+        .route(
             "/api/v1/compute/projects/{project_id}/deployments/{deployment_id}/metrics/see",
-            get(see::stream_deployment_metrics_see_handler),
+            axum_get(see::stream_deployment_metrics_see_handler),
         )
-        .api_route(
+        .route(
             "/api/v1/compute/projects/{project_id}/metrics/see",
-            get(see::stream_deployments_metrics_see_handler),
+            axum_get(see::stream_deployments_metrics_see_handler),
         )
         .api_route("/api/v1/compute/github/repositories", get(handlers::github::get_repositories_handler))
         .api_route("/api/v1/compute/github/setup", post(handlers::github::github_setup_handler))
