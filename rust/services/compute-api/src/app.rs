@@ -70,10 +70,19 @@ pub async fn app(
     let app = ApiRouter::new()
         .merge(features::get_routes())
         .merge(base_routes(cargo_pkg_name, cargo_pkg_version))
-        .route("/docs/scalar", Scalar::new("/api.json").axum_route())
-        .route("/docs/redoc", Redoc::new("/api.json").axum_route())
-        .route("/docs/swagger", Swagger::new("/api.json").axum_route())
-        .route("/api.json", get(serve_api))
+        .route(
+            "/api/v1/compute/docs/scalar",
+            Scalar::new("/api/v1/compute/api.json").axum_route(),
+        )
+        .route(
+            "/api/v1/compute/docs/redoc",
+            Redoc::new("/api/v1/compute/api.json").axum_route(),
+        )
+        .route(
+            "/api/v1/compute/docs/swagger",
+            Swagger::new("/api/v1/compute/api.json").axum_route(),
+        )
+        .route("/api/v1/compute/api.json", get(serve_api))
         .finish_api(&mut api)
         .layer(Extension(Arc::new(api)))
         .layer(DefaultBodyLimit::max(50 * 1024 * 1024))
