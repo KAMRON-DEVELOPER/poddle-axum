@@ -24,7 +24,7 @@ spec:
                 path: config.json
       containers:
         - name: billing-api
-          image: kamronbekdev/poddle-billing-api:1.0.0
+          image: kamronbekdev/poddle-billing-api:1.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

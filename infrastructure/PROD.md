@@ -202,13 +202,13 @@ kubectl apply -f infrastructure/deploy/deployments
 Services
 
 ```bash
-kubectl apply -f infrastructure/deploy/poddle-services.yaml
+kubectl apply -f infrastructure/deploy/services.yaml
 ```
 
 IngressRoutes
 
 ```bash
-kubectl apply -f infrastructure/deploy/poddle-ingressroutes.yaml
+kubectl apply -f infrastructure/deploy/ingressroutes.yaml
 ```
 
 ## GCP Setup
