@@ -8,11 +8,11 @@ use crate::{
     },
     services::cache_service::CacheService,
 };
+use aide::axum::IntoApiResponse;
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
 };
 use factory::factories::{database::Database, redis::Redis};
 use http_contracts::{list::schema::ListResponse, pagination::schema::Pagination};
@@ -41,7 +41,7 @@ pub async fn get_pods_handler(
     State(cfg): State<Config>,
     // State(database): State<Database>,
     State(mut redis): State<Redis>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let count = q.snapshot_count(cfg.prometheus.scrape_interval_secs);
 
     // TODO We may add project, deployment owner checking logic later
@@ -70,7 +70,7 @@ pub async fn get_logs_handler(
     State(http): State<Client>,
     State(cfg): State<Config>,
     State(db): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let preset_id =
         DeploymentRepository::get_prest_id(&claims.sub, &deployment_id, &db.pool).await?;
 

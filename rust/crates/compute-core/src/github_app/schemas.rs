@@ -13,7 +13,7 @@ pub struct InstallationReposResponse {
     pub repositories: Vec<GithubRepository>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all(serialize = "camelCase"))]
 pub struct GithubRepository {
     pub id: i64,

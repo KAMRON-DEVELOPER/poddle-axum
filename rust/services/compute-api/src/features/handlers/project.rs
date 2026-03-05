@@ -1,9 +1,9 @@
 use crate::{error::AppError, features::repository::ProjectRepository};
+use aide::axum::IntoApiResponse;
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
-    response::IntoResponse,
 };
 use compute_core::schemas::{CreateProjectRequest, UpdateProjectRequest};
 use factory::factories::database::Database;
@@ -27,7 +27,7 @@ pub async fn get_projects(
     claims: Claims,
     Query(p): Query<Pagination>,
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
     let (data, total) = ProjectRepository::get_many(&user_id, &p, &database.pool).await?;
@@ -48,7 +48,7 @@ pub async fn get_project_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
     let project = ProjectRepository::get_one_by_id(&user_id, &project_id, &database.pool).await?;
@@ -68,7 +68,7 @@ pub async fn create_project_handler(
     claims: Claims,
     State(database): State<Database>,
     Json(req): Json<CreateProjectRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     req.validate()?;
 
     let user_id: Uuid = claims.sub;
@@ -92,7 +92,7 @@ pub async fn update_project_handler(
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
     Json(req): Json<UpdateProjectRequest>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     req.validate()?;
 
     let user_id: Uuid = claims.sub;
@@ -122,7 +122,7 @@ pub async fn delete_project_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(database): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id: Uuid = claims.sub;
 
     ProjectRepository::delete(&user_id, &project_id, &database.pool).await?;

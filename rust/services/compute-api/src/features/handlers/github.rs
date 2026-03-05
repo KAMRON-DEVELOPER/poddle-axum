@@ -1,7 +1,7 @@
+use aide::axum::IntoApiResponse;
 use axum::{
     Json,
     extract::{Query, State},
-    response::IntoResponse,
 };
 use compute_core::github_app::GithubApp;
 use factory::factories::database::Database;
@@ -17,7 +17,7 @@ pub async fn github_setup_handler(
     claims: Claims,
     State(db): State<Database>,
     Query(params): Query<CallbackParams>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id = claims.sub;
 
     debug!(
@@ -49,7 +49,7 @@ pub async fn get_repositories_handler(
     State(github_app): State<GithubApp>,
     State(http): State<Client>,
     State(db): State<Database>,
-) -> Result<impl IntoResponse, AppError> {
+) -> Result<impl IntoApiResponse, AppError> {
     let user_id = claims.sub;
 
     let installation_id = sqlx::query_scalar!(

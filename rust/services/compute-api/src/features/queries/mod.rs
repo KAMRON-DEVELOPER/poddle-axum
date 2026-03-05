@@ -2,10 +2,11 @@ pub mod error;
 pub mod implementation;
 
 use chrono::{DateTime, Utc};
+use schemars::JsonSchema;
 use serde::Deserialize;
 
 /// Query for fetching metrics for a single deployment with pods (Deployment Page)
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentMetricsQuery {
     /// Relative window in minutes (default: 30)
@@ -14,7 +15,7 @@ pub struct DeploymentMetricsQuery {
 }
 
 /// Query for fetching metrics for multiple deployments (Project Page)
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentsMetricsQuery {
     /// Relative window in minutes (default: 30)
@@ -23,7 +24,7 @@ pub struct DeploymentsMetricsQuery {
 }
 
 /// Query for fetching historical logs with time range
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct LogQuery {
     pub start: DateTime<Utc>,
@@ -31,7 +32,7 @@ pub struct LogQuery {
 }
 
 /// Query for tailing live logs (WebSocket streaming)
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct TailQuery {
     pub start: Option<i64>,
