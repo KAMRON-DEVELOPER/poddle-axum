@@ -27,7 +27,7 @@ spec:
             secretName: github-app-key
       containers:
         - name: compute-api
-          image: kamronbekdev/poddle-compute-api:1.0.2
+          image: kamronbekdev/poddle-compute-api:1.0.3
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
