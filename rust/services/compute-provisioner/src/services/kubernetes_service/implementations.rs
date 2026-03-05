@@ -1594,11 +1594,6 @@ impl KubernetesService {
             image: Some("moby/buildkit:rootless".into()),
             image_pull_policy: Some("IfNotPresent".into()),
             command: Some(vec!["/bin/sh".into(), "-c".into(), build_script]),
-            env: Some(vec![EnvVar {
-                name: "BUILDKITD_FLAGS".into(),
-                value: Some("--oci-worker-no-process-sandbox".into()),
-                ..Default::default()
-            }]),
             working_dir: Some("/workspace".into()),
             volume_mounts: Some(vec![
                 VolumeMount {
