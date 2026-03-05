@@ -1,7 +1,7 @@
 use aide::{
     OperationOutput,
     generate::GenContext,
-    openapi::{Operation, ReferenceOr, Response, StatusCode},
+    openapi::{Operation, Response, StatusCode},
 };
 use axum::Json;
 use factory::factories::zepto::error::ZeptoError;
@@ -18,55 +18,28 @@ use crate::error::AppError;
 // ---------------------------- Error implementations ----------------------------
 // -------------------------------------------------------------------------------
 
+/// Teaches `aide` (the OpenAPI doc generator) how to describe `AppError` in the generated spec.
+///
+/// # Why this exists
+/// Handlers return `Result<T, AppError>`. Without this impl, aide has no idea what error
+/// responses those handlers can produce, so the generated OpenAPI spec would be missing
+/// all error status codes entirely.
+///
+/// # How aide uses this
+/// When aide processes `Result<T, AppError>`, it calls:
+///   1. `T::inferred_responses`      → documents the success path (e.g. 200)
+///   2. `AppError::inferred_responses` → documents all error paths (400, 401, … 500)
+///
+/// # The two methods
+/// - `operation_response`  — returns the *base response schema* (i.e. what the JSON body looks like). Used as a building block by `inferred_responses`.
+/// - `inferred_responses`  — returns every (status code, response) pair this type can produce
 impl OperationOutput for AppError {
     type Inner = ErrorResponse;
 
     fn operation_response(ctx: &mut GenContext, operation: &mut Operation) -> Option<Response> {
-        let base = Json::<ErrorResponse>::operation_response(ctx, operation).unwrap_or_default();
-
-        // Add descriptions to common status codes
-        let responses = operation.responses.get_or_insert_with(Default::default);
-
-        responses.responses.insert(
-            StatusCode::Code(400),
-            ReferenceOr::Item(Response {
-                description: "Bad request / validation error".into(),
-                ..base.clone()
-            }),
-        );
-        responses.responses.insert(
-            StatusCode::Code(401),
-            ReferenceOr::Item(Response {
-                description: "Unauthorized — missing or invalid token".into(),
-                ..base.clone()
-            }),
-        );
-        responses.responses.insert(
-            StatusCode::Code(403),
-            ReferenceOr::Item(Response {
-                description: "Forbidden".into(),
-                ..base.clone()
-            }),
-        );
-        responses.responses.insert(
-            StatusCode::Code(404),
-            ReferenceOr::Item(Response {
-                description: "Not found".into(),
-                ..base.clone()
-            }),
-        );
-        responses.responses.insert(
-            StatusCode::Code(500),
-            ReferenceOr::Item(Response {
-                description: "Internal server error".into(),
-                ..base.clone()
-            }),
-        );
-
-        Some(Response {
-            description: "Error".into(),
-            ..base
-        })
+        let mut res = Json::<ErrorResponse>::operation_response(ctx, operation).unwrap_or_default();
+        res.description = "API Error Response".into();
+        Some(res)
     }
 
     fn inferred_responses(
