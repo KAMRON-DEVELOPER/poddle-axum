@@ -1,0 +1,118 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            WITH latest_addon_price AS (\n                SELECT\n                    cpu_monthly_unit_price,\n                    memory_monthly_unit_price,\n                    currency\n                FROM addon_prices\n                ORDER BY created_at DESC\n                LIMIT 1\n            )\n            SELECT\n                COALESCE((SELECT COUNT(id) FROM projects WHERE owner_id = $1), 0)::BIGINT AS \"projects_count!\",\n\n                COUNT(d.id)::BIGINT AS \"total!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'queued')::BIGINT AS \"queued!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'building')::BIGINT AS \"building!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'provisioning')::BIGINT AS \"provisioning!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'starting')::BIGINT AS \"starting!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'running')::BIGINT AS \"running!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'unhealthy')::BIGINT AS \"unhealthy!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'degraded')::BIGINT AS \"degraded!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'updating')::BIGINT AS \"updating!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'suspended')::BIGINT AS \"suspended!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'failed')::BIGINT AS \"failed!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'build_failed')::BIGINT AS \"build_failed!\",\n                COUNT(d.id) FILTER (WHERE d.status = 'image_pull_error')::BIGINT AS \"image_pull_error!\",\n\n                COALESCE(SUM(\n                    (p.cpu_millicores + COALESCE(d.addon_cpu_millicores, 0)) * d.desired_replicas\n                ), 0)::BIGINT AS \"allocated_cpu_millicores!\",\n\n                COALESCE(SUM(\n                    (p.memory_mb + COALESCE(d.addon_memory_mb, 0)) * d.desired_replicas\n                ), 0)::BIGINT AS \"allocated_memory_mb!\",\n\n                COALESCE(SUM(\n                    CASE\n                        WHEN d.status IN ('provisioning', 'starting', 'running', 'unhealthy', 'degraded', 'updating')\n                        THEN (\n                            p.monthly_price\n                            + COALESCE(d.addon_cpu_millicores, 0)::NUMERIC * lap.cpu_monthly_unit_price\n                            + COALESCE(d.addon_memory_mb, 0)::NUMERIC * lap.memory_monthly_unit_price\n                        ) * d.desired_replicas::NUMERIC\n                        ELSE 0::NUMERIC\n                    END\n                ), 0::NUMERIC) AS \"estimated_monthly_cost!\"\n            FROM deployments d\n            JOIN presets p ON p.id = d.preset_id\n            CROSS JOIN latest_addon_price lap\n            WHERE d.user_id = $1\n            AND d.status != 'deleted'\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "projects_count!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "total!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "queued!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "building!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 4,
+        "name": "provisioning!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 5,
+        "name": "starting!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 6,
+        "name": "running!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 7,
+        "name": "unhealthy!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 8,
+        "name": "degraded!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 9,
+        "name": "updating!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 10,
+        "name": "suspended!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 11,
+        "name": "failed!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 12,
+        "name": "build_failed!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 13,
+        "name": "image_pull_error!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 14,
+        "name": "allocated_cpu_millicores!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 15,
+        "name": "allocated_memory_mb!",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 16,
+        "name": "estimated_monthly_cost!",
+        "type_info": "Numeric"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "0b3b28c560164c8d4becaadef3a8392d674eebd63eca74cd3916224f25b7a095"
+}
