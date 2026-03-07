@@ -13,7 +13,7 @@ members = [
     "crates/http-contracts",
     "crates/compute-core",
     "services/compute-metrics-worker",
-    "crates/http-common",
+    "crates/http-common", "crates/billing-core",
 ]
 
 resolver = "2"

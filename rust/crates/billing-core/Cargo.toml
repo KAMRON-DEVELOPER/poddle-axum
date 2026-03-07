@@ -1,0 +1,9 @@
+[package]
+name = "billing-core"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+serde.workspace = true
+schemars.workspace = true
+bigdecimal.workspace = true

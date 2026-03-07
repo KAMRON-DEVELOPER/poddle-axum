@@ -15,14 +15,20 @@ use users_core::jwt::Claims;
 use uuid::Uuid;
 use validator::Validate;
 
-#[tracing::instrument(
-    name = "get_projects",
-    skip_all,
-    fields(
-        user_id = %claims.sub,
-    ),
-    err
-)]
+#[tracing::instrument(name = "get_projects_overview_handler", skip_all, fields(user_id = %claims.sub), err)]
+pub async fn get_projects_overview_handler(
+    claims: Claims,
+    Query(p): Query<Pagination>,
+    State(database): State<Database>,
+) -> Result<impl IntoApiResponse, AppError> {
+    let user_id: Uuid = claims.sub;
+
+    let (data, total) = ProjectRepository::get_many_overviews(&user_id, &p, &database.pool).await?;
+
+    Ok(Json(ListResponse { data, total }))
+}
+
+#[tracing::instrument(name = "get_projects", skip_all, fields(user_id = %claims.sub), err)]
 pub async fn get_projects(
     claims: Claims,
     Query(p): Query<Pagination>,

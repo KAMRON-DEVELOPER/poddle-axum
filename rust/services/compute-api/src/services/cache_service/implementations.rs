@@ -103,4 +103,28 @@ impl CacheService {
 
         Ok(results)
     }
+
+    #[tracing::instrument(name = "cache_service.get_latest_deployments_metrics", skip_all, err)]
+    pub async fn get_latest_deployments_metrics(
+        ids: Vec<&str>,
+        con: &mut MultiplexedConnection,
+    ) -> Result<Vec<Option<MetricSnapshot>>, AppError> {
+        if ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let mut p = redis::pipe();
+
+        for id in &ids {
+            let key = CacheKeys::deployment_metrics(id);
+            p.lindex(key, 0);
+        }
+
+        let results: Vec<Option<MetricSnapshot>> = p.query_async(con).await.map_err(|e| {
+            error!(error = %e, "❌ Redis pipeline failed");
+            AppError::InternalServerError(format!("❌ Redis pipeline failed: {}", e))
+        })?;
+
+        Ok(results)
+    }
 }

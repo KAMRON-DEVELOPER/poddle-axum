@@ -1,3 +1,4 @@
+pub mod dashboard;
 pub mod deployment;
 pub mod github;
 pub mod pod;

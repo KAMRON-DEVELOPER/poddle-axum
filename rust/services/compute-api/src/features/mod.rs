@@ -18,10 +18,19 @@ use axum::routing::get as axum_get;
 
 pub fn get_routes() -> ApiRouter<AppState> {
     ApiRouter::new()
+    // Dashboard
+        .api_route(
+            "/api/v1/compute/dashboard",
+            get(handlers::dashboard::get_dashboard_handler),
+        )
         // Projects
         .api_route(
             "/api/v1/compute/projects",
             get(handlers::project::get_projects).post(handlers::project::create_project_handler),
+        )
+        .api_route(
+            "/api/v1/compute/projects/overview",
+            get(handlers::project::get_projects_overview_handler),
         )
         .api_route(
             "/api/v1/compute/projects/{project_id}",

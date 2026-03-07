@@ -9,8 +9,9 @@ factory = { path = "../../crates/factory" }
 utility = { path = "../../crates/utility" }
 http-contracts = { path = "../../crates/http-contracts" }
 http-common = { path = "../../crates/http-common" }
-compute-core = { path = "../../crates/compute-core" }
 users-core = { path = "../../crates/users-core" }
+billing-core = { path = "../../crates/billing-core" }
+compute-core = { path = "../../crates/compute-core" }
 thiserror.workspace = true
 anyhow.workspace = true
 rustls.workspace = true
@@ -20,6 +21,7 @@ axum.workspace = true
 axum-extra.workspace = true
 aide.workspace = true
 schemars.workspace = true
+bigdecimal.workspace = true
 redis.workspace = true
 tower-http.workspace = true
 chrono.workspace = true

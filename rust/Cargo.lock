@@ -596,6 +596,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "billing-core"
+version = "0.1.0"
+dependencies = [
+ "bigdecimal",
+ "schemars 1.2.1",
+ "serde",
+]
+
+[[package]]
 name = "billing-worker"
 version = "0.1.0"
 
@@ -790,6 +799,8 @@ dependencies = [
  "async-stream",
  "axum",
  "axum-extra",
+ "bigdecimal",
+ "billing-core",
  "chrono",
  "compute-core",
  "config",
