@@ -260,8 +260,8 @@ impl ProjectRepository {
             LIMIT $2 OFFSET $3;
             "#,
             user_id,
-            pagination.limit as i64,
-            pagination.offset as i64
+            pagination.limit,
+            pagination.offset
         )
         .fetch_all(pool)
         .await?;
@@ -852,9 +852,8 @@ impl DeploymentEventRepository {
         project_id: &Uuid,
         p: &Pagination,
         pool: &PgPool,
-    ) -> Result<Vec<DeploymentEventRow>, sqlx::Error> {
-        sqlx::query_as!(
-            DeploymentEventRow,
+    ) -> Result<(Vec<DeploymentEventRow>, i64), sqlx::Error> {
+        let rows = sqlx::query!(
             r#"
             SELECT
                 id,
@@ -863,7 +862,8 @@ impl DeploymentEventRepository {
                 type AS "event_type: DeploymentEventType",
                 level AS "level: DeploymentEventLevel",
                 message,
-                created_at
+                created_at,
+                COUNT(*) OVER() as "total!"
             FROM deployment_events
             WHERE project_id = $1
             ORDER BY created_at DESC
@@ -875,48 +875,23 @@ impl DeploymentEventRepository {
             p.offset
         )
         .fetch_all(pool)
-        .await
-    }
+        .await?;
 
-    #[tracing::instrument(
-        name = "deployment_event_repository.create",
-        skip_all,
-        fields(
-            project_id = %project_id,
-            deployment_id = %deployment_id,
-            event_type = %event_type
-        ),
-        err
-    )]
-    pub async fn create(
-        project_id: &Uuid,
-        deployment_id: &Uuid,
-        event_type: DeploymentEventType,
-        level: DeploymentEventLevel,
-        message: Option<&str>,
-        pool: &PgPool,
-    ) -> Result<DeploymentEventRow, sqlx::Error> {
-        sqlx::query_as!(
-            DeploymentEventRow,
-            r#"
-            INSERT INTO deployment_events (project_id, deployment_id, type, level, message)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING
-                id,
-                project_id,
-                deployment_id,
-                type AS "event_type: DeploymentEventType",
-                level AS "level: DeploymentEventLevel",
-                message,
-                created_at
-            "#,
-            project_id,
-            deployment_id,
-            event_type,
-            level,
-            message
-        )
-        .fetch_one(pool)
-        .await
+        let total = rows.get(0).map(|r| r.total).unwrap_or(0);
+
+        let events = rows
+            .into_iter()
+            .map(|r| DeploymentEventRow {
+                id: r.id,
+                project_id: r.project_id,
+                deployment_id: r.deployment_id,
+                event_type: r.event_type,
+                level: r.level,
+                message: r.message,
+                created_at: r.created_at,
+            })
+            .collect();
+
+        Ok((events, total))
     }
 }
