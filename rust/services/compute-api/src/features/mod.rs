@@ -23,20 +23,32 @@ pub fn get_routes() -> ApiRouter<AppState> {
             "/api/v1/compute/dashboard",
             get(handlers::dashboard::get_dashboard_handler),
         )
+        .api_route(
+            "/api/v1/compute/dashboard/events",
+            get(handlers::dashboard::get_dashboard_events_handler),
+        )
+        .api_route(
+            "/api/v1/compute/projects/overview",
+            get(handlers::project::get_projects_overview_handler),
+        )
         // Projects
         .api_route(
             "/api/v1/compute/projects",
             get(handlers::project::get_projects).post(handlers::project::create_project_handler),
         )
         .api_route(
-            "/api/v1/compute/projects/overview",
-            get(handlers::project::get_projects_overview_handler),
-        )
-        .api_route(
             "/api/v1/compute/projects/{project_id}",
             get(handlers::project::get_project_handler)
                 .patch(handlers::project::update_project_handler)
                 .delete(handlers::project::delete_project_handler),
+        )
+        .api_route(
+            "/api/v1/compute/projects/{project_id}/events",
+            get(handlers::project::get_project_events_handler)
+        )
+        .api_route(
+            "/api/v1/compute/projects/{project_id}/overview",
+            get(handlers::project::get_project_overview_handler),
         )
         // Deployments
         .api_route(

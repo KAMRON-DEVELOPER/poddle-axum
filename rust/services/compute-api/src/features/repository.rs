@@ -3,8 +3,8 @@ use billing_core::schemas::Money;
 use compute_core::{
     formatters::format_resource_name,
     models::{
-        DeploymentEventLevel, DeploymentEventRow, DeploymentEventType, DeploymentRow,
-        DeploymentStatus, PresetRow, ProjectRow,
+        DeploymentEventLevel, DeploymentEventType, DeploymentRow, DeploymentStatus, PresetRow,
+        ProjectRow,
     },
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentSource, UpdateDeploymentRequest,
@@ -21,7 +21,10 @@ use uuid::Uuid;
 use crate::{
     error::AppError,
     features::{
-        models::{DashboardQueryRow, ProjectOverviewQueryRow},
+        models::{
+            DashboardEventQueryRow, DashboardQueryRow, ProjectEventQueryRow,
+            ProjectOverviewQueryRow,
+        },
         schemas::{
             CostOverview, CpuOverview, DashboardResponse, DeploymentOverview, MemoryOverview,
             ProjectOverviewResponse, ResourceOverview,
@@ -182,7 +185,8 @@ impl ProjectRepository {
         user_id: &Uuid,
         pagination: &Pagination,
         pool: &PgPool,
-    ) -> Result<(Vec<ProjectOverviewResponse>, i64), sqlx::Error> {
+        con: &mut MultiplexedConnection,
+    ) -> Result<(Vec<ProjectOverviewResponse>, i64), AppError> {
         let projects_count = sqlx::query_scalar!(
             "SELECT COUNT(id) FROM projects WHERE owner_id = $1",
             user_id
@@ -266,9 +270,68 @@ impl ProjectRepository {
         .fetch_all(pool)
         .await?;
 
+        if rows.is_empty() {
+            return Ok((vec![], projects_count));
+        }
+
+        let project_ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+
+        let deployment_pairs = sqlx::query!(
+            r#"
+        SELECT id, project_id
+        FROM deployments
+        WHERE user_id = $1
+        AND project_id = ANY($2)
+        AND status != 'deleted'
+        "#,
+            user_id,
+            &project_ids
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let mut deployment_ids = Vec::with_capacity(deployment_pairs.len());
+        let mut deployment_project_ids = Vec::with_capacity(deployment_pairs.len());
+
+        for row in deployment_pairs {
+            deployment_ids.push(row.id.to_string());
+            deployment_project_ids.push(row.project_id);
+        }
+
+        let deployment_id_refs: Vec<&str> = deployment_ids.iter().map(String::as_str).collect();
+
+        let latest_metrics =
+            crate::services::cache_service::CacheService::get_latest_deployments_metrics(
+                deployment_id_refs,
+                con,
+            )
+            .await?;
+
+        let mut usage_by_project: HashMap<Uuid, (f64, f64, bool)> = HashMap::new();
+
+        for (project_id, maybe_metric) in deployment_project_ids
+            .into_iter()
+            .zip(latest_metrics.into_iter())
+        {
+            let entry = usage_by_project
+                .entry(project_id)
+                .or_insert((0.0, 0.0, false));
+
+            if let Some(metric) = maybe_metric {
+                entry.0 += metric.cpu;
+                entry.1 += metric.memory;
+                entry.2 = true;
+            }
+        }
+
         let data = rows
             .into_iter()
             .map(|row| {
+                let (used_cpu, used_memory, has_metrics) = usage_by_project
+                    .get(&row.id)
+                    .copied()
+                    .unwrap_or((0.0, 0.0, false));
+
                 ProjectOverviewResponse {
                     id: row.id,
                     name: row.name,
@@ -290,11 +353,11 @@ impl ProjectRepository {
                     },
                     resource_overview: ResourceOverview {
                         cpu_overview: CpuOverview {
-                            used_millicores: None, // Will fill via Redis later
+                            used_millicores: has_metrics.then_some(used_cpu),
                             allocated_millicores: row.allocated_cpu_millicores,
                         },
                         memory_overview: MemoryOverview {
-                            used_mb: None, // Will fill via Redis later
+                            used_mb: has_metrics.then_some(used_memory),
                             allocated_mb: row.allocated_memory_mb,
                         },
                     },
@@ -313,6 +376,161 @@ impl ProjectRepository {
             .collect();
 
         Ok((data, projects_count))
+    }
+
+    #[tracing::instrument(name = "project_repository.get_one_overview", skip_all, fields(user_id = %user_id, project_id = %project_id), err)]
+    pub async fn get_one_overview(
+        user_id: &Uuid,
+        project_id: &Uuid,
+        pool: &PgPool,
+        con: &mut MultiplexedConnection,
+    ) -> Result<ProjectOverviewResponse, AppError> {
+        let row = sqlx::query_as!(
+            ProjectOverviewQueryRow,
+            r#"
+            WITH latest_addon_price AS (
+                SELECT
+                    cpu_monthly_unit_price,
+                    memory_monthly_unit_price,
+                    currency
+                FROM addon_prices
+                ORDER BY created_at DESC
+                LIMIT 1
+            )
+            SELECT
+                prj.id AS "id!",
+                prj.name AS "name!",
+                prj.description AS "description?",
+
+                COUNT(d.id)::BIGINT AS "total!",
+                COUNT(d.id) FILTER (WHERE d.status = 'queued')::BIGINT AS "queued!",
+                COUNT(d.id) FILTER (WHERE d.status = 'building')::BIGINT AS "building!",
+                COUNT(d.id) FILTER (WHERE d.status = 'provisioning')::BIGINT AS "provisioning!",
+                COUNT(d.id) FILTER (WHERE d.status = 'starting')::BIGINT AS "starting!",
+                COUNT(d.id) FILTER (WHERE d.status = 'running')::BIGINT AS "running!",
+                COUNT(d.id) FILTER (WHERE d.status = 'unhealthy')::BIGINT AS "unhealthy!",
+                COUNT(d.id) FILTER (WHERE d.status = 'degraded')::BIGINT AS "degraded!",
+                COUNT(d.id) FILTER (WHERE d.status = 'updating')::BIGINT AS "updating!",
+                COUNT(d.id) FILTER (WHERE d.status = 'suspended')::BIGINT AS "suspended!",
+                COUNT(d.id) FILTER (WHERE d.status = 'failed')::BIGINT AS "failed!",
+                COUNT(d.id) FILTER (WHERE d.status = 'build_failed')::BIGINT AS "build_failed!",
+                COUNT(d.id) FILTER (WHERE d.status = 'image_pull_error')::BIGINT AS "image_pull_error!",
+
+                COALESCE(SUM(
+                    (p.cpu_millicores + COALESCE(d.addon_cpu_millicores, 0)) * d.desired_replicas
+                ), 0)::BIGINT AS "allocated_cpu_millicores!",
+
+                COALESCE(SUM(
+                    (p.memory_mb + COALESCE(d.addon_memory_mb, 0)) * d.desired_replicas
+                ), 0)::BIGINT AS "allocated_memory_mb!",
+
+                COALESCE(SUM(
+                    CASE
+                        WHEN d.status IN ('provisioning', 'starting', 'running', 'unhealthy', 'degraded', 'updating')
+                        THEN (
+                            p.monthly_price
+                            + COALESCE(d.addon_cpu_millicores, 0)::NUMERIC * lap.cpu_monthly_unit_price
+                            + COALESCE(d.addon_memory_mb, 0)::NUMERIC * lap.memory_monthly_unit_price
+                        ) * d.desired_replicas::NUMERIC
+                        ELSE 0::NUMERIC
+                    END
+                ), 0::NUMERIC) AS "estimated_monthly_cost!"
+
+            FROM projects prj
+            LEFT JOIN deployments d
+                ON d.project_id = prj.id
+                AND d.user_id = $1
+                AND d.status != 'deleted'
+            LEFT JOIN presets p
+                ON p.id = d.preset_id
+            CROSS JOIN latest_addon_price lap
+            WHERE prj.id = $2 AND prj.owner_id = $1
+            GROUP BY prj.id, prj.name, prj.description;
+            "#,
+            user_id,
+            project_id
+        )
+        .fetch_one(pool)
+        .await?;
+
+        let deployment_ids = sqlx::query_scalar!(
+            r#"
+        SELECT id
+        FROM deployments
+        WHERE user_id = $1
+          AND project_id = $2
+          AND status != 'deleted'
+        "#,
+            user_id,
+            project_id
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let id_strings: Vec<String> = deployment_ids.iter().map(Uuid::to_string).collect();
+        let id_refs: Vec<&str> = id_strings.iter().map(String::as_str).collect();
+
+        let metrics = crate::services::cache_service::CacheService::get_latest_deployments_metrics(
+            id_refs, con,
+        )
+        .await?;
+
+        let used_millicores: f64 = metrics
+            .iter()
+            .filter_map(|m| m.as_ref())
+            .map(|m| m.cpu)
+            .sum();
+
+        let used_mb: f64 = metrics
+            .iter()
+            .filter_map(|m| m.as_ref())
+            .map(|m| m.memory)
+            .sum();
+
+        let has_any_metric = metrics.iter().any(|m| m.is_some());
+
+        let data = ProjectOverviewResponse {
+            id: row.id,
+            name: row.name,
+            description: row.description,
+            deployment_overview: DeploymentOverview {
+                total: row.total,
+                queued: row.queued,
+                building: row.building,
+                provisioning: row.provisioning,
+                starting: row.starting,
+                running: row.running,
+                unhealthy: row.unhealthy,
+                degraded: row.degraded,
+                updating: row.updating,
+                suspended: row.suspended,
+                failed: row.failed,
+                build_failed: row.build_failed,
+                image_pull_error: row.image_pull_error,
+            },
+            resource_overview: ResourceOverview {
+                cpu_overview: CpuOverview {
+                    used_millicores: has_any_metric.then_some(used_millicores),
+                    allocated_millicores: row.allocated_cpu_millicores,
+                },
+                memory_overview: MemoryOverview {
+                    used_mb: has_any_metric.then_some(used_mb),
+                    allocated_mb: row.allocated_memory_mb,
+                },
+            },
+            cost_overview: CostOverview {
+                spent_this_month: Some(Money {
+                    amount: BigDecimal::from(0),
+                    currency: "UZS".to_string(),
+                }),
+                estimated_monthly_cost: Money {
+                    amount: row.estimated_monthly_cost,
+                    currency: "UZS".to_string(),
+                },
+            },
+        };
+
+        Ok(data)
     }
 
     #[tracing::instrument(name = "project_repository.get_many", skip_all, err)]
@@ -847,29 +1065,88 @@ impl DeploymentRepository {
 pub struct DeploymentEventRepository;
 
 impl DeploymentEventRepository {
-    #[tracing::instrument(name = "deployment_event_repository.get_many", skip_all, fields(project_id = %project_id), err)]
-    pub async fn get_many(
-        project_id: &Uuid,
+    #[tracing::instrument(name = "deployment_event_repository.get_many_by_owner", skip_all, fields(user_id = %user_id), err)]
+    pub async fn get_many_by_owner(
+        user_id: &Uuid,
         p: &Pagination,
         pool: &PgPool,
-    ) -> Result<(Vec<DeploymentEventRow>, i64), sqlx::Error> {
+    ) -> Result<(Vec<DashboardEventQueryRow>, i64), sqlx::Error> {
         let rows = sqlx::query!(
             r#"
             SELECT
-                id,
-                project_id,
-                deployment_id,
-                type AS "event_type: DeploymentEventType",
-                level AS "level: DeploymentEventLevel",
-                message,
-                created_at,
-                COUNT(*) OVER() as "total!"
-            FROM deployment_events
-            WHERE project_id = $1
-            ORDER BY created_at DESC
+                de.id,
+                de.project_id,
+                p.name AS project_name,
+                de.deployment_id,
+                d.name AS deployment_name,
+                de.type AS "event_type: DeploymentEventType",
+                de.level AS "level: DeploymentEventLevel",
+                de.message,
+                de.created_at,
+                COUNT(*) OVER() AS "total!"
+            FROM deployment_events de
+            JOIN projects p ON de.project_id = p.id
+            JOIN deployments d ON de.deployment_id = d.id
+            WHERE p.owner_id = $1
+            ORDER BY de.created_at DESC
             LIMIT $2
             OFFSET $3
             "#,
+            user_id,
+            p.limit,
+            p.offset
+        )
+        .fetch_all(pool)
+        .await?;
+
+        let total = rows.get(0).map(|r| r.total).unwrap_or(0);
+
+        let data = rows
+            .into_iter()
+            .map(|r| DashboardEventQueryRow {
+                id: r.id,
+                project_id: r.project_id,
+                project_name: r.project_name,
+                deployment_id: r.deployment_id,
+                deployment_name: r.deployment_name,
+                event_type: r.event_type,
+                level: r.level,
+                message: r.message,
+                created_at: r.created_at,
+            })
+            .collect();
+
+        Ok((data, total))
+    }
+
+    #[tracing::instrument(name = "deployment_event_repository.get_many_by_project", skip_all, fields(user_id = %user_id, project_id = %project_id), err)]
+    pub async fn get_many_by_project(
+        user_id: &Uuid,
+        project_id: &Uuid,
+        p: &Pagination,
+        pool: &PgPool,
+    ) -> Result<(Vec<ProjectEventQueryRow>, i64), sqlx::Error> {
+        let rows = sqlx::query!(
+            r#"
+            SELECT
+                de.id,
+                de.deployment_id,
+                d.name AS deployment_name,
+                de.type AS "event_type: DeploymentEventType",
+                de.level AS "level: DeploymentEventLevel",
+                de.message,
+                de.created_at,
+                COUNT(*) OVER() AS "total!"
+            FROM deployment_events de
+            JOIN projects p ON de.project_id = p.id
+            JOIN deployments d ON de.deployment_id = d.id
+            WHERE de.project_id = $1
+            AND p.owner_id = $2
+            ORDER BY de.created_at DESC
+            LIMIT $3
+            OFFSET $4
+            "#,
+            user_id,
             project_id,
             p.limit,
             p.offset
@@ -879,12 +1156,12 @@ impl DeploymentEventRepository {
 
         let total = rows.get(0).map(|r| r.total).unwrap_or(0);
 
-        let events = rows
+        let data = rows
             .into_iter()
-            .map(|r| DeploymentEventRow {
+            .map(|r| ProjectEventQueryRow {
                 id: r.id,
-                project_id: r.project_id,
                 deployment_id: r.deployment_id,
+                deployment_name: r.deployment_name,
                 event_type: r.event_type,
                 level: r.level,
                 message: r.message,
@@ -892,6 +1169,6 @@ impl DeploymentEventRepository {
             })
             .collect();
 
-        Ok((events, total))
+        Ok((data, total))
     }
 }
