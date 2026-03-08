@@ -2,7 +2,10 @@ use bigdecimal::BigDecimal;
 use billing_core::schemas::Money;
 use compute_core::{
     formatters::format_resource_name,
-    models::{DeploymentEventRow, DeploymentRow, DeploymentStatus, PresetRow, ProjectRow},
+    models::{
+        DeploymentEventLevel, DeploymentEventRow, DeploymentEventType, DeploymentRow,
+        DeploymentStatus, PresetRow, ProjectRow,
+    },
     schemas::{
         CreateDeploymentRequest, CreateProjectRequest, DeploymentSource, UpdateDeploymentRequest,
     },
@@ -844,42 +847,10 @@ impl DeploymentRepository {
 pub struct DeploymentEventRepository;
 
 impl DeploymentEventRepository {
-    #[tracing::instrument(name = "deployment_event_repository.create", skip_all, fields(deployment_id = %deployment_id, event_type = %event_type), err)]
-    pub async fn create(
-        deployment_id: &Uuid,
-        event_type: &str,
-        message: Option<&str>,
-        pool: &PgPool,
-    ) -> Result<DeploymentEventRow, sqlx::Error> {
-        sqlx::query_as!(
-            DeploymentEventRow,
-            r#"
-            INSERT INTO deployment_events (deployment_id, type, message)
-            VALUES ($1, $2, $3)
-            RETURNING
-                id,
-                deployment_id,
-                type AS "event_type",
-                message,
-                created_at
-            "#,
-            deployment_id,
-            event_type,
-            message
-        )
-        .fetch_one(pool)
-        .await
-    }
-
-    #[tracing::instrument(
-        name = "deployment_event_repository.get_recent_by_deployment",
-        skip_all,
-        fields(deployment_id = %deployment_id),
-        err
-    )]
-    pub async fn get_recent_by_deployment(
-        deployment_id: &Uuid,
-        limit: i64,
+    #[tracing::instrument(name = "deployment_event_repository.get_many", skip_all, fields(project_id = %project_id), err)]
+    pub async fn get_many(
+        project_id: &Uuid,
+        p: &Pagination,
         pool: &PgPool,
     ) -> Result<Vec<DeploymentEventRow>, sqlx::Error> {
         sqlx::query_as!(
@@ -887,17 +858,21 @@ impl DeploymentEventRepository {
             r#"
             SELECT
                 id,
+                project_id,
                 deployment_id,
-                type AS "event_type",
+                type AS "event_type: DeploymentEventType",
+                level AS "level: DeploymentEventLevel",
                 message,
                 created_at
             FROM deployment_events
-            WHERE deployment_id = $1
+            WHERE project_id = $1
             ORDER BY created_at DESC
             LIMIT $2
+            OFFSET $3
             "#,
-            deployment_id,
-            limit
+            project_id,
+            p.limit,
+            p.offset
         )
         .fetch_all(pool)
         .await

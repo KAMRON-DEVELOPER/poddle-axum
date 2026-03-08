@@ -35,19 +35,71 @@ pub enum DeploymentStatus {
 impl std::fmt::Display for DeploymentStatus {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Building => write!(f, "building"),
-            Self::Queued => write!(f, "queued"),
-            Self::Provisioning => write!(f, "provisioning"),
-            Self::Starting => write!(f, "starting"),
-            Self::Running => write!(f, "running"),
-            Self::Unhealthy => write!(f, "unhealthy"),
-            Self::Degraded => write!(f, "degraded"),
-            Self::Updating => write!(f, "scaling"),
-            Self::Suspended => write!(f, "suspended"),
-            Self::Failed => write!(f, "failed"),
-            Self::BuildFailed => write!(f, "build_failed"),
-            Self::Deleted => write!(f, "deleted"),
-            Self::ImagePullError => write!(f, "image_pull_error"),
+            Self::Building => write!(f, "Building"),
+            Self::Queued => write!(f, "Queued"),
+            Self::Provisioning => write!(f, "Provisioning"),
+            Self::Starting => write!(f, "Starting"),
+            Self::Running => write!(f, "Running"),
+            Self::Unhealthy => write!(f, "Unhealthy"),
+            Self::Degraded => write!(f, "Degraded"),
+            Self::Updating => write!(f, "Updating"),
+            Self::Suspended => write!(f, "Suspended"),
+            Self::Failed => write!(f, "Failed"),
+            Self::BuildFailed => write!(f, "BuildFailed"),
+            Self::Deleted => write!(f, "Deleted"),
+            Self::ImagePullError => write!(f, "ImagePullError"),
+        }
+    }
+}
+
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, JsonSchema, Debug)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "deployment_event_type", rename_all = "snake_case")]
+pub enum DeploymentEventType {
+    StatusChanged,
+    BuildStarted,
+    BuildSucceeded,
+    BuildFailed,
+    DeploymentCreated,
+    DeploymentUpdated,
+    DeploymentDeleted,
+    UnhealthyDetected,
+    ImagePullFailed,
+    SystemMessage,
+}
+
+impl std::fmt::Display for DeploymentEventType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::StatusChanged => write!(f, "StatusChanged"),
+            Self::BuildStarted => write!(f, "BuildStarted"),
+            Self::BuildSucceeded => write!(f, "BuildSucceeded"),
+            Self::BuildFailed => write!(f, "BuildFailed"),
+            Self::DeploymentCreated => write!(f, "DeploymentCreated"),
+            Self::DeploymentUpdated => write!(f, "DeploymentUpdated"),
+            Self::DeploymentDeleted => write!(f, "DeploymentDeleted"),
+            Self::UnhealthyDetected => write!(f, "UnhealthyDetected"),
+            Self::ImagePullFailed => write!(f, "ImagePullFailed"),
+            Self::SystemMessage => write!(f, "SystemMessage"),
+        }
+    }
+}
+
+#[derive(Type, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, JsonSchema, Debug)]
+#[serde(rename_all = "snake_case")]
+#[sqlx(type_name = "deployment_event_level", rename_all = "snake_case")]
+pub enum DeploymentEventLevel {
+    Info,
+    Warning,
+    Error,
+}
+
+impl std::fmt::Display for DeploymentEventLevel {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Info => write!(f, "Info"),
+            Self::Warning => write!(f, "Warning"),
+            Self::Error => write!(f, "Error"),
         }
     }
 }
@@ -128,14 +180,16 @@ pub struct DeploymentRow {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
+#[derive(FromRow, Serialize, Deserialize, JsonSchema, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentEventRow {
     pub id: Uuid,
+    pub project_id: Uuid,
     pub deployment_id: Uuid,
     #[serde(rename = "type")]
     #[sqlx(rename = "type")]
-    pub event_type: String,
+    pub event_type: DeploymentEventType,
+    pub level: DeploymentEventLevel,
     pub message: Option<String>,
     pub created_at: DateTime<Utc>,
 }

@@ -46,6 +46,29 @@ EXCEPTION
 WHEN duplicate_object THEN NULL;
 END $$;
 
+DO $$ BEGIN 
+    CREATE TYPE deployment_event_type AS ENUM (
+        'status_changed',
+        'build_started',
+        'build_succeeded',
+        'build_failed',
+        'deployment_created',
+        'deployment_updated',
+        'deployment_deleted',
+        'unhealthy_detected',
+        'image_pull_failed',
+        'system_message',
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN 
+    CREATE TYPE deployment_event_level AS ENUM (
+        'info',
+        'warning',
+        'error'
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 DO $$ BEGIN CREATE TYPE user_role AS ENUM ('admin', 'regular');
 EXCEPTION
 WHEN duplicate_object THEN NULL;
@@ -250,13 +273,15 @@ CREATE INDEX IF NOT EXISTS idx_deployments_status ON deployments (status);
 -- ==============================================
 CREATE TABLE IF NOT EXISTS deployment_events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4 (),
+    project_id UUID NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
     deployment_id UUID NOT NULL REFERENCES deployments (id) ON DELETE CASCADE,
-    type VARCHAR(128) NOT NULL,
+    type deployment_event_type NOT NULL,
+    level deployment_event_level NOT NULL,
     message TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TRIGGER set_deployment_events_timestamp BEFORE UPDATE ON deployment_events FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
+CREATE INDEX IF NOT EXISTS idx_deployment_events_project_id ON deployment_events (project_id);
 
 CREATE INDEX IF NOT EXISTS idx_deployment_events_deployment_id ON deployment_events (deployment_id);
 

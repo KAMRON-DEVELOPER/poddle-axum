@@ -38,7 +38,6 @@ config.workspace = true
 tracing-opentelemetry.workspace = true
 base64 = "0.22.1"
 sha256 = "1.6.0"
-ghrepo.workspace = true
 kcr_cert_manager_io = "3.20260117.142700"
 kcr_traefik_io = "3.20260128.50253"
 kcr_secrets_hashicorp_com = "3.20260119.105833"

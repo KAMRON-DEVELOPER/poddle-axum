@@ -807,7 +807,6 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
- "ghrepo",
  "http",
  "http-common",
  "http-contracts",
@@ -844,7 +843,6 @@ version = "0.1.0"
 dependencies = [
  "bigdecimal",
  "chrono",
- "ghrepo",
  "jsonwebtoken",
  "k8s-openapi",
  "kube",
@@ -860,6 +858,7 @@ dependencies = [
  "serde_with",
  "sqlx",
  "thiserror 2.0.18",
+ "tracing",
  "uuid",
  "validator",
 ]
@@ -904,7 +903,6 @@ dependencies = [
  "dotenvy",
  "factory",
  "futures",
- "ghrepo",
  "http-common",
  "k8s-crds-cert-manager",
  "k8s-crds-traefik",
@@ -1908,15 +1906,6 @@ checksum = "f0d8a4362ccb29cb0b265253fb0a2728f592895ee6854fd9bc13f2ffda266ff1"
 dependencies = [
  "opaque-debug",
  "polyval",
-]
-
-[[package]]
-name = "ghrepo"
-version = "0.7.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0e2508da0b48f2f45c3f9dea89d149d04a5f74a76c42401373fde6976be6e4ca"
-dependencies = [
- "serde",
 ]
 
 [[package]]
