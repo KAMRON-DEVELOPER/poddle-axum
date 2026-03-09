@@ -45,8 +45,8 @@ pub async fn stream_deployment_metrics_sse_handler(
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
     let metrics_channel = ChannelNames::deployment_metrics(&deployment_id.to_string());
-    let status_channel = ChannelNames::deployment_status(&deployment_id.to_string());
-    let channel_name = [metrics_channel, status_channel];
+    let events_channel = ChannelNames::deployment_events(&deployment_id.to_string());
+    let channel_name = [metrics_channel, events_channel];
 
     let mut pubsub = redis.pubsub().await.map_err(|err| {
         error!("❌ Failed to connect to Redis PubSub: {}", err);
@@ -70,7 +70,7 @@ pub async fn stream_deployment_metrics_sse_handler(
 }
 
 #[tracing::instrument(
-    name = "stream_deployments_metrics_see_handler",
+    name = "stream_project_metrics_sse_handler",
     skip_all,
     fields(
         user_id = %claims.sub,
@@ -78,14 +78,14 @@ pub async fn stream_deployment_metrics_sse_handler(
     ),
     err
 )]
-pub async fn stream_deployments_metrics_sse_handler(
+pub async fn stream_project_metrics_sse_handler(
     claims: Claims,
     Path(project_id): Path<Uuid>,
     State(redis): State<Redis>,
 ) -> Result<Sse<impl Stream<Item = Result<Event, Infallible>>>, StatusCode> {
-    let metrics_channel = ChannelNames::deployments_metrics(&project_id.to_string());
-    let status_channel = ChannelNames::deployments_metrics(&project_id.to_string());
-    let channel_name = [metrics_channel, status_channel];
+    let metrics_channel = ChannelNames::project_metrics(&project_id.to_string());
+    let events_channel = ChannelNames::project_metrics(&project_id.to_string());
+    let channel_name = [metrics_channel, events_channel];
 
     let mut pubsub = redis.pubsub().await.map_err(|err| {
         error!("❌ Failed to connect to Redis PubSub: {}", err);

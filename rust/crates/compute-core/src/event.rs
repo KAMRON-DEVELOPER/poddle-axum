@@ -1,58 +1,30 @@
-use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use serde::Serialize;
 
 use crate::{
-    models::DeploymentStatus,
     schemas::{DeploymentMetricUpdate, Pod, PodMetricUpdate, PodPhase},
+    services::event_emission_service::DeploymentEventEnvelope,
 };
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum EventLevel {
-    Info,
-    Error,
-    Warning,
-    Success,
-}
 
 #[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
-    // Deployment
     DeploymentMetricsUpdate {
         updates: Vec<DeploymentMetricUpdate>,
     },
-
-    DeploymentStatusUpdate {
-        id: &'a Uuid,
-        status: DeploymentStatus,
+    DeploymentEvent {
+        event: DeploymentEventEnvelope,
     },
 
-    DeploymentSystemMessage {
-        id: &'a Uuid,
-        message: String,
-        level: EventLevel,
-    },
-
-    // Pod
     PodMetricsUpdate {
         updates: Vec<PodMetricUpdate>,
     },
-
     PodPhaseUpdate {
-        uid: &'a String,
+        uid: &'a str,
         status: PodPhase,
     },
-
-    PodSystemMessage {
-        uid: &'a String,
-        message: String,
-        level: EventLevel,
-    },
-
     PodApply {
         pod: Pod,
     },
-
     PodDelete {
         uid: String,
     },

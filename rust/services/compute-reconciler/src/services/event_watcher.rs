@@ -2,11 +2,12 @@ use chrono::Utc;
 use compute_core::cache_keys::CacheKeys;
 use compute_core::channel_names::ChannelNames;
 use compute_core::determiners::determine_deployment_status;
-use compute_core::event::{ComputeEvent, EventLevel};
-use compute_core::models::DeploymentStatus;
+use compute_core::event::ComputeEvent;
+use compute_core::models::{DeploymentEventType, DeploymentStatus};
 use compute_core::schemas::{
     DeploymentSourceMessage, MetricSnapshot, Pod, PodMeta, PodPhase, UpdateDeploymentMessage,
 };
+use compute_core::services::event_emission_service::{EmitDeploymentEvent, EventEmissionService};
 use factory::factories::amqp::{Amqp, AmqpPropagator};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
@@ -29,7 +30,7 @@ use crate::error::AppError;
 pub async fn event_watcher(
     cfg: Config,
     pool: PgPool,
-    mut redis: MultiplexedConnection,
+    mut con: MultiplexedConnection,
     amqp: Amqp,
     client: Client,
 ) -> Result<(), AppError> {
@@ -50,17 +51,17 @@ pub async fn event_watcher(
     loop {
         tokio::select! {
             Some(event) = deployment_stream.next() => {
-                if let Err(e) = handle_deployment_event(event, &pool, &mut redis).await {
+                if let Err(e) = handle_deployment_event(event, &pool, &mut con).await {
                     error!(error = %e, "❌ Failed to handle deployment event: {}", e);
                 }
             }
             Some(event) = pod_stream.next() => {
-                if let Err(e) = handle_pod_event(event, &cfg, &pool, &mut redis).await {
+                if let Err(e) = handle_pod_event(event, &cfg, &pool, &mut con).await {
                     error!(error = %e, "❌ Failed to handle pod event");
                 }
             }
             Some(event) = buildkit_job_stream.next() => {
-                if let Err(e) = handle_buildkit_job_event(event, &cfg, &pool, &mut redis, &amqp).await {
+                if let Err(e) = handle_buildkit_job_event(event, &cfg, &pool, &mut con, &amqp).await {
                     error!(error = %e, "❌ Failed to handle job event");
                 }
             }
@@ -83,7 +84,7 @@ pub async fn event_watcher(
 async fn handle_deployment_event(
     event: Result<Event<K8sDeployment>, kube::runtime::watcher::Error>,
     pool: &PgPool,
-    con: &mut MultiplexedConnection,
+    mut con: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
     match event {
         Ok(Event::Apply(deployment)) => {
@@ -153,28 +154,22 @@ async fn handle_deployment_event(
                 con.lpush(&metrics_key, idle_snapshot).await?;
             }
 
-            // Update database
-            let query_result = sqlx::query!(
-                r#"
-                UPDATE deployments
-                SET status = $2
-                WHERE id = $1
-                "#,
-                deployment_id,
-                new_status as DeploymentStatus
+            EventEmissionService::emit(
+                EmitDeploymentEvent {
+                    project_id: &project_id,
+                    deployment_id: &deployment_id,
+                    status: Some(new_status),
+                    event_type: Some(DeploymentEventType::StatusChanged),
+                    level: None,
+                    message: Some(&format!("Deployment status changed to {}", new_status)),
+                    persist_event: true,
+                    publish_project: true,
+                    publish_deployment: true,
+                },
+                &pool,
+                &mut con,
             )
-            .execute(pool)
             .await?;
-
-            if query_result.rows_affected() == 0 {
-                when_affacted_rows_zero(&project_id, &deployment_id, con).await?
-            }
-
-            let message = ComputeEvent::DeploymentStatusUpdate {
-                id: &deployment_id,
-                status: new_status,
-            };
-            send_deployments_message(&project_id, message, con).await?;
         }
         Ok(Event::Delete(deployment)) => {
             let labels = deployment.metadata.labels.as_ref();
@@ -221,11 +216,22 @@ async fn handle_deployment_event(
 
             p.query_async::<()>(con).await?;
 
-            let message = ComputeEvent::DeploymentStatusUpdate {
-                id: &deployment_id,
-                status: DeploymentStatus::Deleted,
-            };
-            send_deployments_message(&project_id, message, con).await?
+            EventEmissionService::emit(
+                EmitDeploymentEvent {
+                    project_id: &project_id,
+                    deployment_id: &deployment_id,
+                    status: Some(DeploymentStatus::Deleted),
+                    event_type: Some(DeploymentEventType::StatusChanged),
+                    level: None,
+                    message: Some(&format!("Deployment deleted successfully")),
+                    persist_event: true,
+                    publish_project: true,
+                    publish_deployment: true,
+                },
+                &pool,
+                &mut con,
+            )
+            .await?;
         }
         Ok(Event::Init) => info!("✅ Watcher started init phase"),
         Ok(Event::InitApply(_)) => {}
@@ -241,7 +247,7 @@ async fn handle_pod_event(
     event: Result<Event<K8sPod>, kube::runtime::watcher::Error>,
     _cfg: &Config,
     pool: &PgPool,
-    con: &mut MultiplexedConnection,
+    mut con: &mut MultiplexedConnection,
 ) -> Result<(), AppError> {
     match event {
         Ok(Event::Apply(pod)) => {
@@ -354,43 +360,59 @@ async fn handle_pod_event(
                             msg.push_str(&format!(" Details: {}", detail));
                         }
 
-                        let message = ComputeEvent::DeploymentSystemMessage {
-                            id: &deployment_id,
-                            message: msg,
-                            level: EventLevel::Error,
-                        };
-                        send_deployments_message(&project_id, message, con).await?;
-                        let message = ComputeEvent::DeploymentStatusUpdate {
-                            id: &deployment_id,
-                            status: DeploymentStatus::ImagePullError,
-                        };
-                        send_deployments_message(&project_id, message, con).await?;
+                        EventEmissionService::emit(
+                            EmitDeploymentEvent {
+                                project_id: &project_id,
+                                deployment_id: &deployment_id,
+                                status: Some(DeploymentStatus::ImagePullError),
+                                event_type: Some(DeploymentEventType::SystemMessage),
+                                level: None,
+                                message: Some(&msg),
+                                persist_event: true,
+                                publish_project: true,
+                                publish_deployment: true,
+                            },
+                            &pool,
+                            &mut con,
+                        )
+                        .await?;
                     }
                 } else {
-                    sqlx::query!(
-                        r#"
-                        UPDATE deployments
-                        SET status = 'unhealthy'
-                        WHERE id = $1 AND status NOT IN ('unhealthy', 'failed', 'suspended')
-                        "#,
-                        deployment_id
+                    EventEmissionService::emit(
+                        EmitDeploymentEvent {
+                            project_id: &project_id,
+                            deployment_id: &deployment_id,
+                            status: Some(DeploymentStatus::Unhealthy),
+                            event_type: Some(DeploymentEventType::UnhealthyDetected),
+                            level: None,
+                            message: Some("Deployment is crashing unhealthy"),
+                            persist_event: true,
+                            publish_project: true,
+                            publish_deployment: true,
+                        },
+                        &pool,
+                        &mut con,
                     )
-                    .execute(pool)
                     .await?;
 
                     // keep your CrashLoopBackOff restart-based spam control if you want
                     if restart_count > 0 && restart_count % 3 == 0 {
-                        let message = ComputeEvent::DeploymentSystemMessage {
-                            id: &deployment_id,
-                            message: format!("Deployment is crashing: {}", reason),
-                            level: EventLevel::Error,
-                        };
-                        send_deployments_message(&project_id, message, con).await?;
-                        let message = ComputeEvent::DeploymentStatusUpdate {
-                            id: &deployment_id,
-                            status: DeploymentStatus::Unhealthy,
-                        };
-                        send_deployments_message(&project_id, message, con).await?;
+                        EventEmissionService::emit(
+                            EmitDeploymentEvent {
+                                project_id: &project_id,
+                                deployment_id: &deployment_id,
+                                status: Some(DeploymentStatus::Unhealthy),
+                                event_type: Some(DeploymentEventType::UnhealthyDetected),
+                                level: None,
+                                message: Some(&format!("Deployment is crashing: {}", reason)),
+                                persist_event: true,
+                                publish_project: true,
+                                publish_deployment: true,
+                            },
+                            &pool,
+                            &mut con,
+                        )
+                        .await?;
                     }
                 }
             }
@@ -518,7 +540,7 @@ async fn handle_buildkit_job_event(
     event: Result<Event<Job>, kube::runtime::watcher::Error>,
     _cfg: &Config,
     pool: &PgPool,
-    con: &mut MultiplexedConnection,
+    mut con: &mut MultiplexedConnection,
     amqp: &Amqp,
 ) -> Result<(), AppError> {
     match event {
@@ -619,19 +641,22 @@ async fn handle_buildkit_job_event(
             } else if failed > 0 {
                 error!("❌ Build Job {} Failed", name);
 
-                sqlx::query!(
-                    "UPDATE deployments SET status = 'build_failed' WHERE id = $1",
-                    deployment_id
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::BuildFailed),
+                        event_type: Some(DeploymentEventType::BuildFailed),
+                        level: None,
+                        message: Some("Image build failed from your code"),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
+                    &pool,
+                    &mut con,
                 )
-                .execute(pool)
                 .await?;
-
-                let message = ComputeEvent::DeploymentStatusUpdate {
-                    id: &deployment_id,
-                    status: DeploymentStatus::BuildFailed,
-                };
-                let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-                con.publish(channel, message).await?;
             }
         }
         Ok(Event::Delete(job)) => {
@@ -642,43 +667,5 @@ async fn handle_buildkit_job_event(
         Ok(Event::InitDone) => info!("✅ buildkit build watcher ready"),
         Err(e) => error!("❌ buildkit build watcher error: {}", e),
     }
-    Ok(())
-}
-
-async fn when_affacted_rows_zero(
-    project_id: &Uuid,
-    deployment_id: &Uuid,
-    con: &mut MultiplexedConnection,
-) -> Result<(), AppError> {
-    {
-        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-        let message = ComputeEvent::DeploymentSystemMessage {
-            id: deployment_id,
-            level: EventLevel::Error,
-            message: "❌ Internal server error".to_string(),
-        };
-        con.publish(channel, message)
-            .instrument(info_span!("pubsub.message"))
-            .await?;
-        warn!(
-            project_id = %project_id,
-            deployment_id = %deployment_id,
-            "❌ Update deployment status affected zero rows"
-        );
-
-        Ok(())
-    }
-}
-
-async fn send_deployments_message(
-    id: &Uuid,
-    msg: ComputeEvent<'_>,
-    con: &mut MultiplexedConnection,
-) -> Result<(), AppError> {
-    let channel = ChannelNames::deployments_metrics(&id.to_string());
-    con.publish(channel, msg)
-        .instrument(info_span!("pubsub.status_update"))
-        .await?;
-
     Ok(())
 }

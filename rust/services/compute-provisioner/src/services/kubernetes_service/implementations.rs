@@ -1,14 +1,13 @@
 use std::collections::{BTreeMap, HashMap};
 
 use base64::Engine;
-use compute_core::event::ComputeEvent;
 use compute_core::formatters::{format_namespace, format_resource_name};
-use compute_core::models::{DeploymentStatus, ResourceSpec};
-use compute_core::schemas::{DeploymentSourceMessage, ImagePullSecret};
-use compute_core::{
-    channel_names::ChannelNames,
-    schemas::{CreateDeploymentMessage, DeleteDeploymentMessage, UpdateDeploymentMessage},
+use compute_core::models::{DeploymentEventType, DeploymentStatus, ResourceSpec};
+use compute_core::schemas::{
+    CreateDeploymentMessage, DeleteDeploymentMessage, DeploymentSourceMessage, ImagePullSecret,
+    UpdateDeploymentMessage,
 };
+use compute_core::services::event_emission_service::{EmitDeploymentEvent, EventEmissionService};
 use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
@@ -46,10 +45,9 @@ use kube::{
     api::{DeleteParams, ObjectMeta, Patch, PatchParams, PostParams},
 };
 
-use redis::AsyncTypedCommands;
 use redis::aio::MultiplexedConnection;
 use sqlx::PgPool;
-use tracing::{Instrument, error, info, info_span, warn};
+use tracing::{Instrument, error, info, info_span};
 use uuid::Uuid;
 
 use crate::error::AppError;
@@ -160,10 +158,19 @@ impl KubernetesService {
                 url,
                 image_pull_secret,
             } => {
-                self.notify_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Provisioning,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Provisioning),
+                        event_type: Some(DeploymentEventType::StatusChanged),
+                        level: None,
+                        message: Some("Provisioning deployment"),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
+                    &pool,
                     &mut con,
                 )
                 .await?;
@@ -217,10 +224,18 @@ impl KubernetesService {
                 self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, msg.port)
                     .await?;
 
-                self.finalize_status(
-                    &msg.project_id,
-                    &msg.deployment_id,
-                    DeploymentStatus::Running,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Running),
+                        event_type: Some(DeploymentEventType::StatusChanged),
+                        level: None,
+                        message: Some("Deployment is running"),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -234,18 +249,18 @@ impl KubernetesService {
                 context_path,
                 dockerfile_path,
             } => {
-                self.notify_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
-                    &mut con,
-                )
-                .await?;
-
-                self.finalize_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("Image is building from Dockerfile"),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -269,18 +284,18 @@ impl KubernetesService {
                 clone_url,
                 context_path,
             } => {
-                self.notify_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
-                    &mut con,
-                )
-                .await?;
-
-                self.finalize_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("Image is building from source code"),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -327,17 +342,26 @@ impl KubernetesService {
         mut con: MultiplexedConnection,
         msg: UpdateDeploymentMessage,
     ) -> Result<(), AppError> {
-        self.notify_status(
-            &msg.project_id,
-            &msg.deployment_id,
-            DeploymentStatus::Updating,
-            &mut con,
-        )
-        .await?;
-
         let user_id = msg.user_id;
         let project_id = msg.project_id;
         let deployment_id = msg.deployment_id;
+
+        EventEmissionService::emit(
+            EmitDeploymentEvent {
+                project_id: &project_id,
+                deployment_id: &deployment_id,
+                status: Some(DeploymentStatus::Updating),
+                event_type: Some(DeploymentEventType::StatusChanged),
+                level: None,
+                message: Some("Deployment is updating"),
+                persist_event: true,
+                publish_project: true,
+                publish_deployment: true,
+            },
+            &pool,
+            &mut con,
+        )
+        .await?;
 
         let ns = self.ensure_namespace(&user_id).await?;
         let name = format_resource_name(&deployment_id);
@@ -443,10 +467,20 @@ impl KubernetesService {
                 )
                 .await?;
 
-                self.finalize_status(
-                    &msg.project_id,
-                    &deployment_id,
-                    DeploymentStatus::Running,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Running),
+                        event_type: Some(DeploymentEventType::StatusChanged),
+                        level: None,
+                        message: Some(
+                            "🏗️ Build finished. Materializing deployment for the first time...",
+                        ),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -456,6 +490,25 @@ impl KubernetesService {
                 url,
                 image_pull_secret,
             }) => {
+                info!("🏗️ Source changed to Image. Building...");
+
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("🏗️ Source changed to Image. Building..."),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
+                    &pool,
+                    &mut con,
+                )
+                .await?;
+
                 let image_pull_secret_data = if let Some(secret) = image_pull_secret.as_ref() {
                     Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
                 } else {
@@ -482,15 +535,6 @@ impl KubernetesService {
                     &selector,
                 )
                 .await?;
-
-                self.finalize_status(
-                    &msg.project_id,
-                    &deployment_id,
-                    DeploymentStatus::Running,
-                    &pool,
-                    &mut con,
-                )
-                .await?;
             }
             Some(DeploymentSourceMessage::Dockerfile {
                 clone_url,
@@ -499,18 +543,18 @@ impl KubernetesService {
             }) => {
                 info!("🏗️ Source changed to Dockerfile. Building...");
 
-                self.notify_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
-                    &mut con,
-                )
-                .await?;
-
-                self.finalize_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("🏗️ Source changed to Dockerfile. Building..."),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -535,18 +579,18 @@ impl KubernetesService {
             }) => {
                 info!("🏗️ Source changed to Code. Building...");
 
-                self.notify_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
-                    &mut con,
-                )
-                .await?;
-
-                self.finalize_status(
-                    &project_id,
-                    &deployment_id,
-                    DeploymentStatus::Building,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("🏗️ Source changed to Code. Building..."),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -589,10 +633,18 @@ impl KubernetesService {
                 )
                 .await?;
 
-                self.finalize_status(
-                    &msg.project_id,
-                    &deployment_id,
-                    DeploymentStatus::Running,
+                EventEmissionService::emit(
+                    EmitDeploymentEvent {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("Deployment updated successfully"),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
                     &pool,
                     &mut con,
                 )
@@ -1791,42 +1843,4 @@ impl KubernetesService {
     // ============================================================================================
     // HELPERS
     // ============================================================================================
-
-    #[tracing::instrument(name = "kubernetes_service.notify_status", skip_all, fields(project_id = %project_id, deployment_id = %deployment_id), err)]
-    async fn notify_status(
-        &self,
-        project_id: &Uuid,
-        deployment_id: &Uuid,
-        status: DeploymentStatus,
-        con: &mut MultiplexedConnection,
-    ) -> Result<(), AppError> {
-        let channel = ChannelNames::deployments_metrics(&project_id.to_string());
-        let message = ComputeEvent::DeploymentStatusUpdate {
-            id: deployment_id,
-            status,
-        };
-        con.publish(channel, message).await?;
-        Ok(())
-    }
-
-    #[tracing::instrument(name = "kubernetes_service.finalize_status", skip_all, fields(project_id = %project_id, deployment_id = %deployment_id), err)]
-    async fn finalize_status(
-        &self,
-        project_id: &Uuid,
-        deployment_id: &Uuid,
-        status: DeploymentStatus,
-        pool: &PgPool,
-        con: &mut MultiplexedConnection,
-    ) -> Result<(), AppError> {
-        let res = DeploymentRepository::update_status(deployment_id, status, pool).await?;
-        if res.rows_affected() == 0 {
-            warn!(
-                "⚠️ Update deployment status affected zero rows for {}",
-                deployment_id
-            );
-        }
-        self.notify_status(project_id, deployment_id, status, con)
-            .await?;
-        Ok(())
-    }
 }

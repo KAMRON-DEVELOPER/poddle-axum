@@ -1,23 +1,19 @@
 pub struct ChannelNames;
 
 impl ChannelNames {
-    /// `deployments:{}:metrics`
-    pub fn deployments_metrics(id: &str) -> String {
-        format!("project:{}:metrics", id)
+    pub fn project_metrics(project_id: &str) -> String {
+        format!("project:{project_id}:metrics")
     }
 
-    /// `deployments:{}:status`
-    pub fn deployments_status(id: &str) -> String {
-        format!("deployments:{}:status", id)
+    pub fn project_events(project_id: &str) -> String {
+        format!("project:{project_id}:events")
     }
 
-    /// `deployment:{id}:metrics`
-    pub fn deployment_metrics(id: &str) -> String {
-        format!("deployment:{id}:metrics")
+    pub fn deployment_metrics(deployment_id: &str) -> String {
+        format!("deployment:{deployment_id}:metrics")
     }
 
-    /// `deployment:{id}:status`
-    pub fn deployment_status(id: &str) -> String {
-        format!("deployment:{id}:status")
+    pub fn deployment_events(deployment_id: &str) -> String {
+        format!("deployment:{deployment_id}:events")
     }
 }

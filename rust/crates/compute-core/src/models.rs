@@ -45,9 +45,9 @@ impl std::fmt::Display for DeploymentStatus {
             Self::Updating => write!(f, "Updating"),
             Self::Suspended => write!(f, "Suspended"),
             Self::Failed => write!(f, "Failed"),
-            Self::BuildFailed => write!(f, "BuildFailed"),
+            Self::BuildFailed => write!(f, "Build failed"),
             Self::Deleted => write!(f, "Deleted"),
-            Self::ImagePullError => write!(f, "ImagePullError"),
+            Self::ImagePullError => write!(f, "Image pull error"),
         }
     }
 }
@@ -71,16 +71,16 @@ pub enum DeploymentEventType {
 impl std::fmt::Display for DeploymentEventType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::StatusChanged => write!(f, "StatusChanged"),
-            Self::BuildStarted => write!(f, "BuildStarted"),
-            Self::BuildSucceeded => write!(f, "BuildSucceeded"),
-            Self::BuildFailed => write!(f, "BuildFailed"),
-            Self::DeploymentCreated => write!(f, "DeploymentCreated"),
-            Self::DeploymentUpdated => write!(f, "DeploymentUpdated"),
-            Self::DeploymentDeleted => write!(f, "DeploymentDeleted"),
-            Self::UnhealthyDetected => write!(f, "UnhealthyDetected"),
-            Self::ImagePullFailed => write!(f, "ImagePullFailed"),
-            Self::SystemMessage => write!(f, "SystemMessage"),
+            Self::StatusChanged => write!(f, "Status changed"),
+            Self::BuildStarted => write!(f, "Build started"),
+            Self::BuildSucceeded => write!(f, "Build succeeded"),
+            Self::BuildFailed => write!(f, "Build failed"),
+            Self::DeploymentCreated => write!(f, "Deployment created"),
+            Self::DeploymentUpdated => write!(f, "Deployment updated"),
+            Self::DeploymentDeleted => write!(f, "Deployment deleted"),
+            Self::UnhealthyDetected => write!(f, "Unhealthy detected"),
+            Self::ImagePullFailed => write!(f, "Image pull failed"),
+            Self::SystemMessage => write!(f, "System message"),
         }
     }
 }

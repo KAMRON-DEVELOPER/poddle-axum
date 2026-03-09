@@ -1,12 +1,37 @@
-use sqlx::PgPool;
+use sqlx::{PgPool, postgres::PgQueryResult};
+use tracing::instrument;
 use uuid::Uuid;
 
-use crate::models::{DeploymentEventLevel, DeploymentEventRow, DeploymentEventType};
+use crate::models::{
+    DeploymentEventLevel, DeploymentEventRow, DeploymentEventType, DeploymentStatus,
+};
+
+pub struct DeploymentRepository;
+
+impl DeploymentRepository {
+    #[instrument("deployment_repository.update_status", skip_all, fields(deployment_id = %deployment_id, status = %status), err)]
+    pub async fn update_status(
+        deployment_id: &Uuid,
+        status: DeploymentStatus,
+        pool: &PgPool,
+    ) -> Result<PgQueryResult, sqlx::Error> {
+        Ok(sqlx::query!(
+            r#"
+            UPDATE deployments
+            SET status = $1
+            WHERE id = $2"#,
+            status as DeploymentStatus,
+            deployment_id
+        )
+        .execute(pool)
+        .await?)
+    }
+}
 
 pub struct DeploymentEventRepository;
 
 impl DeploymentEventRepository {
-    #[tracing::instrument(
+    #[instrument(
         name = "deployment_event_repository.create",
         skip_all,
         fields(

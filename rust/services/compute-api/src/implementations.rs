@@ -4,6 +4,7 @@ use aide::{
     openapi::{Operation, Response, StatusCode},
 };
 use axum::Json;
+use compute_core::services::event_emission_service::error::EventEmissionServiceError;
 use http_contracts::error::schema::ErrorResponse;
 use users_core::jwt::JwtCapability;
 
@@ -65,6 +66,15 @@ impl OperationOutput for AppError {
             mk(422, "Validation error"),
             mk(500, "Internal server error"),
         ]
+    }
+}
+
+impl From<EventEmissionServiceError> for AppError {
+    fn from(e: EventEmissionServiceError) -> Self {
+        match e {
+            EventEmissionServiceError::SqlxError(error) => AppError::SqlxError(error),
+            EventEmissionServiceError::RedisError(error) => AppError::RedisError(error),
+        }
     }
 }
 

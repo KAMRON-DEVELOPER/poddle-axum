@@ -357,7 +357,7 @@ async fn scrape(cfg: &PrometheusConfig, client: &Client, mut redis: Redis) -> Re
 
         // Publish deployment metrics update message to project page
         if !deployment_messages.is_empty() {
-            let channel = ChannelNames::deployments_metrics(&id);
+            let channel = ChannelNames::project_metrics(&id);
             let message = ComputeEvent::DeploymentMetricsUpdate {
                 updates: deployment_messages,
             };

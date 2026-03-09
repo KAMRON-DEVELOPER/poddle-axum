@@ -83,7 +83,7 @@ pub fn get_routes() -> ApiRouter<AppState> {
         )
         .route(
             "/api/v1/compute/projects/{project_id}/metrics/sse",
-            axum_get(see::stream_deployments_metrics_sse_handler),
+            axum_get(see::stream_project_metrics_sse_handler),
         )
         .api_route("/api/v1/compute/github/repositories", get(handlers::github::get_repositories_handler))
         .api_route("/api/v1/compute/github/setup", post(handlers::github::github_setup_handler))
