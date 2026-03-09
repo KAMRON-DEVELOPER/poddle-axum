@@ -1,6 +1,8 @@
 use crate::{
     error::AppError,
-    features::repository::{DashboardRepository, DeploymentEventRepository},
+    features::repositories::{
+        dashboard::DashboardRepository, deployment_event::DeploymentEventRepository,
+    },
 };
 use aide::axum::IntoApiResponse;
 use axum::{

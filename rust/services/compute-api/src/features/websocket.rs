@@ -1,7 +1,7 @@
 use crate::{
     config::Config,
     features::{
-        repository::DeploymentRepository,
+        repositories::deployment::DeploymentRepository,
         schemas::{LogResponse, LokiTailResponse},
     },
 };

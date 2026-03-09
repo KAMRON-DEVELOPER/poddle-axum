@@ -3,7 +3,10 @@ use crate::{
     error::AppError,
     features::{
         queries::DeploymentsMetricsQuery,
-        repository::{DeploymentPresetRepository, DeploymentRepository, ProjectRepository},
+        repositories::{
+            deployment::DeploymentRepository, deployment_preset::DeploymentPresetRepository,
+            project::ProjectRepository,
+        },
     },
     services::cache_service::CacheService,
 };

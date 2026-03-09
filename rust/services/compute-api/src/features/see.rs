@@ -25,7 +25,7 @@ use crate::{
     config::Config,
     features::{
         queries::TailQuery,
-        repository::{DeploymentRepository, ProjectRepository},
+        repositories::{deployment::DeploymentRepository, project::ProjectRepository},
         schemas::{LogResponse, LokiTailResponse},
     },
 };

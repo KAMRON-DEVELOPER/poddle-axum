@@ -2,7 +2,7 @@ pub mod handlers;
 pub mod implementations;
 pub mod models;
 pub mod queries;
-pub mod repository;
+pub mod repositories;
 pub mod schemas;
 pub mod see;
 pub mod webhook;

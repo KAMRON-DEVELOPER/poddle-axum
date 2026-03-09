@@ -3,7 +3,7 @@ use crate::{
     error::AppError,
     features::{
         queries::{DeploymentMetricsQuery, LogQuery},
-        repository::DeploymentRepository,
+        repositories::deployment::DeploymentRepository,
         schemas::{LogResponse, LokiResponse},
     },
     services::cache_service::CacheService,
