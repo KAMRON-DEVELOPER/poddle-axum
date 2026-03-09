@@ -458,8 +458,8 @@ impl ProjectRepository {
         SELECT id
         FROM deployments
         WHERE user_id = $1
-          AND project_id = $2
-          AND status != 'deleted'
+        AND project_id = $2
+        AND status != 'deleted'
         "#,
             user_id,
             project_id
