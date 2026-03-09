@@ -7,7 +7,7 @@ use compute_core::models::{DeploymentEventType, DeploymentStatus};
 use compute_core::schemas::{
     DeploymentSourceMessage, MetricSnapshot, Pod, PodMeta, PodPhase, UpdateDeploymentMessage,
 };
-use compute_core::services::event_emission_service::{EmitDeploymentEvent, EventEmissionService};
+use compute_core::services::event_emission_service::{EventEmitterInput, EventEmitterService};
 use factory::factories::amqp::{Amqp, AmqpPropagator};
 use futures::StreamExt;
 use k8s_openapi::api::apps::v1::Deployment as K8sDeployment;
@@ -154,8 +154,8 @@ async fn handle_deployment_event(
                 con.lpush(&metrics_key, idle_snapshot).await?;
             }
 
-            EventEmissionService::emit(
-                EmitDeploymentEvent {
+            EventEmitterService::emit(
+                EventEmitterInput {
                     project_id: &project_id,
                     deployment_id: &deployment_id,
                     status: Some(new_status),
@@ -216,8 +216,8 @@ async fn handle_deployment_event(
 
             p.query_async::<()>(con).await?;
 
-            EventEmissionService::emit(
-                EmitDeploymentEvent {
+            EventEmitterService::emit(
+                EventEmitterInput {
                     project_id: &project_id,
                     deployment_id: &deployment_id,
                     status: Some(DeploymentStatus::Deleted),
@@ -360,8 +360,8 @@ async fn handle_pod_event(
                             msg.push_str(&format!(" Details: {}", detail));
                         }
 
-                        EventEmissionService::emit(
-                            EmitDeploymentEvent {
+                        EventEmitterService::emit(
+                            EventEmitterInput {
                                 project_id: &project_id,
                                 deployment_id: &deployment_id,
                                 status: Some(DeploymentStatus::ImagePullError),
@@ -378,8 +378,8 @@ async fn handle_pod_event(
                         .await?;
                     }
                 } else {
-                    EventEmissionService::emit(
-                        EmitDeploymentEvent {
+                    EventEmitterService::emit(
+                        EventEmitterInput {
                             project_id: &project_id,
                             deployment_id: &deployment_id,
                             status: Some(DeploymentStatus::Unhealthy),
@@ -397,8 +397,8 @@ async fn handle_pod_event(
 
                     // keep your CrashLoopBackOff restart-based spam control if you want
                     if restart_count > 0 && restart_count % 3 == 0 {
-                        EventEmissionService::emit(
-                            EmitDeploymentEvent {
+                        EventEmitterService::emit(
+                            EventEmitterInput {
                                 project_id: &project_id,
                                 deployment_id: &deployment_id,
                                 status: Some(DeploymentStatus::Unhealthy),
@@ -641,8 +641,8 @@ async fn handle_buildkit_job_event(
             } else if failed > 0 {
                 error!("❌ Build Job {} Failed", name);
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::BuildFailed),

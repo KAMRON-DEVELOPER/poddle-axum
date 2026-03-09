@@ -2,6 +2,7 @@ pub mod error;
 
 use chrono::{DateTime, Utc};
 use redis::{AsyncTypedCommands, aio::MultiplexedConnection};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -15,9 +16,9 @@ use crate::{
     services::event_emission_service::error::EventEmissionServiceError,
 };
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct DeploymentEventEnvelope {
+pub struct DeploymentEventUpdate {
     pub id: Option<Uuid>,
     pub project_id: Uuid,
     pub deployment_id: Uuid,
@@ -28,7 +29,7 @@ pub struct DeploymentEventEnvelope {
     pub created_at: DateTime<Utc>,
 }
 
-pub struct EmitDeploymentEvent<'a> {
+pub struct EventEmitterInput<'a> {
     pub project_id: &'a Uuid,
     pub deployment_id: &'a Uuid,
     pub status: Option<DeploymentStatus>,
@@ -40,9 +41,9 @@ pub struct EmitDeploymentEvent<'a> {
     pub publish_deployment: bool,
 }
 
-pub struct EventEmissionService;
+pub struct EventEmitterService;
 
-impl EventEmissionService {
+impl EventEmitterService {
     #[tracing::instrument(
         name = "event_emission_service.emit",
         skip_all,
@@ -55,7 +56,7 @@ impl EventEmissionService {
         err
     )]
     pub async fn emit(
-        input: EmitDeploymentEvent<'_>,
+        input: EventEmitterInput<'_>,
         pool: &PgPool,
         con: &mut MultiplexedConnection,
     ) -> Result<(), EventEmissionServiceError> {
@@ -93,7 +94,7 @@ impl EventEmissionService {
         }
 
         let message = ComputeEvent::DeploymentEvent {
-            event: DeploymentEventEnvelope {
+            event: DeploymentEventUpdate {
                 id: persisted_id,
                 project_id: *input.project_id,
                 deployment_id: *input.deployment_id,

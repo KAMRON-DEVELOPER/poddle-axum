@@ -293,14 +293,14 @@ pub struct PodMeta {
     pub restart_count: i32,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct DeploymentMetricUpdate {
     pub id: String,
     pub snapshot: MetricSnapshot,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct PodMetricUpdate {
     pub meta: PodMeta,

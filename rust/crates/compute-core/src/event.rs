@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::{
     schemas::{DeploymentMetricUpdate, Pod, PodMetricUpdate, PodPhase},
-    services::event_emission_service::DeploymentEventEnvelope,
+    services::event_emission_service::DeploymentEventUpdate,
 };
 
 #[derive(Serialize, Clone, Debug)]
@@ -12,7 +12,7 @@ pub enum ComputeEvent<'a> {
         updates: Vec<DeploymentMetricUpdate>,
     },
     DeploymentEvent {
-        event: DeploymentEventEnvelope,
+        event: DeploymentEventUpdate,
     },
 
     PodMetricsUpdate {

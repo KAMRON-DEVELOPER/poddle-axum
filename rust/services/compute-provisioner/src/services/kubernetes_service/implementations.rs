@@ -7,7 +7,7 @@ use compute_core::schemas::{
     CreateDeploymentMessage, DeleteDeploymentMessage, DeploymentSourceMessage, ImagePullSecret,
     UpdateDeploymentMessage,
 };
-use compute_core::services::event_emission_service::{EmitDeploymentEvent, EventEmissionService};
+use compute_core::services::event_emission_service::{EventEmitterInput, EventEmitterService};
 use k8s_openapi::ByteString;
 use k8s_openapi::api::batch::v1::{Job, JobSpec};
 use k8s_openapi::api::core::v1::{
@@ -158,8 +158,8 @@ impl KubernetesService {
                 url,
                 image_pull_secret,
             } => {
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Provisioning),
@@ -224,8 +224,8 @@ impl KubernetesService {
                 self.apply_ingressroute(&ns, &name, msg.domain, msg.subdomain, msg.port)
                     .await?;
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Running),
@@ -249,8 +249,8 @@ impl KubernetesService {
                 context_path,
                 dockerfile_path,
             } => {
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Building),
@@ -284,8 +284,8 @@ impl KubernetesService {
                 clone_url,
                 context_path,
             } => {
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Building),
@@ -346,8 +346,8 @@ impl KubernetesService {
         let project_id = msg.project_id;
         let deployment_id = msg.deployment_id;
 
-        EventEmissionService::emit(
-            EmitDeploymentEvent {
+        EventEmitterService::emit(
+            EventEmitterInput {
                 project_id: &project_id,
                 deployment_id: &deployment_id,
                 status: Some(DeploymentStatus::Updating),
@@ -467,8 +467,8 @@ impl KubernetesService {
                 )
                 .await?;
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Running),
@@ -492,8 +492,8 @@ impl KubernetesService {
             }) => {
                 info!("🏗️ Source changed to Image. Building...");
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Building),
@@ -543,8 +543,8 @@ impl KubernetesService {
             }) => {
                 info!("🏗️ Source changed to Dockerfile. Building...");
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Building),
@@ -579,8 +579,8 @@ impl KubernetesService {
             }) => {
                 info!("🏗️ Source changed to Code. Building...");
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Building),
@@ -633,8 +633,8 @@ impl KubernetesService {
                 )
                 .await?;
 
-                EventEmissionService::emit(
-                    EmitDeploymentEvent {
+                EventEmitterService::emit(
+                    EventEmitterInput {
                         project_id: &project_id,
                         deployment_id: &deployment_id,
                         status: Some(DeploymentStatus::Building),
