@@ -1,8 +1,7 @@
 pub mod error;
 
 use chrono::{DateTime, Utc};
-use redis::AsyncCommands;
-use redis::aio::MultiplexedConnection;
+use redis::{AsyncTypedCommands, aio::MultiplexedConnection};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use uuid::Uuid;
@@ -108,7 +107,7 @@ impl EventEmissionService {
 
         if input.publish_project {
             let channel = ChannelNames::project_events(&input.project_id.to_string());
-            con.publish(channel, message).await?;
+            con.publish(channel, &message).await?;
         }
 
         if input.publish_deployment {
