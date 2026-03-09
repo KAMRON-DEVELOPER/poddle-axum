@@ -1,0 +1,23 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT id\n        FROM deployments\n        WHERE user_id = $1\n        AND project_id = $2\n        AND status != 'deleted'\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "66eed6a12a1a8708440c6c7d167b2f2aac90847c25ff01715d2f4f4dfc92ec08"
+}

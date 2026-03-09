@@ -1,0 +1,120 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            INSERT INTO deployment_events (project_id, deployment_id, type, level, message)\n            VALUES ($1, $2, $3, $4, $5)\n            RETURNING\n                id,\n                project_id,\n                deployment_id,\n                type AS \"event_type: DeploymentEventType\",\n                level AS \"level: DeploymentEventLevel\",\n                message,\n                created_at\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "project_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "deployment_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "event_type: DeploymentEventType",
+        "type_info": {
+          "Custom": {
+            "name": "deployment_event_type",
+            "kind": {
+              "Enum": [
+                "status_changed",
+                "build_started",
+                "build_succeeded",
+                "build_failed",
+                "deployment_created",
+                "deployment_updated",
+                "deployment_deleted",
+                "unhealthy_detected",
+                "image_pull_failed",
+                "system_message"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "level: DeploymentEventLevel",
+        "type_info": {
+          "Custom": {
+            "name": "deployment_event_level",
+            "kind": {
+              "Enum": [
+                "info",
+                "warning",
+                "error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        {
+          "Custom": {
+            "name": "deployment_event_type",
+            "kind": {
+              "Enum": [
+                "status_changed",
+                "build_started",
+                "build_succeeded",
+                "build_failed",
+                "deployment_created",
+                "deployment_updated",
+                "deployment_deleted",
+                "unhealthy_detected",
+                "image_pull_failed",
+                "system_message"
+              ]
+            }
+          }
+        },
+        {
+          "Custom": {
+            "name": "deployment_event_level",
+            "kind": {
+              "Enum": [
+                "info",
+                "warning",
+                "error"
+              ]
+            }
+          }
+        },
+        "Text"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
+    ]
+  },
+  "hash": "e422b075f9f4a73daa02f3664761432543fa1000df8a451e71285c95f9dac6af"
+}

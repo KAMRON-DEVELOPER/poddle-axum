@@ -1,0 +1,96 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT\n                de.id,\n                de.deployment_id,\n                d.name AS deployment_name,\n                de.type AS \"event_type: DeploymentEventType\",\n                de.level AS \"level: DeploymentEventLevel\",\n                de.message,\n                de.created_at,\n                COUNT(*) OVER() AS \"total!\"\n            FROM deployment_events de\n            JOIN projects p ON de.project_id = p.id\n            JOIN deployments d ON de.deployment_id = d.id\n            WHERE p.owner_id = $1\n            AND de.project_id = $2\n            ORDER BY de.created_at DESC\n            LIMIT $3\n            OFFSET $4\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "deployment_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 2,
+        "name": "deployment_name",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 3,
+        "name": "event_type: DeploymentEventType",
+        "type_info": {
+          "Custom": {
+            "name": "deployment_event_type",
+            "kind": {
+              "Enum": [
+                "status_changed",
+                "build_started",
+                "build_succeeded",
+                "build_failed",
+                "deployment_created",
+                "deployment_updated",
+                "deployment_deleted",
+                "unhealthy_detected",
+                "image_pull_failed",
+                "system_message"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "level: DeploymentEventLevel",
+        "type_info": {
+          "Custom": {
+            "name": "deployment_event_level",
+            "kind": {
+              "Enum": [
+                "info",
+                "warning",
+                "error"
+              ]
+            }
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "message",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 6,
+        "name": "created_at",
+        "type_info": "Timestamptz"
+      },
+      {
+        "ordinal": 7,
+        "name": "total!",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Uuid",
+        "Int8",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      false,
+      null
+    ]
+  },
+  "hash": "bb9e46d17d181b72b11e65466ae69c6902de0ec894fa3110cc69350cb4600700"
+}
