@@ -84,8 +84,8 @@ impl DeploymentEventRepository {
             FROM deployment_events de
             JOIN projects p ON de.project_id = p.id
             JOIN deployments d ON de.deployment_id = d.id
-            WHERE de.project_id = $1
-            AND p.owner_id = $2
+            WHERE p.owner_id = $1
+            AND de.project_id = $2
             ORDER BY de.created_at DESC
             LIMIT $3
             OFFSET $4
