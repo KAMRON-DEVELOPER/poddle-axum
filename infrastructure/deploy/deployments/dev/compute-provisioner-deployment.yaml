@@ -1,21 +1,21 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: compute-reconciler
-  namespace: poddle-system
+  name: compute-provisioner
+  namespace: poddle-system-dev
   labels:
-    service: compute-reconciler
+    service: compute-provisioner
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: compute-reconciler
+      service: compute-provisioner
   template:
     metadata:
       labels:
-        service: compute-reconciler
+        service: compute-provisioner
     spec:
-      serviceAccountName: compute-reconciler
+      serviceAccountName: compute-provisioner
       volumes:
         - name: config-volume
           configMap:
@@ -23,9 +23,12 @@ spec:
             items:
               - key: config.json
                 path: config.json
+        - name: ca-bundle-volume
+          secret:
+            secretName: vault-root-ca-bundle
       containers:
-        - name: compute-reconciler
-          image: kamronbekdev/poddle-compute-reconciler:1.0.2
+        - name: compute-provisioner
+          image: kamronbekdev/poddle-compute-provisioner:1.0.4
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -36,10 +39,16 @@ spec:
           #   - name: config-volume
           #     mountPath: /etc/poddle
           #     readOnly: true
+          env:
+            - name: SSL_CERT_FILE
+              value: /etc/poddle/certs/tls.crt
           volumeMounts:
             - name: config-volume
-              mountPath: /app/services/compute-reconciler/config.json
+              mountPath: /app/services/compute-provisioner/config.json
               subPath: config.json
+              readOnly: true
+            - name: ca-bundle-volume
+              mountPath: /etc/poddle/certs
               readOnly: true
           readinessProbe:
             httpGet: { path: /health, port: 8000 }

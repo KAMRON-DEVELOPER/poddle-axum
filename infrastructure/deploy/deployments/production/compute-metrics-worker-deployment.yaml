@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: compute-api
+  name: compute-metrics-worker
   namespace: poddle-system
   labels:
-    service: compute-api
+    service: compute-metrics-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: compute-api
+      service: compute-metrics-worker
   template:
     metadata:
       labels:
-        service: compute-api
+        service: compute-metrics-worker
     spec:
       volumes:
         - name: config-volume
@@ -22,12 +22,9 @@ spec:
             items:
               - key: config.json
                 path: config.json
-        - name: github-key-volume
-          secret:
-            secretName: github-app-key
       containers:
-        - name: compute-api
-          image: kamronbekdev/poddle-compute-api:1.0.4
+        - name: compute-metrics-worker
+          image: kamronbekdev/poddle-compute-metrics-worker:1.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -40,11 +37,8 @@ spec:
           #     readOnly: true
           volumeMounts:
             - name: config-volume
-              mountPath: /app/services/compute-api/config.json
+              mountPath: /app/services/compute-metrics-worker/config.json
               subPath: config.json
-              readOnly: true
-            - name: github-key-volume
-              mountPath: /etc/secrets/github
               readOnly: true
           readinessProbe:
             httpGet: { path: /health, port: 8000 }

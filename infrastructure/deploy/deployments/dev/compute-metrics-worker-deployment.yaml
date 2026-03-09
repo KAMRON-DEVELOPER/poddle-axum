@@ -1,21 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: compute-provisioner
-  namespace: poddle-system
+  name: compute-metrics-worker
+  namespace: poddle-system-dev
   labels:
-    service: compute-provisioner
+    service: compute-metrics-worker
 spec:
   replicas: 1
   selector:
     matchLabels:
-      service: compute-provisioner
+      service: compute-metrics-worker
   template:
     metadata:
       labels:
-        service: compute-provisioner
+        service: compute-metrics-worker
     spec:
-      serviceAccountName: compute-provisioner
       volumes:
         - name: config-volume
           configMap:
@@ -23,12 +22,9 @@ spec:
             items:
               - key: config.json
                 path: config.json
-        - name: ca-bundle-volume
-          secret:
-            secretName: vault-root-ca-bundle
       containers:
-        - name: compute-provisioner
-          image: kamronbekdev/poddle-compute-provisioner:1.0.3
+        - name: compute-metrics-worker
+          image: kamronbekdev/poddle-compute-metrics-worker:1.0.1
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000
@@ -39,16 +35,10 @@ spec:
           #   - name: config-volume
           #     mountPath: /etc/poddle
           #     readOnly: true
-          env:
-            - name: SSL_CERT_FILE
-              value: /etc/poddle/certs/tls.crt
           volumeMounts:
             - name: config-volume
-              mountPath: /app/services/compute-provisioner/config.json
+              mountPath: /app/services/compute-metrics-worker/config.json
               subPath: config.json
-              readOnly: true
-            - name: ca-bundle-volume
-              mountPath: /etc/poddle/certs
               readOnly: true
           readinessProbe:
             httpGet: { path: /health, port: 8000 }

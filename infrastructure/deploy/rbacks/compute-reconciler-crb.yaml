@@ -6,6 +6,9 @@ metadata:
 subjects:
   - kind: ServiceAccount
     name: compute-reconciler
+    namespace: poddle-system-dev
+  - kind: ServiceAccount
+    name: compute-reconciler
     namespace: poddle-system
 roleRef:
   kind: ClusterRole

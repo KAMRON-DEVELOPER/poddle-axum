@@ -1,0 +1,36 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: poddle-ir
+  namespace: poddle-system-dev
+spec:
+  entryPoints: []
+    # If not specified, HTTP routers will accept requests from all EntryPoints in the list of default EntryPoints.
+    # - web
+    # - websecure
+  routes:
+    - match: Host(`poddle.uz`) && PathPrefix(`/dev`)
+      kind: Rule
+      services:
+        - name: frontend
+          port: 80
+
+    - match: Host(`poddle.uz`) && PathPrefix(`/dev/api/v1/users`)
+      kind: Rule
+      services:
+        - name: users-api
+          port: 80
+
+    - match: Host(`poddle.uz`) && PathPrefix(`/dev/api/v1/billing`)
+      kind: Rule
+      services:
+        - name: billing-api
+          port: 80
+
+    - match: Host(`poddle.uz`) && PathPrefix(`/dev/api/v1/compute`)
+      kind: Rule
+      services:
+        - name: compute-api
+          port: 80
+  # tls:
+  #   secretName: wildcard-tls-secret

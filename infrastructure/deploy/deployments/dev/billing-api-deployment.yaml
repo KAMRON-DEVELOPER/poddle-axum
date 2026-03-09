@@ -1,0 +1,63 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-api
+  namespace: poddle-system-dev
+  labels:
+    service: billing-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: billing-api
+  template:
+    metadata:
+      labels:
+        service: billing-api
+    spec:
+      volumes:
+        - name: config-volume
+          configMap:
+            name: service-config
+            items:
+              - key: config.json
+                path: config.json
+      containers:
+        - name: billing-api
+          image: kamronbekdev/poddle-billing-api:1.0.2
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # env:
+          #   - name: CONFIG
+          #     value: /etc/poddle/config.json
+          # volumeMounts:
+          #   - name: config-volume
+          #     mountPath: /etc/poddle
+          #     readOnly: true
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/services/billing-api/config.json
+              subPath: config.json
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"

@@ -1,0 +1,64 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: compute-reconciler
+  namespace: poddle-system
+  labels:
+    service: compute-reconciler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      service: compute-reconciler
+  template:
+    metadata:
+      labels:
+        service: compute-reconciler
+    spec:
+      serviceAccountName: compute-reconciler
+      volumes:
+        - name: config-volume
+          configMap:
+            name: service-config
+            items:
+              - key: config.json
+                path: config.json
+      containers:
+        - name: compute-reconciler
+          image: kamronbekdev/poddle-compute-reconciler:1.0.3
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8000
+          # env:
+          #   - name: CONFIG
+          #     value: /etc/poddle/config.json
+          # volumeMounts:
+          #   - name: config-volume
+          #     mountPath: /etc/poddle
+          #     readOnly: true
+          volumeMounts:
+            - name: config-volume
+              mountPath: /app/services/compute-reconciler/config.json
+              subPath: config.json
+              readOnly: true
+          readinessProbe:
+            httpGet: { path: /health, port: 8000 }
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            timeoutSeconds: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 120
+            timeoutSeconds: 1
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
