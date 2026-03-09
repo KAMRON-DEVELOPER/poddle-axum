@@ -29,7 +29,7 @@ pub struct DeploymentEventUpdate {
     pub created_at: DateTime<Utc>,
 }
 
-pub struct EventEmitterInput<'a> {
+pub struct DeploymentEventEmitterInput<'a> {
     pub project_id: &'a Uuid,
     pub deployment_id: &'a Uuid,
     pub status: Option<DeploymentStatus>,
@@ -41,9 +41,9 @@ pub struct EventEmitterInput<'a> {
     pub publish_deployment: bool,
 }
 
-pub struct EventEmitterService;
+pub struct DeploymentEventEmitter;
 
-impl EventEmitterService {
+impl DeploymentEventEmitter {
     #[tracing::instrument(
         name = "event_emission_service.emit",
         skip_all,
@@ -56,7 +56,7 @@ impl EventEmitterService {
         err
     )]
     pub async fn emit(
-        input: EventEmitterInput<'_>,
+        input: DeploymentEventEmitterInput<'_>,
         pool: &PgPool,
         con: &mut MultiplexedConnection,
     ) -> Result<(), EventEmissionServiceError> {
