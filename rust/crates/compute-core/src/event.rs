@@ -1,4 +1,3 @@
-use schemars::JsonSchema;
 use serde::Serialize;
 
 use crate::{
@@ -6,7 +5,7 @@ use crate::{
     services::event_emission_service::DeploymentEventUpdate,
 };
 
-#[derive(Serialize, Clone, JsonSchema, Debug)]
+#[derive(Serialize, Clone, Debug)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum ComputeEvent<'a> {
     DeploymentMetricsUpdate {
