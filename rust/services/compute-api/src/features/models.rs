@@ -30,8 +30,7 @@ pub struct DashboardQueryRow {
     pub estimated_monthly_cost: BigDecimal,
 }
 
-#[derive(FromRow, Serialize, Deserialize, JsonSchema, Clone, Debug)]
-#[serde(rename_all = "camelCase")]
+#[derive(FromRow, Debug)]
 pub struct ProjectOverviewQueryRow {
     pub id: Uuid,
     pub name: String,
