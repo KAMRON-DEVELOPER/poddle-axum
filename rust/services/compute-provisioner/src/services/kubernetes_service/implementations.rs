@@ -494,23 +494,6 @@ impl KubernetesService {
             }) => {
                 info!("🏗️ Source changed to Image. Building...");
 
-                DeploymentEventEmitter::emit(
-                    DeploymentEventEmitterInput {
-                        project_id: &project_id,
-                        deployment_id: &deployment_id,
-                        status: Some(DeploymentStatus::Building),
-                        event_type: Some(DeploymentEventType::BuildStarted),
-                        level: None,
-                        message: Some("🏗️ Source changed to Image. Building..."),
-                        persist_event: true,
-                        publish_project: true,
-                        publish_deployment: true,
-                    },
-                    &pool,
-                    &mut con,
-                )
-                .await?;
-
                 let image_pull_secret_data = if let Some(secret) = image_pull_secret.as_ref() {
                     Some(self.apply_image_pull_secret(&ns, &name, secret).await?)
                 } else {
@@ -537,6 +520,23 @@ impl KubernetesService {
                     &selector,
                 )
                 .await?;
+
+                DeploymentEventEmitter::emit(
+                    DeploymentEventEmitterInput {
+                        project_id: &project_id,
+                        deployment_id: &deployment_id,
+                        status: Some(DeploymentStatus::Building),
+                        event_type: Some(DeploymentEventType::BuildStarted),
+                        level: None,
+                        message: Some("🏗️ Source changed to Image. Building..."),
+                        persist_event: true,
+                        publish_project: true,
+                        publish_deployment: true,
+                    },
+                    &pool,
+                    &mut con,
+                )
+                .await?;
             }
             Some(DeploymentSourceMessage::Dockerfile {
                 clone_url,
@@ -544,6 +544,19 @@ impl KubernetesService {
                 dockerfile_path,
             }) => {
                 info!("🏗️ Source changed to Dockerfile. Building...");
+
+                let build_id = Uuid::new_v4().to_string();
+
+                self.spawn_buildctl_job(
+                    &project_id.to_string(),
+                    &deployment_id.to_string(),
+                    &preset_id.to_string(),
+                    &build_id,
+                    &clone_url,
+                    context_path.as_deref(),
+                    dockerfile_path.as_deref(),
+                )
+                .await?;
 
                 DeploymentEventEmitter::emit(
                     DeploymentEventEmitterInput {
@@ -561,25 +574,24 @@ impl KubernetesService {
                     &mut con,
                 )
                 .await?;
-
-                let build_id = Uuid::new_v4().to_string();
-
-                self.spawn_buildctl_job(
-                    &project_id.to_string(),
-                    &deployment_id.to_string(),
-                    &preset_id.to_string(),
-                    &build_id,
-                    &clone_url,
-                    context_path.as_deref(),
-                    dockerfile_path.as_deref(),
-                )
-                .await?;
             }
             Some(DeploymentSourceMessage::Code {
                 clone_url,
                 context_path,
             }) => {
                 info!("🏗️ Source changed to Code. Building...");
+
+                let build_id = Uuid::new_v4().to_string();
+
+                self.spawn_railpack_job(
+                    &project_id.to_string(),
+                    &deployment_id.to_string(),
+                    &preset_id.to_string(),
+                    &build_id,
+                    &clone_url,
+                    context_path.as_deref(),
+                )
+                .await?;
 
                 DeploymentEventEmitter::emit(
                     DeploymentEventEmitterInput {
@@ -595,18 +607,6 @@ impl KubernetesService {
                     },
                     &pool,
                     &mut con,
-                )
-                .await?;
-
-                let build_id = Uuid::new_v4().to_string();
-
-                self.spawn_railpack_job(
-                    &project_id.to_string(),
-                    &deployment_id.to_string(),
-                    &preset_id.to_string(),
-                    &build_id,
-                    &clone_url,
-                    context_path.as_deref(),
                 )
                 .await?;
             }
