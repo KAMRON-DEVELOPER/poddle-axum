@@ -57,7 +57,7 @@ DO $$ BEGIN
         'deployment_deleted',
         'unhealthy_detected',
         'image_pull_failed',
-        'system_message',
+        'system_message'
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
