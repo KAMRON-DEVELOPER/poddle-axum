@@ -49,6 +49,8 @@ pub enum AppError {
     TokenCreationError,
     #[error("Invalid token error")]
     InvalidTokenError,
+    #[error("Failed to extract private key from state")]
+    KeyError,
     #[error("Expired token error")]
     ExpiredTokenError,
     #[error("Wrong token type error")]
@@ -139,6 +141,10 @@ impl IntoResponse for AppError {
                 format!("Internal server error: {}", msg),
             ),
             Self::InvalidTokenError => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Failed to extract private key from state".to_string(),
+            ),
+            Self::KeyError => (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "Invalid token".to_string(),
             ),

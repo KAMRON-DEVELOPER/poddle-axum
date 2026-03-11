@@ -3,7 +3,7 @@ use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, deco
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::JwtError;
+use crate::error::ClaimsError;
 
 #[derive(Serialize, Deserialize, PartialEq, JsonSchema, Debug)]
 #[serde(rename_all = "snake_case")]
@@ -43,7 +43,7 @@ pub fn create_token<C: JwtCapability + ?Sized>(
     cfg: &C,
     user_id: Uuid,
     typ: TokenType,
-) -> Result<String, JwtError> {
+) -> Result<String, ClaimsError> {
     let now = Utc::now();
 
     let exp = now
@@ -63,13 +63,17 @@ pub fn create_token<C: JwtCapability + ?Sized>(
     };
 
     let encoding_key = EncodingKey::from_secret(cfg.jwt_secret().as_bytes());
-    encode(&Header::new(Algorithm::HS256), &claims, &encoding_key).map_err(|_| JwtError::Creation)
+    encode(&Header::new(Algorithm::HS256), &claims, &encoding_key)
+        .map_err(|_| ClaimsError::Creation)
 }
 
 #[tracing::instrument(name = "verify_token", skip_all, err)]
-pub fn verify_token<C: JwtCapability + ?Sized>(cfg: &C, token: &str) -> Result<Claims, JwtError> {
+pub fn verify_token<C: JwtCapability + ?Sized>(
+    cfg: &C,
+    token: &str,
+) -> Result<Claims, ClaimsError> {
     let decoding_key = DecodingKey::from_secret(cfg.jwt_secret().as_bytes());
     decode::<Claims>(token, &decoding_key, &Validation::default())
         .map(|d| d.claims)
-        .map_err(|_| JwtError::Invalid)
+        .map_err(|_| ClaimsError::Invalid)
 }

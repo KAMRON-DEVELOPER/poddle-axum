@@ -169,16 +169,23 @@ pub async fn google_oauth_callback_handler(
     tracing::Span::current().record("oauth_user_id", &google_oauth_user_sub);
     tracing::Span::current().record("user_id", &user.id.to_string());
 
+    let access_token = create_token(&config, user.id, TokenType::Access)?;
     let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
+
+    let max_age_days = config.jwt.refresh_token_expire_in_days;
+    let access_cookie = Cookie::build(("access_token", access_token.clone()))
+        .http_only(true)
+        .path("/")
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::days(max_age_days))
+        .secure(config.cookie_secure);
     let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
         .http_only(true)
         .path("/")
         .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(
-            config.jwt.refresh_token_expire_in_days,
-        ))
+        .max_age(CookieDuration::days(max_age_days))
         .secure(config.cookie_secure);
-    let jar = jar.add(refresh_cookie);
+    let jar = jar.add(refresh_cookie).add(access_cookie);
 
     UsersRepository::create_session(
         &database.pool,
@@ -323,16 +330,23 @@ pub async fn github_oauth_callback_handler(
     tracing::Span::current().record("oauth_user_id", &github_oauth_user_id);
     tracing::Span::current().record("user_id", &user.id.to_string());
 
+    let access_token = create_token(&config, user.id, TokenType::Access)?;
     let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
+
+    let max_age_days = config.jwt.refresh_token_expire_in_days;
+    let access_cookie = Cookie::build(("access_token", access_token.clone()))
+        .http_only(true)
+        .path("/")
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::days(max_age_days))
+        .secure(config.cookie_secure);
     let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
         .http_only(true)
         .path("/")
         .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(
-            config.jwt.refresh_token_expire_in_days,
-        ))
+        .max_age(CookieDuration::days(max_age_days))
         .secure(config.cookie_secure);
-    let jar = jar.add(refresh_cookie);
+    let jar = jar.add(refresh_cookie).add(access_cookie);
 
     UsersRepository::create_session(
         &database.pool,
@@ -407,13 +421,19 @@ pub async fn continue_with_email_handler(
         let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
 
         let max_age_days = config.jwt.refresh_token_expire_in_days;
+        let access_cookie = Cookie::build(("access_token", access_token.clone()))
+            .http_only(true)
+            .path("/")
+            .same_site(SameSite::Lax)
+            .max_age(CookieDuration::days(max_age_days))
+            .secure(config.cookie_secure);
         let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
             .http_only(true)
             .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(max_age_days))
             .secure(config.cookie_secure);
-        let jar = jar.add(refresh_cookie);
+        let jar = jar.add(refresh_cookie).add(access_cookie);
 
         let tokens = Tokens {
             access_token: access_token,
@@ -688,15 +708,15 @@ pub async fn refresh_handler(
         None
     };
 
+    let max_age_days = config.jwt.refresh_token_expire_in_days;
     let jar = if is_web {
         if let Some(ref refresh) = refresh_token {
-            let max_age_days = config.jwt.refresh_token_expire_in_days;
-            let cookie = Cookie::build(("refresh_token", refresh.clone()))
+            let refresh_cookie = Cookie::build(("refresh_token", refresh.clone()))
                 .http_only(true)
                 .same_site(SameSite::Lax)
                 .max_age(CookieDuration::days(max_age_days))
                 .secure(config.cookie_secure);
-            jar.add(cookie)
+            jar.add(refresh_cookie)
         } else {
             jar
         }
@@ -705,6 +725,12 @@ pub async fn refresh_handler(
     };
 
     let access_token = create_token(&config, claims.sub, TokenType::Access)?;
+    let access_cookie = Cookie::build(("access_token", access_token.clone()))
+        .http_only(true)
+        .same_site(SameSite::Lax)
+        .max_age(CookieDuration::days(max_age_days))
+        .secure(config.cookie_secure);
+    let jar = jar.add(access_cookie);
 
     let response = Json(Tokens {
         access_token,

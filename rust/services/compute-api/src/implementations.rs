@@ -10,7 +10,7 @@ use users_core::jwt::JwtCapability;
 
 use crate::config::Config;
 
-use users_core::error::JwtError;
+use users_core::error::ClaimsError;
 
 use crate::error::AppError;
 
@@ -78,13 +78,14 @@ impl From<EventEmissionServiceError> for AppError {
     }
 }
 
-impl From<JwtError> for AppError {
-    fn from(e: JwtError) -> Self {
+impl From<ClaimsError> for AppError {
+    fn from(e: ClaimsError) -> Self {
         match e {
-            JwtError::Creation => AppError::TokenCreationError,
-            JwtError::Invalid => AppError::InvalidTokenError,
-            JwtError::Expired => AppError::ExpiredTokenError,
-            JwtError::WrongType => AppError::WrongTokenTypeError,
+            ClaimsError::Creation => AppError::TokenCreationError,
+            ClaimsError::Expired => AppError::ExpiredTokenError,
+            ClaimsError::WrongType => AppError::WrongTokenTypeError,
+            ClaimsError::Invalid => AppError::InvalidTokenError,
+            ClaimsError::KeyError => AppError::KeyError,
         }
     }
 }
