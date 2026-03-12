@@ -205,7 +205,7 @@ pub async fn google_oauth_callback_handler(
     //         .secure(config.cookie_secure);
     // let jar = jar.add(google_oauth_user_sub_cookie);
 
-    let redirect = Redirect::to(&format!("{}/dashboard", config.frontend_endpoint));
+    let redirect = Redirect::to(&format!("{}/console/dashboard", config.frontend_endpoint));
     Ok((jar, redirect).into_response())
 }
 
@@ -365,7 +365,7 @@ pub async fn github_oauth_callback_handler(
     //     .secure(config.cookie_secure);
     // let jar = jar.add(github_oauth_user_id_cookie);
 
-    let redirect = Redirect::to(&format!("{}/dashboard", config.frontend_endpoint));
+    let redirect = Redirect::to(&format!("{}/console/dashboard", config.frontend_endpoint));
     Ok((jar, redirect).into_response())
 }
 
@@ -585,7 +585,7 @@ pub async fn verify_handler(
             let redirect_to = if jar.get("refresh_token").is_none() {
                 "auth".to_string()
             } else {
-                "dashboard".to_string()
+                "console/dashboard".to_string()
             };
 
             let response = Json(RedirectResponse { redirect_to });
