@@ -22,11 +22,7 @@ impl Mailtrap {
         }
     }
 
-    #[tracing::instrument(
-        name = "mailtrip.send_email_verification_link",
-        skip_all, fields(recipient = %to_email)
-        err
-    )]
+    #[tracing::instrument(name = "mailtrip.send_email_verification_link", skip_all, fields(recipient = %to_email) err)]
     pub async fn send_email_verification_link(
         &self,
         to_name: &str,
@@ -34,8 +30,6 @@ impl Mailtrap {
         link: &str,
         cfg: &MailtrapConfig,
     ) -> Result<(), MailtrapError> {
-        debug!("Sending email...");
-
         let template = cfg.verification.clone();
 
         let payload = Payload {
@@ -53,7 +47,53 @@ impl Mailtrap {
             }),
         };
 
-        debug!("Sending email to '{}' with email '{}'", to_name, to_email);
+        let res = self
+            .client
+            .post(&self.url)
+            .header("accept", "application/json")
+            .header("content-type", "application/json")
+            .header("authorization", cfg.clone().api_key)
+            .json(&payload)
+            .send()
+            .await?;
+
+        let status_code = res.status();
+
+        if status_code == 200 {
+            let response = res.json::<SuccessResponse>().await?;
+            debug!("Mailtrap success: {:?}", response);
+            Ok(())
+        } else {
+            let response = res.json::<ErrorResponse>().await?;
+            error!("Mailtrap error: {:?}", response);
+            Err(MailtrapError::Api { error: response })
+        }
+    }
+
+    #[tracing::instrument(name = "mailtrip.send_password_setup_link", skip_all, fields(recipient = %to_email) err)]
+    pub async fn send_password_setup_link(
+        &self,
+        to_name: &str,
+        to_email: &str,
+        link: &str,
+        cfg: &MailtrapConfig,
+    ) -> Result<(), MailtrapError> {
+        let template = cfg.password_setup.clone();
+
+        let payload = Payload {
+            from: Mailbox {
+                name: template.from_name,
+                email: template.from_email,
+            },
+            to: vec![Mailbox {
+                email: to_email.to_string(),
+                name: to_name.to_string(),
+            }],
+            template_uuid: template.template_uuid,
+            template_variables: serde_json::json!({
+                "link": link
+            }),
+        };
 
         let res = self
             .client
@@ -86,8 +126,6 @@ impl Mailtrap {
         message: &str,
         cfg: &MailtrapConfig,
     ) -> Result<(), MailtrapError> {
-        debug!("Sending email...");
-
         let template = cfg.feedback_confirmation.clone();
 
         let payload = Payload {
@@ -105,8 +143,6 @@ impl Mailtrap {
                 "message": message
             }),
         };
-
-        debug!("Sending email to '{}' with email '{}'", to_name, to_email);
 
         let res = self
             .client

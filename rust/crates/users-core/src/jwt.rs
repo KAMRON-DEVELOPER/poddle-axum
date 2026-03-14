@@ -11,6 +11,7 @@ pub enum TokenType {
     Access,
     Refresh,
     EmailVerification,
+    PasswordSetup,
 }
 use schemars::JsonSchema;
 
@@ -28,6 +29,7 @@ pub struct JwtConfig {
     pub access_token_expire_in_minute: i64,
     pub refresh_token_expire_in_days: i64,
     pub email_verification_token_expire_in_hours: i64,
+    pub password_setup_token_expire_in_minutes: i64,
     pub refresh_token_renewal_threshold_days: i64,
 }
 
@@ -36,6 +38,7 @@ pub trait JwtCapability {
     fn access_token_expire_in_minute(&self) -> i64;
     fn refresh_token_expire_in_days(&self) -> i64;
     fn email_verification_token_expire_in_hours(&self) -> i64;
+    fn password_setup_token_expire_in_minutes(&self) -> i64;
 }
 
 #[tracing::instrument(name = "create_token", skip_all, fields(user_id = %user_id), err)]
@@ -52,6 +55,9 @@ pub fn create_token<C: JwtCapability + ?Sized>(
             TokenType::Refresh => Duration::days(cfg.refresh_token_expire_in_days()),
             TokenType::EmailVerification => {
                 Duration::hours(cfg.email_verification_token_expire_in_hours())
+            }
+            TokenType::PasswordSetup => {
+                Duration::hours(cfg.password_setup_token_expire_in_minutes())
             }
         };
 

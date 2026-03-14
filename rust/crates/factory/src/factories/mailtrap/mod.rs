@@ -15,7 +15,7 @@ pub struct MailtrapTemplateConfig {
 pub struct MailtrapConfig {
     pub api_key: String,
     pub verification: MailtrapTemplateConfig,
-    pub password_reset: MailtrapTemplateConfig,
+    pub password_setup: MailtrapTemplateConfig,
     pub billing: MailtrapTemplateConfig,
     pub support: MailtrapTemplateConfig,
     pub feedback_confirmation: MailtrapTemplateConfig,

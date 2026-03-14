@@ -126,7 +126,7 @@ CREATE TABLE IF NOT EXISTS oauth_users (
     picture TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_oauth_email UNIQUE (email)
+    CONSTRAINT uq_oauth_provider_email UNIQUE (provider, email)
 );
 
 CREATE TRIGGER set_oauth_users_timestamp BEFORE UPDATE ON oauth_users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();

@@ -251,6 +251,21 @@ impl UsersRepository {
         .await?)
     }
 
+    #[tracing::instrument("users_repository.update_user_password", skip_all, err)]
+    pub async fn update_user_password(
+        user_id: &Uuid,
+        hash_password: &str,
+        pool: &PgPool,
+    ) -> Result<PgQueryResult, AppError> {
+        Ok(sqlx::query!(
+            r#"UPDATE users SET password = $1 WHERE id = $2"#,
+            hash_password,
+            user_id
+        )
+        .execute(pool)
+        .await?)
+    }
+
     // ----------------------------------------------------------------------------
     // create_session
     // ----------------------------------------------------------------------------

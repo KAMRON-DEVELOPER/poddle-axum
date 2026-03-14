@@ -66,6 +66,10 @@ impl JwtCapability for AppState {
     fn email_verification_token_expire_in_hours(&self) -> i64 {
         self.config.jwt.email_verification_token_expire_in_hours
     }
+
+    fn password_setup_token_expire_in_minutes(&self) -> i64 {
+        self.config.jwt.password_setup_token_expire_in_minutes
+    }
 }
 
 // Option B: State can produce a JwtConfig via FromRef

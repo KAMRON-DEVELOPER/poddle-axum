@@ -129,4 +129,8 @@ impl JwtCapability for Config {
     fn email_verification_token_expire_in_hours(&self) -> i64 {
         self.jwt.email_verification_token_expire_in_hours
     }
+
+    fn password_setup_token_expire_in_minutes(&self) -> i64 {
+        self.jwt.password_setup_token_expire_in_minutes
+    }
 }

@@ -1,9 +1,9 @@
 pub mod handlers;
+pub mod helpers;
 pub mod implementations;
 pub mod models;
 pub mod repository;
 pub mod schemas;
-pub mod helpers;
 
 use crate::utilities::app_state::AppState;
 
@@ -36,7 +36,11 @@ pub fn get_routes() -> ApiRouter<AppState> {
         )
         .api_route(
             "/api/v1/users/auth/email",
-            post(handlers::continue_with_email_handler),
+            post(handlers::email_auth_handler),
+        )
+        .api_route(
+            "/api/v1/users/auth/password-setup",
+            get(handlers::password_setup_handler),
         )
         .api_route(
             "/api/v1/users/auth/google/callback",

@@ -7,7 +7,7 @@ use crate::{
         repository::UsersRepository,
         schemas::{
             AuthIn, CreateFeedbackRequest, GithubOAuthUser, GoogleOAuthUser, OAuthCallback,
-            RedirectResponse, StatsResponse, Tokens, UserIn, VerifyQuery,
+            PasswordSetupRequest, RedirectResponse, StatsResponse, TokenQuery, Tokens, UserIn,
         },
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
@@ -47,11 +47,7 @@ use uuid::Uuid;
 // -- =====================
 // -- GOOGLE OAUTH
 // -- =====================
-#[tracing::instrument(
-    name = "google_oauth_handler",
-    skip(jar, config, google_oauth_client),
-    err
-)]
+#[tracing::instrument(name = "google_oauth_handler", skip_all, err)]
 pub async fn google_oauth_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
@@ -82,15 +78,7 @@ pub async fn google_oauth_handler(
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
 }
 
-#[tracing::instrument(
-    name = "google_oauth_callback_handler",
-    skip(jar, http_client, database, config, query, google_oauth_client),
-    fields(
-        oauth_user_id = tracing::field::Empty,
-        user_id = tracing::field::Empty,
-    ),
-    err
-)]
+#[tracing::instrument(name = "google_oauth_callback_handler", skip_all, fields(oauth_user_id = tracing::field::Empty, user_id = tracing::field::Empty), err)]
 pub async fn google_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
@@ -121,19 +109,21 @@ pub async fn google_oauth_callback_handler(
         .send()
         .instrument(info_span!("get_google_oauth_user_request"))
         .await?;
-    debug!(
-        "get_google_oauth_user_response: {:#?}",
-        get_google_oauth_user_response
-    );
 
-    // TODO We need to check status code and potential errors
+    if !get_google_oauth_user_response.status().is_success() {
+        let status = get_google_oauth_user_response.status();
+        let error_body = get_google_oauth_user_response
+            .text()
+            .await
+            .unwrap_or_default();
+        tracing::error!(%status, %error_body, "Failed to fetch profile from Google");
+        return Err(AppError::InternalServerError("OAuth provider error".into()));
+    }
 
     let google_oauth_user = get_google_oauth_user_response
         .json::<GoogleOAuthUser>()
         .await?;
-    debug!("google_oauth_user: {:#?}", google_oauth_user);
     let oauth_user: OAuthUser = google_oauth_user.into();
-    debug!("oauth_user: {:#?}", oauth_user);
 
     let mut tx = database.pool.begin().await?;
 
@@ -188,11 +178,7 @@ pub async fn google_oauth_callback_handler(
 // -- =====================
 // -- GITHUB OAUTH
 // -- =====================
-#[tracing::instrument(
-    name = "github_oauth_handler",
-    skip(jar, config, github_oauth_client),
-    err
-)]
+#[tracing::instrument(name = "github_oauth_handler", skip_all, err)]
 pub async fn github_oauth_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
@@ -218,15 +204,7 @@ pub async fn github_oauth_handler(
     Ok((jar, Redirect::to(auth_url.as_ref())).into_response())
 }
 
-#[tracing::instrument(
-    name = "github_oauth_callback_handler",
-    skip(jar, http_client, database, config, user_agent, addr, query, github_oauth_client),
-    fields(
-        oauth_user_id = tracing::field::Empty,
-        user_id = tracing::field::Empty,
-    ),
-    err
-)]
+#[tracing::instrument(name = "github_oauth_callback_handler", skip_all, fields(oauth_user_id = tracing::field::Empty, user_id = tracing::field::Empty), err)]
 pub async fn github_oauth_callback_handler(
     jar: PrivateCookieJar,
     State(http_client): State<Client>,
@@ -258,17 +236,21 @@ pub async fn github_oauth_callback_handler(
         .send()
         .instrument(info_span!("get_github_oauth_user_request"))
         .await?;
-    debug!(
-        "get_github_oauth_user_response: {:#?}",
-        get_github_oauth_user_response
-    );
+
+    if !get_github_oauth_user_response.status().is_success() {
+        let status = get_github_oauth_user_response.status();
+        let error_body = get_github_oauth_user_response
+            .text()
+            .await
+            .unwrap_or_default();
+        tracing::error!(%status, %error_body, "Failed to fetch profile from Google");
+        return Err(AppError::InternalServerError("OAuth provider error".into()));
+    }
 
     let github_oauth_user = get_github_oauth_user_response
         .json::<GithubOAuthUser>()
         .await?;
-    debug!("github_oauth_user: {:#?}", github_oauth_user);
     let oauth_user: OAuthUser = github_oauth_user.into();
-    debug!("oauth_user: {:#?}", oauth_user);
 
     let mut tx = database.pool.begin().await?;
 
@@ -284,7 +266,6 @@ pub async fn github_oauth_callback_handler(
     )
     .await?;
 
-    // If user already exists, reuse it
     let user = if let Some(existing) =
         UsersRepository::find_user_by_oauth_user_id(&github_oauth_user_id, &mut *tx).await?
     {
@@ -321,19 +302,10 @@ pub async fn github_oauth_callback_handler(
 }
 
 // -- =====================
-// -- CONTINUE WITH EMAIL
+// -- EMAILT AUTH
 // -- =====================
-
-#[tracing::instrument(
-    name = "continue_with_email_handler",
-    skip_all,
-    fields(
-        email = %auth_in.email,
-        user_id = tracing::field::Empty
-    ),
-    err
-)]
-pub async fn continue_with_email_handler(
+#[tracing::instrument(name = "email_auth_handler", skip_all, fields(email = %auth_in.email, user_id = tracing::field::Empty), err)]
+pub async fn email_auth_handler(
     jar: PrivateCookieJar,
     State(database): State<Database>,
     State(config): State<Config>,
@@ -341,11 +313,7 @@ pub async fn continue_with_email_handler(
     ConnectInfo(addr): ConnectInfo<SocketAddr>,
     Json(auth_in): Json<AuthIn>,
 ) -> Result<impl IntoApiResponse, AppError> {
-    debug!("auth_in is {:#?}", auth_in);
-
     let maybe_user = UsersRepository::find_user_by_email(&auth_in.email, &database.pool).await?;
-
-    debug!("maybe_user is {:#?}", maybe_user);
 
     if let Some(user) = maybe_user {
         tracing::Span::current().record("user_id", &user.id.to_string());
@@ -368,16 +336,36 @@ pub async fn continue_with_email_handler(
         } else if let Some(oauth_user_id) = &user.oauth_user_id {
             let provider =
                 UsersRepository::get_oauth_user_provider(oauth_user_id, &database.pool).await?;
+
+            let token = create_token(&config, user.id, TokenType::PasswordSetup)?;
+            let setup_link = format!(
+                "{}/auth/set-password?token={}",
+                config.frontend_endpoint, token
+            );
+
+            let mailtrap = Mailtrap::new();
+            if let Err(e) = mailtrap
+                .send_password_setup_link(
+                    &user.username,
+                    &user.email,
+                    &setup_link,
+                    &config.mailtrap,
+                )
+                .await
+            {
+                error!("Failed to send password setup email: {}", e);
+                return Err(AppError::InternalServerError(
+                    "Failed to send setup email".into(),
+                ));
+            }
+
             return Ok((
-                StatusCode::CONFLICT,
-                Json(ErrorResponse {
-                    error: format!(
-                        "This account is linked to {}. Please use the 'Continue with {}' button.",
-                        provider, provider
-                    ),
-                }),
-            )
-                .into_response());
+                StatusCode::ACCEPTED,
+                Json(MessageResponse::new(&format!(
+                    "This account was created with {}. We've sent a secure link to your email to set a password.", 
+                    provider
+                ))),
+            ).into_response());
         } else {
             error!(user_id = %user.id, "User has neither password nor oauth_id");
             return Ok((
@@ -402,7 +390,6 @@ pub async fn continue_with_email_handler(
         return Ok(res.into_response());
     }
 
-    // --- REGISTRATION FLOW ---
     if auth_in.username.is_none() {
         return Ok(MessageResponse::new("new_user").into_response());
     }
@@ -477,33 +464,66 @@ pub async fn continue_with_email_handler(
 }
 
 // -- =====================
+// -- PASSWORD SETUP
+// -- =====================
+#[tracing::instrument(name = "verify_handler", skip_all, err)]
+pub async fn password_setup_handler(
+    State(config): State<Config>,
+    State(database): State<Database>,
+    Query(token_query): Query<TokenQuery>,
+    Json(req): Json<PasswordSetupRequest>,
+) -> Result<impl IntoApiResponse, AppError> {
+    let claims = verify_token(&config, &token_query.token)?;
+
+    if claims.typ != TokenType::PasswordSetup {
+        return Err(AppError::InvalidTokenError);
+    }
+
+    let hash_password = tokio::task::spawn_blocking(move || {
+        let _span = info_span!("password_hashing").entered();
+        hash(req.password, 10)
+    })
+    .await
+    .map_err(|e| AppError::InternalServerError(e.to_string()))??;
+
+    let query_result =
+        UsersRepository::update_user_password(&claims.sub, &hash_password, &database.pool).await?;
+
+    if query_result.rows_affected() == 0 {
+        return Err(AppError::NotFoundError("User not found".to_string()));
+    }
+
+    Ok((
+        StatusCode::OK,
+        Json(MessageResponse::new(
+            "Password set successfully. You can now log in with your email.",
+        )),
+    )
+        .into_response())
+}
+
+// -- =====================
 // -- VERIFY
 // -- =====================
-#[tracing::instrument(
-    name = "verify_handler",
-    skip(jar, config, database, verify_query),
-    err
-)]
+#[tracing::instrument(name = "verify_handler", skip_all, err)]
 pub async fn verify_handler(
     jar: PrivateCookieJar,
     State(config): State<Config>,
     State(database): State<Database>,
-    Query(verify_query): Query<VerifyQuery>,
+    Query(token_query): Query<TokenQuery>,
 ) -> Result<impl IntoApiResponse, AppError> {
-    debug!("verify_query is '{}'", verify_query.token.clone());
-    let verification_token_claims = verify_token(&config, &verify_query.token)?;
+    let claims = verify_token(&config, &token_query.token)?;
 
-    if verification_token_claims.typ != TokenType::EmailVerification {
+    if claims.typ != TokenType::EmailVerification {
         return Err(AppError::InvalidTokenError);
     }
 
     let query_result =
-        UsersRepository::set_user_email_verified(&verification_token_claims.sub, &database.pool)
-            .await?;
+        UsersRepository::set_user_email_verified(&claims.sub, &database.pool).await?;
 
     match query_result.rows_affected() {
         0 => {
-            warn!(user_id = %verification_token_claims.sub, "email verification update affected zero rows");
+            warn!(user_id = %claims.sub, "email verification update affected zero rows");
             Err(AppError::InternalServerError(
                 "User not found or already verified".to_string(),
             ))
@@ -614,6 +634,13 @@ pub async fn refresh_handler(
     jar: PrivateCookieJar,
     auth_header: Option<TypedHeader<Authorization<Bearer>>>,
 ) -> Result<impl IntoApiResponse, AppError> {
+    // TODO we need to refien the sesion logic
+    // Currently we are not effectively using sessions. access token is stateless and refresh is statefull
+    // - Look up the refresh token in the sessions table
+    // - Check if `is_active == false` -> If false, someone might be tampering with tokens. You should revoke all sessions for that user to be safe.
+    // - If valid, generate a new Access Token and a new Refresh Token. Update the DB row with the new refresh token, and send the new cookies back.
+    // - When a user logs out `UPDATE sessions SET is_active = FALSE WHERE refresh_token = $1`
+
     let (token, is_web) = if let Some(cookie) = jar.get("refresh_token") {
         (cookie.value().to_string(), true)
     } else if let Some(TypedHeader(Authorization(bearer))) = auth_header {

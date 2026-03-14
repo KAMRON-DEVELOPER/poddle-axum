@@ -6,7 +6,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 #[derive(Deserialize, JsonSchema, Debug)]
-pub struct VerifyQuery {
+pub struct TokenQuery {
     pub token: String,
 }
 
@@ -115,4 +115,15 @@ pub struct CreateFeedbackRequest {
     pub name: String,
     pub email: String,
     pub message: String,
+}
+
+#[derive(Deserialize, Validate, JsonSchema, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct PasswordSetupRequest {
+    #[validate(length(
+        min = 8,
+        max = 24,
+        message = "Password should be long between 8 and 24"
+    ))]
+    pub password: String,
 }
