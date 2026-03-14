@@ -32,17 +32,16 @@ pub enum UserStatus {
 pub enum Provider {
     Google,
     Github,
-    Email,
 }
 
 impl Display for Provider {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let s = match self {
-            Provider::Email => "Email",
             Provider::Google => "Google",
             Provider::Github => "Github",
         };
-        f.write_str(s)
+        // f.write_str(s)
+        write!(f, "{s}")
     }
 }
 
@@ -65,9 +64,9 @@ pub struct Feedback {
 pub struct OAuthUser {
     pub id: String,
     pub provider: Provider,
+    pub user_id: Uuid,
     pub username: Option<String>,
     pub email: Option<String>,
-    pub password: Option<String>,
     pub picture: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -84,14 +83,13 @@ pub struct User {
     pub email_verified: bool,
     pub role: UserRole,
     pub status: UserStatus,
-    pub oauth_user_id: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
 
 #[derive(FromRow, Serialize, Deserialize, Clone, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
-pub struct UserSession {
+pub struct Session {
     pub id: Uuid,
     pub user_id: Uuid,
     pub user_agent: Option<String>,

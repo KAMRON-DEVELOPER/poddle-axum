@@ -2,7 +2,7 @@ pub mod handlers;
 pub mod helpers;
 pub mod implementations;
 pub mod models;
-pub mod repository;
+pub mod repositories;
 pub mod schemas;
 
 use crate::utilities::app_state::AppState;
@@ -16,43 +16,53 @@ pub fn get_routes() -> ApiRouter<AppState> {
     ApiRouter::new()
         .api_route(
             "/api/v1/users/profile",
-            get(handlers::get_user_handler)
-                .patch(handlers::update_user_handler)
-                .delete(handlers::delete_user_handler),
+            get(handlers::users::get_user_handler)
+                .patch(handlers::users::update_user_handler)
+                .delete(handlers::users::delete_user_handler),
         )
         .api_route(
             "/api/v1/users/auth/refresh",
-            post(handlers::refresh_handler),
+            post(handlers::users::refresh_handler),
         )
-        .api_route("/api/v1/users/auth/logout", post(handlers::logout_handler))
-        .api_route("/api/v1/users/auth/verify", get(handlers::verify_handler))
+        .api_route(
+            "/api/v1/users/auth/logout",
+            post(handlers::users::logout_handler),
+        )
+        .api_route(
+            "/api/v1/users/auth/verify",
+            get(handlers::users::verify_handler),
+        )
         .api_route(
             "/api/v1/users/auth/google",
-            get(handlers::google_oauth_handler),
+            get(handlers::oauth_users::google_oauth_handler),
         )
         .api_route(
             "/api/v1/users/auth/github",
-            get(handlers::github_oauth_handler),
+            get(handlers::oauth_users::github_oauth_handler),
         )
         .api_route(
             "/api/v1/users/auth/email",
-            post(handlers::email_auth_handler),
+            post(handlers::users::email_auth_handler),
         )
         .api_route(
             "/api/v1/users/auth/password-setup",
-            get(handlers::password_setup_handler),
+            get(handlers::oauth_users::password_setup_handler),
         )
         .api_route(
             "/api/v1/users/auth/google/callback",
-            get(handlers::google_oauth_callback_handler),
+            get(handlers::oauth_users::google_oauth_callback_handler),
         )
         .api_route(
             "/api/v1/users/auth/github/callback",
-            get(handlers::github_oauth_callback_handler),
+            get(handlers::oauth_users::github_oauth_callback_handler),
         )
-        .api_route("/api/v1/users/stats", get(handlers::get_stats_handler))
+        .api_route(
+            "/api/v1/users/stats",
+            get(handlers::stats::get_stats_handler),
+        )
         .api_route(
             "/api/v1/users/feedback",
-            get(handlers::get_feedbacks_handler).post(handlers::create_feedback_handler),
+            get(handlers::feedbacks::get_feedbacks_handler)
+                .post(handlers::feedbacks::create_feedback_handler),
         )
 }

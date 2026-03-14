@@ -141,9 +141,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON users (lower(email));
 CREATE TABLE IF NOT EXISTS oauth_users (
     id VARCHAR(255) NOT NULL,
     provider provider NOT NULL,
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     username VARCHAR(50),
     email VARCHAR(100),
-    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     picture TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,

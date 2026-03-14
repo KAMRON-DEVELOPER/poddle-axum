@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use serde_json::json;
+use http_contracts::error::schema::ErrorResponse;
 use thiserror::Error;
 
 #[derive(Error, Debug)]
@@ -115,7 +115,7 @@ pub enum AppError {
 
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
-        let (status, error_message) = match self {
+        let (status, error) = match self {
             Self::SqlxError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
             Self::BadRequest(msg) => (StatusCode::BAD_REQUEST, msg),
             Self::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
@@ -244,7 +244,7 @@ impl IntoResponse for AppError {
             Self::BcryptError(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()),
         };
 
-        let body = Json(json!({"error": error_message}));
+        let body = Json(ErrorResponse { error });
 
         (status, body).into_response()
     }

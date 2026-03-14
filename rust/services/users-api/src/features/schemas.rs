@@ -35,7 +35,7 @@ pub struct Tokens {
 }
 
 #[derive(Deserialize, Validate, JsonSchema, Debug)]
-pub struct AuthIn {
+pub struct EmailAuthRequest {
     #[validate(length(
         min = 8,
         max = 24,
@@ -76,6 +76,15 @@ pub struct GithubOAuthUser {
     pub email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    pub(crate) picture: Option<String>,
+}
+
+#[derive(Deserialize, Default, JsonSchema, Debug)]
+pub struct UserMutationPayload {
+    pub username: Option<String>,
+    pub email: Option<String>,
+    pub hash_password: Option<String>,
+    pub picture: Option<String>,
 }
 
 #[derive(Deserialize, Default, JsonSchema, Debug)]
