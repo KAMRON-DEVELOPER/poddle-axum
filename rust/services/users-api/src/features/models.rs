@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use chrono::{DateTime, Utc};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -31,6 +33,17 @@ pub enum Provider {
     Google,
     Github,
     Email,
+}
+
+impl Display for Provider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Provider::Email => "Email",
+            Provider::Google => "Google",
+            Provider::Github => "Github",
+        };
+        f.write_str(s)
+    }
 }
 
 // ============================================

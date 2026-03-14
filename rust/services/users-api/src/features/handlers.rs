@@ -2,11 +2,12 @@ use crate::{
     config::Config,
     error::AppError,
     features::{
+        helpers::finalize_auth_session,
         models::{OAuthUser, Provider},
         repository::UsersRepository,
         schemas::{
-            AuthIn, AuthOut, CreateFeedbackRequest, GithubOAuthUser, GoogleOAuthUser,
-            OAuthCallback, RedirectResponse, StatsResponse, Tokens, UserIn, VerifyQuery,
+            AuthIn, CreateFeedbackRequest, GithubOAuthUser, GoogleOAuthUser, OAuthCallback,
+            RedirectResponse, StatsResponse, Tokens, UserIn, VerifyQuery,
         },
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
@@ -15,7 +16,8 @@ use aide::axum::IntoApiResponse;
 use bcrypt::{hash, verify};
 use factory::factories::{database::Database, mailtrap::Mailtrap};
 use http_contracts::{
-    list::schema::ListResponse, message::MessageResponse, pagination::schema::Pagination,
+    error::schema::ErrorResponse, list::schema::ListResponse, message::MessageResponse,
+    pagination::schema::Pagination,
 };
 use serde_json::json;
 use std::net::SocketAddr;
@@ -39,7 +41,7 @@ use oauth2::{
 };
 use object_store::{ObjectStore, aws::AmazonS3, path::Path as ObjectStorePath};
 use reqwest::Client;
-use tracing::{Instrument, debug, error, info, info_span, warn};
+use tracing::{Instrument, debug, error, info_span, warn};
 use uuid::Uuid;
 
 // -- =====================
@@ -169,41 +171,15 @@ pub async fn google_oauth_callback_handler(
     tracing::Span::current().record("oauth_user_id", &google_oauth_user_sub);
     tracing::Span::current().record("user_id", &user.id.to_string());
 
-    let access_token = create_token(&config, user.id, TokenType::Access)?;
-    let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
-
-    let max_age_days = config.jwt.refresh_token_expire_in_days;
-    let access_cookie = Cookie::build(("access_token", access_token.clone()))
-        .http_only(true)
-        .path("/")
-        .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(max_age_days))
-        .secure(config.cookie_secure);
-    let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
-        .http_only(true)
-        .path("/")
-        .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(max_age_days))
-        .secure(config.cookie_secure);
-    let jar = jar.add(refresh_cookie).add(access_cookie);
-
-    UsersRepository::create_session(
-        &database.pool,
-        &user.id,
-        &user_agent.to_string(),
+    let (jar, _) = finalize_auth_session(
+        user,
+        user_agent.as_str(),
         &addr.ip().to_string(),
-        &refresh_token,
+        &config,
+        jar,
+        &database.pool,
     )
     .await?;
-
-    // let google_oauth_user_sub_cookie =
-    //     Cookie::build(("google_oauth_user_sub", google_oauth_user_sub))
-    //         .http_only(true)
-    //         .path("/")
-    //         .same_site(SameSite::Lax)
-    //         .max_age(CookieDuration::days(365))
-    //         .secure(config.cookie_secure);
-    // let jar = jar.add(google_oauth_user_sub_cookie);
 
     let redirect = Redirect::to(&format!("{}/console/dashboard", config.frontend_endpoint));
     Ok((jar, redirect).into_response())
@@ -330,40 +306,15 @@ pub async fn github_oauth_callback_handler(
     tracing::Span::current().record("oauth_user_id", &github_oauth_user_id);
     tracing::Span::current().record("user_id", &user.id.to_string());
 
-    let access_token = create_token(&config, user.id, TokenType::Access)?;
-    let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
-
-    let max_age_days = config.jwt.refresh_token_expire_in_days;
-    let access_cookie = Cookie::build(("access_token", access_token.clone()))
-        .http_only(true)
-        .path("/")
-        .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(max_age_days))
-        .secure(config.cookie_secure);
-    let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
-        .http_only(true)
-        .path("/")
-        .same_site(SameSite::Lax)
-        .max_age(CookieDuration::days(max_age_days))
-        .secure(config.cookie_secure);
-    let jar = jar.add(refresh_cookie).add(access_cookie);
-
-    UsersRepository::create_session(
-        &database.pool,
-        &user.id,
-        &user_agent.to_string(),
+    let (jar, _) = finalize_auth_session(
+        user,
+        user_agent.as_str(),
         &addr.ip().to_string(),
-        &refresh_token,
+        &config,
+        jar,
+        &database.pool,
     )
     .await?;
-
-    // let github_oauth_user_id_cookie = Cookie::build(("github_oauth_user_id", github_oauth_user_id))
-    //     .http_only(true)
-    //     .path("/")
-    //     .same_site(SameSite::Lax)
-    //     .max_age(CookieDuration::days(365))
-    //     .secure(config.cookie_secure);
-    // let jar = jar.add(github_oauth_user_id_cookie);
 
     let redirect = Redirect::to(&format!("{}/console/dashboard", config.frontend_endpoint));
     Ok((jar, redirect).into_response())
@@ -372,9 +323,10 @@ pub async fn github_oauth_callback_handler(
 // -- =====================
 // -- CONTINUE WITH EMAIL
 // -- =====================
+
 #[tracing::instrument(
     name = "continue_with_email_handler",
-    skip(jar, database, config, user_agent, addr, auth_in),
+    skip_all,
     fields(
         email = %auth_in.email,
         user_id = tracing::field::Empty
@@ -398,73 +350,66 @@ pub async fn continue_with_email_handler(
     if let Some(user) = maybe_user {
         tracing::Span::current().record("user_id", &user.id.to_string());
 
-        // Run VERIFY in a blocking thread
-        // We clone the data needed for the closure to avoid borrow checker issues
-        let password_input = auth_in.password.clone();
-        let password_hash = user.password.clone().unwrap_or_default();
+        if let Some(password_hash) = &user.password {
+            let password_input = auth_in.password.clone();
+            let hash_clone = password_hash.clone(); // Clone for the blocking task
 
-        let same = tokio::task::spawn_blocking(move || {
-            let _span = info_span!("password_verifying").entered();
-            verify(&password_input, &password_hash)
-        })
-        .await
-        .map_err(|e| AppError::InternalServerError(e.to_string()))? // JoinError
-        .map_err(|e| AppError::InternalServerError(e.to_string()))?; // VerifyError
+            let same = tokio::task::spawn_blocking(move || {
+                let _span = info_span!("password_verifying").entered();
+                verify(&password_input, &hash_clone)
+            })
+            .await
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?
+            .map_err(|e| AppError::InternalServerError(e.to_string()))?;
 
-        if !same {
-            return Err(AppError::ValidationError(
-                "Password is incorrect or not set".to_string(),
-            ));
+            if !same {
+                return Err(AppError::ValidationError("Incorrect password".to_string()));
+            }
+        } else if let Some(oauth_user_id) = &user.oauth_user_id {
+            let provider =
+                UsersRepository::get_oauth_user_provider(oauth_user_id, &database.pool).await?;
+            return Ok((
+                StatusCode::CONFLICT,
+                Json(ErrorResponse {
+                    error: format!(
+                        "This account is linked to {}. Please use the 'Continue with {}' button.",
+                        provider, provider
+                    ),
+                }),
+            )
+                .into_response());
+        } else {
+            error!(user_id = %user.id, "User has neither password nor oauth_id");
+            return Ok((
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(ErrorResponse {
+                    error: "Account configuration error. Please contact support.".to_string(),
+                }),
+            )
+                .into_response());
         }
 
-        let access_token = create_token(&config, user.id, TokenType::Access)?;
-        let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
-
-        let max_age_days = config.jwt.refresh_token_expire_in_days;
-        let access_cookie = Cookie::build(("access_token", access_token.clone()))
-            .http_only(true)
-            .path("/")
-            .same_site(SameSite::Lax)
-            .max_age(CookieDuration::days(max_age_days))
-            .secure(config.cookie_secure);
-        let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
-            .http_only(true)
-            .path("/")
-            .same_site(SameSite::Lax)
-            .max_age(CookieDuration::days(max_age_days))
-            .secure(config.cookie_secure);
-        let jar = jar.add(refresh_cookie).add(access_cookie);
-
-        let tokens = Tokens {
-            access_token: access_token,
-            refresh_token: Some(refresh_token.clone()),
-        };
-
-        UsersRepository::create_session(
-            &database.pool,
-            &user.id,
-            &user_agent.to_string(),
+        let res = finalize_auth_session(
+            user,
+            user_agent.as_str(),
             &addr.ip().to_string(),
-            &refresh_token,
+            &config,
+            jar,
+            &database.pool,
         )
         .await?;
 
-        let response = Json(AuthOut { user, tokens });
-        return Ok((jar, response).into_response());
+        return Ok(res.into_response());
     }
 
+    // --- REGISTRATION FLOW ---
     if auth_in.username.is_none() {
-        info!(
-            reason = "missing_username",
-            "user not found, prompting registration"
-        );
         return Ok(MessageResponse::new("new_user").into_response());
     }
 
     let mut tx = database.pool.begin().await?;
 
     let password = auth_in.password.clone();
-    // Offload CPU intensive work to a thread pool dedicated to blocking operations
     let hash_password = tokio::task::spawn_blocking(move || {
         let _span = info_span!("password_hashing").entered();
         hash(password, 10)
@@ -511,40 +456,22 @@ pub async fn continue_with_email_handler(
         Ok(_) => {
             tx.commit().await?;
             tracing::Span::current().record("user_id", &user.id.to_string());
-            let access_token = create_token(&config, user.id, TokenType::Access)?;
-            let refresh_token = create_token(&config, user.id, TokenType::Refresh)?;
 
-            let max_age_days = config.jwt.refresh_token_expire_in_days;
-            let refresh_cookie = Cookie::build(("refresh_token", refresh_token.clone()))
-                .http_only(true)
-                .path("/")
-                .same_site(SameSite::Lax)
-                .max_age(CookieDuration::days(max_age_days))
-                .secure(config.cookie_secure);
-            let jar = jar.add(refresh_cookie);
-
-            let tokens = Tokens {
-                access_token: access_token,
-                refresh_token: Some(refresh_token.clone()),
-            };
-
-            UsersRepository::create_session(
-                &database.pool,
-                &user.id,
-                &user_agent.to_string(),
+            let res = finalize_auth_session(
+                user,
+                user_agent.as_str(),
                 &addr.ip().to_string(),
-                &refresh_token,
+                &config,
+                jar,
+                &database.pool,
             )
             .await?;
 
-            // Return the new user and tokens
-            let response = Json(AuthOut { user, tokens });
-            Ok((jar, response).into_response())
+            return Ok(res.into_response());
         }
-        Err(email_error) => {
-            error!(name: "MailtrapError", "email_error: {}", email_error);
+        Err(e) => {
             tx.rollback().await?;
-            Err(email_error.into())
+            Err(e.into())
         }
     }
 }

@@ -54,6 +54,28 @@ impl UsersRepository {
         .await
     }
 
+    #[tracing::instrument("users_repository.get_oauth_user_provider", skip_all, err)]
+    pub async fn get_oauth_user_provider<'e, E>(
+        oauth_user_id: &str,
+        executor: E,
+    ) -> Result<Provider, sqlx::Error>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
+        sqlx::query_scalar!(
+            r#"
+            SELECT
+                provider AS "provider: Provider"
+            FROM oauth_users
+            WHERE
+                id = $1
+        "#,
+            oauth_user_id
+        )
+        .fetch_one(executor)
+        .await
+    }
+
     // ----------------------------------------------------------------------------
     // find_user_by_oauth_user_id
     // ----------------------------------------------------------------------------
@@ -234,11 +256,11 @@ impl UsersRepository {
     // ----------------------------------------------------------------------------
     #[tracing::instrument("users_repository.create_session", skip_all, err)]
     pub async fn create_session(
-        pool: &PgPool,
         user_id: &Uuid,
         user_agent: &str,
         ip_address: &str,
         refresh_token: &str,
+        pool: &PgPool,
     ) -> Result<(), AppError> {
         sqlx::query!(
             r#"
