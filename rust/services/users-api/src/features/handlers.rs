@@ -7,7 +7,7 @@ use crate::{
         repository::UsersRepository,
         schemas::{
             AuthIn, CreateFeedbackRequest, GithubOAuthUser, GoogleOAuthUser, OAuthCallback,
-            PasswordSetupRequest, RedirectResponse, StatsResponse, TokenQuery, Tokens, UserIn,
+            PasswordSetupRequest, StatsResponse, TokenQuery, Tokens, UserIn,
         },
     },
     services::{github_oauth::GithubOAuthClient, google_oauth::GoogleOAuthClient},
@@ -521,24 +521,21 @@ pub async fn verify_handler(
     let query_result =
         UsersRepository::set_user_email_verified(&claims.sub, &database.pool).await?;
 
-    match query_result.rows_affected() {
-        0 => {
-            warn!(user_id = %claims.sub, "email verification update affected zero rows");
-            Err(AppError::InternalServerError(
-                "User not found or already verified".to_string(),
-            ))
-        }
-        _ => {
-            let redirect_to = if jar.get("refresh_token").is_none() {
-                "auth".to_string()
-            } else {
-                "console/dashboard".to_string()
-            };
-
-            let response = Json(RedirectResponse { redirect_to });
-            return Ok((jar, response).into_response());
-        }
+    if query_result.rows_affected() == 0 {
+        warn!(user_id = %claims.sub, "email verification update affected zero rows");
+        return Err(AppError::InternalServerError(
+            "User not found or already verified".to_string(),
+        ));
     }
+
+    let message = if jar.get("refresh_token").is_none() {
+        "auth".to_string()
+    } else {
+        "console/dashboard".to_string()
+    };
+
+    let res = Json(MessageResponse { message });
+    return Ok((jar, res).into_response());
 }
 
 // -- =====================

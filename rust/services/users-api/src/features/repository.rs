@@ -212,7 +212,13 @@ impl UsersRepository {
     // find_user_by_email
     // ----------------------------------------------------------------------------
     #[tracing::instrument("users_repository.find_user_by_email", skip_all, err)]
-    pub async fn find_user_by_email(email: &str, pool: &PgPool) -> Result<Option<User>, AppError> {
+    pub async fn find_user_by_email<'e, E>(
+        email: &str,
+        executor: E,
+    ) -> Result<Option<User>, AppError>
+    where
+        E: Executor<'e, Database = Postgres>,
+    {
         Ok(sqlx::query_as!(
             User,
             r#"
@@ -232,7 +238,7 @@ impl UsersRepository {
             "#,
             email,
         )
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await?)
     }
 

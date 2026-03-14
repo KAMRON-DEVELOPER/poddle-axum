@@ -84,7 +84,7 @@ EXCEPTION
 WHEN duplicate_object THEN NULL;
 END $$;
 
-DO $$ BEGIN CREATE TYPE provider AS ENUM ('google', 'github', 'email');
+DO $$ BEGIN CREATE TYPE provider AS ENUM ('google', 'github');
 EXCEPTION
 WHEN duplicate_object THEN NULL;
 END $$;
@@ -114,23 +114,6 @@ CREATE TABLE feedbacks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
--- =====================
--- OAUTH USERS
--- =====================
-CREATE TABLE IF NOT EXISTS oauth_users (
-    id VARCHAR(255) PRIMARY KEY,
-    provider provider NOT NULL,
-    username VARCHAR(50),
-    email VARCHAR(100),
-    password TEXT,
-    picture TEXT,
-    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT uq_oauth_provider_email UNIQUE (provider, email)
-);
-
-CREATE TRIGGER set_oauth_users_timestamp BEFORE UPDATE ON oauth_users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
-
 -- ==============================================
 -- USERS
 -- ==============================================
@@ -143,15 +126,32 @@ CREATE TABLE IF NOT EXISTS users (
     email_verified BOOLEAN NOT NULL DEFAULT FALSE,
     role user_role NOT NULL DEFAULT 'regular',
     status user_status NOT NULL DEFAULT 'pending_verification',
-    oauth_user_id VARCHAR(255) REFERENCES oauth_users (id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE (username)
+    CONSTRAINT uq_users_username UNIQUE (username)
 );
 
 CREATE TRIGGER set_users_timestamp BEFORE UPDATE ON users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_users_email ON users (lower(email));
+
+-- =====================
+-- OAUTH USERS
+-- =====================
+CREATE TABLE IF NOT EXISTS oauth_users (
+    id VARCHAR(255) NOT NULL,
+    provider provider NOT NULL,
+    username VARCHAR(50),
+    email VARCHAR(100),
+    user_id UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+    picture TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT oauth_users_pkey PRIMARY KEY (provider, id),
+    CONSTRAINT uq_oauth_user_id_provider UNIQUE (user_id, provider)
+);
+
+CREATE TRIGGER set_oauth_users_timestamp BEFORE UPDATE ON oauth_users FOR EACH ROW EXECUTE PROCEDURE trigger_set_timestamp();
 
 -- ==============================================
 -- SESSIONS

@@ -22,7 +22,7 @@ pub struct OAuthCallback {
 }
 
 #[derive(Serialize, JsonSchema, Debug)]
-pub struct AuthOut {
+pub struct AuthResponse {
     pub user: User,
     pub tokens: Tokens,
 }
