@@ -30,7 +30,7 @@ pub fn get_routes() -> ApiRouter<AppState> {
         )
         .api_route(
             "/api/v1/users/auth/verify",
-            get(handlers::users::verify_handler),
+            post(handlers::users::verify_handler),
         )
         .api_route(
             "/api/v1/users/auth/google",
