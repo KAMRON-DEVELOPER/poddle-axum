@@ -13,7 +13,7 @@ pub struct TokenQuery {
 #[derive(Deserialize, Serialize, JsonSchema, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct RedirectResponse {
-    pub redirect_to: String,
+    pub to: String,
 }
 
 #[derive(Deserialize, JsonSchema, Debug)]

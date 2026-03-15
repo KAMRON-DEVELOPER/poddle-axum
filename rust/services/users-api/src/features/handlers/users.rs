@@ -4,7 +4,9 @@ use crate::{
     features::{
         helpers::finalize_session,
         repositories::{oauth_users::OAuthUsersRepository, users::UsersRepository},
-        schemas::{EmailAuthRequest, TokenQuery, Tokens, UserIn, UserMutationPayload},
+        schemas::{
+            EmailAuthRequest, RedirectResponse, TokenQuery, Tokens, UserIn, UserMutationPayload,
+        },
     },
 };
 use aide::axum::IntoApiResponse;
@@ -199,13 +201,13 @@ pub async fn verify_handler(
         ));
     }
 
-    let message = if jar.get("refresh_token").is_none() {
+    let to = if jar.get("refresh_token").is_none() {
         "auth".to_string()
     } else {
         "console/dashboard".to_string()
     };
 
-    let res = Json(MessageResponse { message });
+    let res = Json(RedirectResponse { to });
     return Ok((jar, res).into_response());
 }
 
