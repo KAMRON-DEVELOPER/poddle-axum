@@ -202,9 +202,9 @@ pub async fn verify_handler(
     }
 
     let to = if jar.get("refresh_token").is_none() {
-        "auth".to_string()
+        "/auth".to_string()
     } else {
-        "console/dashboard".to_string()
+        "/console/dashboard".to_string()
     };
 
     let res = Json(RedirectResponse { to });
