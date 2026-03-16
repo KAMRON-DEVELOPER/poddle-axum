@@ -335,6 +335,7 @@ pub async fn refresh_handler(
     let jar = if let Some(ref refresh) = refresh_token {
         let refresh_cookie = Cookie::build(("refresh_token", refresh.clone()))
             .http_only(true)
+            .path("/")
             .same_site(SameSite::Lax)
             .max_age(CookieDuration::days(
                 config.jwt.refresh_token_expire_in_days,
@@ -348,6 +349,7 @@ pub async fn refresh_handler(
     let access_token = create_token(&config, claims.sub, TokenType::Access)?;
     let access_cookie = Cookie::build(("access_token", access_token.clone()))
         .http_only(true)
+        .path("/")
         .same_site(SameSite::Lax)
         .max_age(CookieDuration::minutes(
             config.jwt.access_token_expire_in_minute,
