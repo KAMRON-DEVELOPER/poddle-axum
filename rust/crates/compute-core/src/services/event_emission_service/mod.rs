@@ -22,6 +22,7 @@ pub struct DeploymentEventUpdate {
     pub id: Option<Uuid>,
     pub project_id: Uuid,
     pub deployment_id: Uuid,
+    // pub deployment_name: &'a str,
     pub status: Option<DeploymentStatus>,
     pub event_type: Option<DeploymentEventType>,
     pub level: DeploymentEventLevel,
@@ -32,6 +33,7 @@ pub struct DeploymentEventUpdate {
 pub struct DeploymentEventEmitterInput<'a> {
     pub project_id: &'a Uuid,
     pub deployment_id: &'a Uuid,
+    // pub deployment_name: &'a str,
     pub status: Option<DeploymentStatus>,
     pub event_type: Option<DeploymentEventType>,
     pub level: Option<DeploymentEventLevel>,
@@ -45,7 +47,7 @@ pub struct DeploymentEventEmitter;
 
 impl DeploymentEventEmitter {
     #[tracing::instrument(
-        name = "event_emission_service.emit",
+        name = "deployment_event_emitter.emit",
         skip_all,
         fields(
             project_id = %input.project_id,
@@ -98,6 +100,7 @@ impl DeploymentEventEmitter {
                 id: persisted_id,
                 project_id: *input.project_id,
                 deployment_id: *input.deployment_id,
+                // deployment_name: &*input.deployment_name,
                 status: input.status,
                 event_type: input.event_type,
                 level,
