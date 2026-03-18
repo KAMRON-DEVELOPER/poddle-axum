@@ -17,13 +17,10 @@ spec:
     spec:
       containers:
         - name: frontend
-          image: kamronbekdev/poddle-frontend:1.0.6
+          image: kamronbekdev/poddle-frontend:1.0.7
           imagePullPolicy: IfNotPresent
           ports:
-            - containerPort: 3000
-          env:
-            - name: PORT
-              value: "3000"
+            - containerPort: 5173
           resources:
             requests:
               cpu: "100m"
