@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                provider AS \"provider: Provider\",\n                username,\n                email,\n                password,\n                picture,\n                created_at,\n                updated_at\n            FROM oauth_users WHERE email = $1\n            ",
+  "query": "\n            INSERT INTO oauth_users (id, provider, user_id, username, email, picture)\n            VALUES ($1, $2, $3, $4, $5, $6)\n            RETURNING\n                id,\n                provider AS \"provider: Provider\",\n                user_id,\n                username,\n                email,\n                picture,\n                created_at,\n                updated_at\n            ",
   "describe": {
     "columns": [
       {
@@ -17,8 +17,7 @@
             "kind": {
               "Enum": [
                 "google",
-                "github",
-                "email"
+                "github"
               ]
             }
           }
@@ -26,18 +25,18 @@
       },
       {
         "ordinal": 2,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
         "name": "username",
         "type_info": "Varchar"
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "email",
         "type_info": "Varchar"
-      },
-      {
-        "ordinal": 4,
-        "name": "password",
-        "type_info": "Text"
       },
       {
         "ordinal": 5,
@@ -57,13 +56,28 @@
     ],
     "parameters": {
       "Left": [
+        "Varchar",
+        {
+          "Custom": {
+            "name": "provider",
+            "kind": {
+              "Enum": [
+                "google",
+                "github"
+              ]
+            }
+          }
+        },
+        "Uuid",
+        "Varchar",
+        "Varchar",
         "Text"
       ]
     },
     "nullable": [
       false,
       false,
-      true,
+      false,
       true,
       true,
       true,
@@ -71,5 +85,5 @@
       false
     ]
   },
-  "hash": "5488c53e4ec1fc8594f6569d506ac22ae7d6bf1d7f50958b4bea2f09b8f8f13c"
+  "hash": "8c479240384a12a2dad837691a9fe5c5e5f550e120a0bfd1c1eb9dafa9ebd05e"
 }

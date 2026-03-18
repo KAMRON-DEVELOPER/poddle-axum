@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            SELECT\n                id,\n                username,\n                email,\n                password,\n                picture,\n                role AS \"role: UserRole\",\n                status AS \"status: UserStatus\",\n                email_verified,\n                oauth_user_id,\n                created_at,\n                updated_at\n            FROM users\n            WHERE oauth_user_id = $1\n        ",
+  "query": "\n            SELECT\n                id,\n                username,\n                email,\n                password,\n                picture,\n                role AS \"role: UserRole\",\n                status AS \"status: UserStatus\",\n                email_verified,\n                created_at,\n                updated_at\n            FROM users WHERE email = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -66,16 +66,11 @@
       },
       {
         "ordinal": 8,
-        "name": "oauth_user_id",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 9,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
@@ -94,10 +89,9 @@
       false,
       false,
       false,
-      true,
       false,
       false
     ]
   },
-  "hash": "814c2595b67b0b8a008f945c59a883d14c3ba08ae85ad8e806e3416d601f37d4"
+  "hash": "01a1183089d131625a2e9836ac07ed18d93bad305f3bd9f99cd78d89863ac8e8"
 }

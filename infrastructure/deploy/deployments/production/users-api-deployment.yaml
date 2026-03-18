@@ -24,7 +24,7 @@ spec:
                 path: config.json
       containers:
         - name: users-api
-          image: kamronbekdev/poddle-users-api:1.0.6
+          image: kamronbekdev/poddle-users-api:1.0.7
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8000

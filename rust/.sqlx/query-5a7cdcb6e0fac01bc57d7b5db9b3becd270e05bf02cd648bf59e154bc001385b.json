@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n            INSERT INTO users (username, email, password, picture, oauth_user_id)\n            VALUES ($1,$2,$3,$4, $5)\n            RETURNING\n                id,\n                username,\n                email,\n                password,\n                picture,\n                role AS \"role: UserRole\",\n                status AS \"status: UserStatus\",\n                email_verified,\n                oauth_user_id,\n                created_at,\n                updated_at\n            ",
+  "query": "\n            SELECT\n                id,\n                username,\n                email,\n                password,\n                picture,\n                role AS \"role: UserRole\",\n                status AS \"status: UserStatus\",\n                email_verified,\n                created_at,\n                updated_at\n            FROM users WHERE id = $1\n            ",
   "describe": {
     "columns": [
       {
@@ -66,27 +66,18 @@
       },
       {
         "ordinal": 8,
-        "name": "oauth_user_id",
-        "type_info": "Varchar"
-      },
-      {
-        "ordinal": 9,
         "name": "created_at",
         "type_info": "Timestamptz"
       },
       {
-        "ordinal": 10,
+        "ordinal": 9,
         "name": "updated_at",
         "type_info": "Timestamptz"
       }
     ],
     "parameters": {
       "Left": [
-        "Varchar",
-        "Varchar",
-        "Text",
-        "Text",
-        "Varchar"
+        "Uuid"
       ]
     },
     "nullable": [
@@ -98,10 +89,9 @@
       false,
       false,
       false,
-      true,
       false,
       false
     ]
   },
-  "hash": "a12328876d7790699f93e7c8316f02058f6af670bca56d2b66c06bbd0741e106"
+  "hash": "5a7cdcb6e0fac01bc57d7b5db9b3becd270e05bf02cd648bf59e154bc001385b"
 }
